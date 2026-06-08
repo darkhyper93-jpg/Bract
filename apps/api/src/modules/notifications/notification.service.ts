@@ -25,7 +25,7 @@ export const notificationService = {
       userId,
       page: query.page,
       perPage: query.perPage,
-      unread,
+      ...(unread !== undefined ? { unread } : {}),
     });
 
     return {

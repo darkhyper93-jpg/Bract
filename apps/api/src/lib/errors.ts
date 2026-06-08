@@ -20,7 +20,7 @@ export class AppError extends Error {
     this.name = 'AppError';
     this.code = code;
     this.statusCode = STATUS_MAP[code];
-    this.details = details;
+    if (details !== undefined) this.details = details;
     Error.captureStackTrace(this, AppError);
   }
 }

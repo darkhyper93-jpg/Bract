@@ -161,7 +161,10 @@ export const usersService = {
     if (!user) {
       throw new AppError('NOT_FOUND', 'User not found');
     }
-    const updated = await usersRepository.updateUser(targetId, dto);
+    const updated = await usersRepository.updateUser(targetId, {
+      ...(dto.name !== undefined ? { name: dto.name } : {}),
+      ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
+    });
     return toUserPublic(updated);
   },
 
