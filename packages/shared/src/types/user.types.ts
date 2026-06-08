@@ -53,8 +53,8 @@ export interface PaginatedUsers {
 }
 
 export interface UpdateProfileDto {
-  name?: string;
-  avatarUrl?: string;
+  name?: string | undefined;
+  avatarUrl?: string | undefined;
 }
 
 export interface ChangePasswordDto {

@@ -5,7 +5,7 @@ import { Button } from './Button';
 export interface ErrorStateProps {
   title?: string;
   message?: string;
-  onRetry?: () => void;
+  onRetry?: (() => void) | undefined;
   className?: string;
 }
 

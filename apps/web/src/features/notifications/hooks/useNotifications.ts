@@ -7,7 +7,7 @@ import { notificationsApi } from '../api/notifications.api';
 interface UseNotificationsParams {
   page?: number;
   perPage?: number;
-  unread?: string;
+  unread?: 'true' | 'false' | undefined;
 }
 
 export function useNotifications(params: UseNotificationsParams = {}): {

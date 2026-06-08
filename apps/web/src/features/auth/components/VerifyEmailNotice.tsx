@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface VerifyEmailNoticeProps {
-  email?: string;
+  email?: string | undefined;
 }
 
 export function VerifyEmailNotice({ email }: VerifyEmailNoticeProps) {

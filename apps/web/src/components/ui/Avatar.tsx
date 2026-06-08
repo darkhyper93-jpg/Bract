@@ -10,8 +10,8 @@ const sizes = {
 } as const;
 
 export interface AvatarProps {
-  src?: string | null;
-  name?: string | null;
+  src?: string | null | undefined;
+  name?: string | null | undefined;
   size?: keyof typeof sizes;
   loading?: boolean;
   className?: string;

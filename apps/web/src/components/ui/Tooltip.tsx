@@ -20,7 +20,7 @@ export function Tooltip({
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateCoords = useCallback(() => {
     const el = triggerRef.current;

@@ -4,8 +4,8 @@ export interface NotificationToast {
   id: string;
   type: 'success' | 'error' | 'warning' | 'info' | 'loading';
   title: string;
-  message?: string;
-  duration?: number;
+  message?: string | undefined;
+  duration?: number | undefined;
 }
 
 interface UIState {
