@@ -3,7 +3,7 @@ import { usersController } from './users.controller.js';
 import { authenticate, authorize, authorizeSelfOrAdmin } from '../../middleware/auth.middleware.js';
 import { Role } from '@bract/shared';
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * @openapi

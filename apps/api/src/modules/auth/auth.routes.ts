@@ -4,7 +4,7 @@ import { authenticate } from '../../middleware/auth.middleware.js';
 import { createRateLimiter } from '../../middleware/rateLimiter.middleware.js';
 import { RATE_LIMIT } from '../../config/constants.js';
 
-const router = Router();
+const router: Router = Router();
 
 // Per-route rate limiters — README §5.4
 const loginLimiter = createRateLimiter(RATE_LIMIT.AUTH_LOGIN.max, RATE_LIMIT.AUTH_LOGIN.windowMs);

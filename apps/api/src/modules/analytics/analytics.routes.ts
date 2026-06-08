@@ -3,7 +3,7 @@ import { authenticate, authorize } from '../../middleware/auth.middleware.js';
 import { analyticsController } from './analytics.controller.js';
 import { Role } from '@bract/shared';
 
-const router = Router();
+const router: Router = Router();
 
 // Todos los endpoints de analytics requieren ADMIN o SUPER_ADMIN — README §5.5
 router.use(authenticate);

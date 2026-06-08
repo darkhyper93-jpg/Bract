@@ -2,7 +2,7 @@ import { Router } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from '../lib/swagger.js';
 
-const router = Router();
+const router: Router = Router();
 
 // DECISIÓN: la UI de docs está disponible en todos los entornos por simplicidad.
 // En producción real, protegerla con authenticate + authorize(['ADMIN', 'SUPER_ADMIN'])

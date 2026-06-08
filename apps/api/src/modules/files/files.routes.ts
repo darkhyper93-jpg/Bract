@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.middleware.js';
 import { filesController } from './files.controller.js';
 
-export const filesRouter = Router();
+export const filesRouter: Router = Router();
 
 filesRouter.use(authenticate);
 

@@ -3,7 +3,7 @@ import { authenticate, authorize } from '../../middleware/auth.middleware.js';
 import { Role } from '@bract/shared';
 import { adminController } from './admin.controller.js';
 
-const router = Router();
+const router: Router = Router();
 
 router.use(authenticate);
 router.use(authorize(Role.ADMIN, Role.SUPER_ADMIN));

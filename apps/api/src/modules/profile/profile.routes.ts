@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { profileController } from './profile.controller.js';
 import { authenticate } from '../../middleware/auth.middleware.js';
 
-const router = Router();
+const router: Router = Router();
 
 // All profile routes require authentication — README §5.5
 router.use(authenticate);

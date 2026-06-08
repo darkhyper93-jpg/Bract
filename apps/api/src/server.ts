@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Express } from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
@@ -21,7 +21,7 @@ import { analyticsRouter } from './modules/analytics/analytics.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
 import { docsRouter } from './routes/docs.routes.js';
 
-export const app = express();
+export const app: Express = express();
 
 // Middleware order — README §(agent spec): requestId → cors → helmet → json → cookies → logger → rate limit → routes → error
 app.use(requestIdMiddleware);

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { notificationController } from './notification.controller.js';
 import { authenticate } from '../../middleware/auth.middleware.js';
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * @openapi
