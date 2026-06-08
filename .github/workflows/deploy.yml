@@ -49,35 +49,43 @@ jobs:
     needs: ci
     # Solo deployar si el CI pasó
     if: success()
+    # Hoisteamos los secrets a env para poder chequear su presencia en los `if`.
+    env:
+      RENDER_DEPLOY_HOOK_BACKEND: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       # Render auto-deploya al detectar push a main via webhook configurado en el dashboard.
-      # Este step es explícito para tener trazabilidad en GitHub Actions.
-      # DECISIÓN: usamos Deploy Hook de Render (URL en RENDER_DEPLOY_HOOK_BACKEND).
-      # El frontend se auto-deploya desde Render directamente (sin paso adicional).
+      # Este step solo es necesario si se usa un Deploy Hook explícito (RENDER_DEPLOY_HOOK_BACKEND).
       - name: Trigger backend deploy
-        run: |
-          curl --fail -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}" || echo "Deploy hook triggered"
+        if: ${{ env.RENDER_DEPLOY_HOOK_BACKEND != '' }}
+        run: curl --fail -X POST "$RENDER_DEPLOY_HOOK_BACKEND"
 
+      - name: Skip deploy hook (no configurado)
+        if: ${{ env.RENDER_DEPLOY_HOOK_BACKEND == '' }}
+        run: echo "RENDER_DEPLOY_HOOK_BACKEND no configurado — Render auto-deploya desde el dashboard al detectar el push."
+
+      # DECISIÓN: slack-github-action@v2 espera webhook + webhook-type como inputs (no env como v1).
+      # Se saltea si SLACK_WEBHOOK_URL no está, y continue-on-error para que nunca bloquee el deploy.
       - name: Notify on success
-        if: success()
+        if: ${{ success() && env.SLACK_WEBHOOK_URL != '' }}
+        continue-on-error: true
         uses: slackapi/slack-github-action@v2
         with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
           payload: |
             {
               "text": "✅ Deploy en curso — *${{ github.repository }}* (`${{ github.sha }}`). Verificar en Render dashboard."
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
       - name: Notify on failure
-        if: failure()
+        if: ${{ failure() && env.SLACK_WEBHOOK_URL != '' }}
+        continue-on-error: true
         uses: slackapi/slack-github-action@v2
         with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
           payload: |
             {
               "text": "❌ Deploy fallido — *${{ github.repository }}* (`${{ github.sha }}`). Revisar GitHub Actions."
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
