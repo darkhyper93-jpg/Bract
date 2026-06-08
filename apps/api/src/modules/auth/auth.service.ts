@@ -80,8 +80,9 @@ function signAccessToken(payload: { sub: string; email: string; role: Role }): s
   return jwt.sign(
     { sub: payload.sub, email: payload.email, role: payload.role },
     privateKey,
-    // DECISIÓN: cast necesario porque env.JWT_ACCESS_EXPIRES_IN es string y jsonwebtoken@9 espera number | StringValue (ms)
-    { algorithm: 'RS256' as const, expiresIn: env.JWT_ACCESS_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
+    // DECISIÓN: NonNullable<...> quita el undefined del cast; con exactOptionalPropertyTypes no se puede asignar
+    // undefined a una prop opcional. env.JWT_ACCESS_EXPIRES_IN es string; jsonwebtoken@9 espera number | StringValue (ms).
+    { algorithm: 'RS256' as const, expiresIn: env.JWT_ACCESS_EXPIRES_IN as NonNullable<jwt.SignOptions['expiresIn']> },
   );
 }
 
