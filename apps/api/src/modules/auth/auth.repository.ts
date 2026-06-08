@@ -56,8 +56,8 @@ export const authRepository = {
         token: hashToken(data.rawToken),
         userId: data.userId,
         expiresAt: data.expiresAt,
-        ipAddress: data.ipAddress,
-        userAgent: data.userAgent,
+        ipAddress: data.ipAddress ?? null,
+        userAgent: data.userAgent ?? null,
       },
     });
   },

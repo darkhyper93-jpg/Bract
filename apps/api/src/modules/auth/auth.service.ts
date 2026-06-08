@@ -80,7 +80,7 @@ function signAccessToken(payload: { sub: string; email: string; role: Role }): s
   return jwt.sign(
     { sub: payload.sub, email: payload.email, role: payload.role },
     privateKey,
-    { algorithm: 'RS256', expiresIn: env.JWT_ACCESS_EXPIRES_IN },
+    { algorithm: 'RS256' as const, expiresIn: env.JWT_ACCESS_EXPIRES_IN },
   );
 }
 
