@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  ci:
+    name: Lint · Typecheck · Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Shared package primero (API y Web dependen de él)
+      - name: Build shared
+        run: pnpm --filter @bract/shared build
+
+      - name: Typecheck API
+        run: pnpm --filter api typecheck
+
+      - name: Typecheck Web
+        run: pnpm --filter web typecheck
+
+      - name: Lint API
+        run: pnpm --filter api lint
+
+      - name: Lint Web
+        run: pnpm --filter web lint
+
+      - name: Build API
+        run: pnpm --filter api build
+
+      - name: Build Web
+        run: pnpm --filter web build
+        env:
+          # Variables de build mínimas para que Vite no falle
+          VITE_API_URL: http://localhost:4000/api/v1
+          VITE_APP_NAME: Bract
+          VITE_APP_URL: http://localhost:5173

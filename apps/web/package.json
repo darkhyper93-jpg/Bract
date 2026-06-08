@@ -1,0 +1,43 @@
+{
+  "name": "@bract/web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "preview": "vite preview",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@bract/shared": "workspace:*",
+    "@tanstack/react-query": "^5.45.0",
+    "axios": "^1.7.2",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.2.11",
+    "i18next": "^23.11.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@hookform/resolvers": "^3.6.0",
+    "react-hook-form": "^7.52.0",
+    "react-i18next": "^14.1.2",
+    "react-router-dom": "^6.24.0",
+    "recharts": "^2.12.7",
+    "tailwind-merge": "^2.3.0",
+    "zod": "^3.23.8",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "rimraf": "^5.0.7",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1"
+  }
+}

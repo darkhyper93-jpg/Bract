@@ -1,0 +1,117 @@
+# render.yaml
+# Documentación: https://render.com/docs/render-yaml
+# DECISIÓN: Render en lugar de K8s+Docker del README §12 — ver error.md
+
+services:
+  # ============================================================
+  # Backend — Express API
+  # ============================================================
+  - type: web
+    name: bract-api
+    runtime: node
+    region: oregon           # cambiar a la región más cercana a los usuarios
+    plan: starter            # starter (free tier) o standard para producción
+    # Render ejecuta buildCommand y startCommand desde el directorio raíz del repo
+    buildCommand: |
+      corepack enable
+      corepack prepare pnpm@9 --activate
+      pnpm install --frozen-lockfile
+      pnpm --filter @bract/shared build
+      pnpm --filter @bract/api build && pnpm exec prisma migrate deploy
+    startCommand: pnpm --filter @bract/api start
+    healthCheckPath: /api/v1/health
+    # IMPORTANTE: estas variables se configuran manualmente en el Dashboard de Render
+    # → Service → Environment → Add Environment Variables
+    # NO poner valores aquí — solo nombres para documentación
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000         # Render asigna este puerto; no cambiar
+      - key: APP_URL
+        fromService:
+          type: web
+          name: bract-api
+          property: host     # Render auto-inyecta la URL del servicio
+      - key: FRONTEND_URL
+        sync: false          # Valor manual: URL del static site de Render
+      - key: DATABASE_URL
+        sync: false          # Valor manual: Supabase connection string (Transaction mode)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      # BULLMQ_REDIS_URL eliminado — workers son síncronos (ver error.md)
+      # @upstash/redis (REST) sigue siendo requerido para blacklist JWT, rate limit y cache
+      - key: JWT_PRIVATE_KEY
+        sync: false          # Pegar con \n literales, ver nota en apps/api/.env.example
+      - key: JWT_PUBLIC_KEY
+        sync: false
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CLOUDFLARE_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET
+        sync: false
+      - key: CLOUDFLARE_R2_PUBLIC_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  # ============================================================
+  # Frontend — React Static Site
+  # ============================================================
+  - type: static
+    name: bract-web
+    buildCommand: |
+      corepack enable
+      corepack prepare pnpm@9 --activate
+      pnpm install --frozen-lockfile
+      pnpm --filter @bract/shared build
+      pnpm --filter @bract/web build
+    staticPublishPath: apps/web/dist
+    # IMPORTANTE: estas variables se configuran en Dashboard de Render
+    envVars:
+      - key: VITE_API_URL
+        sync: false          # Valor manual: https://bract-api.onrender.com/api/v1
+      - key: VITE_APP_NAME
+        value: Bract
+      - key: VITE_APP_URL
+        sync: false          # Valor manual: URL del static site
+    routes:
+      # SPA fallback: todas las rutas no-archivo van a index.html (React Router)
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      # Security headers para el static site
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
+      # Assets con hash en nombre → cache agresivo (1 año)
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

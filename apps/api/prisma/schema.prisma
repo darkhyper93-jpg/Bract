@@ -1,0 +1,166 @@
+// Schema completo — fuente de verdad: README §3.1 y §3.2
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// USUARIO
+// ==========================================
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  passwordHash  String
+  name          String
+  avatarUrl     String?
+  role          Role       @default(USER)
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  sessions      Session[]
+
+  @@index([email])
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+// ==========================================
+// AUTH
+// ==========================================
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// DECISIÓN: Session reutilizada para tokens de verificación y reset via campo `type`.
+// Alternativa (columnas en User) descartada: mezcla concerns y bloquea multi-token.
+model Session {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String      @unique
+  type      SessionType @default(EMAIL_VERIFICATION)
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+  ipAddress String?
+  userAgent String?
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+enum SessionType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+// ==========================================
+// NOTIFICACIONES
+// ==========================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  read      Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  SYSTEM
+  ALERT
+  INFO
+  SUCCESS
+  WARNING
+}
+
+// ==========================================
+// AUDIT LOG
+// ==========================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  resource   String
+  resourceId String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==========================================
+// FILE METADATA (archivos en R2)
+// ==========================================
+
+model FileRecord {
+  id          String     @id @default(cuid())
+  key         String     @unique // R2 object key
+  bucket      String
+  filename    String
+  mimeType    String
+  size        Int
+  uploadedBy  String
+  publicUrl   String?
+  status      FileStatus @default(PENDING)
+  createdAt   DateTime   @default(now())
+  confirmedAt DateTime?
+
+  @@index([uploadedBy])
+  @@map("file_records")
+}
+
+enum FileStatus {
+  PENDING  // signed URL emitida, upload no confirmado
+  UPLOADED // confirmado por el cliente
+  DELETED  // marcado como eliminado (soft delete)
+}

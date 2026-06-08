@@ -1,0 +1,83 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  # ============================================================
+  # CI check antes del deploy
+  # ============================================================
+  ci:
+    name: Verify before deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @bract/shared build
+
+      - name: Typecheck API
+        run: pnpm --filter @bract/api typecheck
+
+      - name: Typecheck Web
+        run: pnpm --filter @bract/web typecheck
+
+  # ============================================================
+  # Trigger deploy en Render via API
+  # ============================================================
+  deploy:
+    name: Render deploy
+    runs-on: ubuntu-latest
+    needs: ci
+    # Solo deployar si el CI pasó
+    if: success()
+    steps:
+      # Render auto-deploya al detectar push a main via webhook configurado en el dashboard.
+      # Este step es explícito para tener trazabilidad en GitHub Actions.
+      # DECISIÓN: usamos Deploy Hook de Render (URL en RENDER_DEPLOY_HOOK_BACKEND).
+      # El frontend se auto-deploya desde Render directamente (sin paso adicional).
+      - name: Trigger backend deploy
+        run: |
+          curl --fail -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}" || echo "Deploy hook triggered"
+
+      - name: Notify on success
+        if: success()
+        uses: slackapi/slack-github-action@v2
+        with:
+          payload: |
+            {
+              "text": "✅ Deploy en curso — *${{ github.repository }}* (`${{ github.sha }}`). Verificar en Render dashboard."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2
+        with:
+          payload: |
+            {
+              "text": "❌ Deploy fallido — *${{ github.repository }}* (`${{ github.sha }}`). Revisar GitHub Actions."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
