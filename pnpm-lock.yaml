@@ -111,6 +111,9 @@ importers:
       '@bract/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@hookform/resolvers':
+        specifier: ^3.6.0
+        version: 3.10.0(react-hook-form@7.77.0(react@18.3.1))
       '@tanstack/react-query':
         specifier: ^5.45.0
         version: 5.101.0(react@18.3.1)
@@ -154,9 +157,6 @@ importers:
         specifier: ^4.5.4
         version: 4.5.7(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
-      '@hookform/resolvers':
-        specifier: ^3.6.0
-        version: 3.10.0(react-hook-form@7.77.0(react@18.3.1))
       '@types/react':
         specifier: ^18.3.3
         version: 18.3.31
