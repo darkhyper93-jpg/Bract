@@ -28,7 +28,8 @@ export const analyticsRepository = {
       prisma.user.groupBy({ by: ['role'], _count: true, orderBy: { role: 'asc' } }),
     ]);
 
-    const roleMap = Object.fromEntries(usersByRole.map((r) => [r.role, r._count]));
+    // DECISIÓN: cast a number — Prisma 5.22 tipa _count como unión (true | 0 | {...}) aunque en runtime es number
+    const roleMap = Object.fromEntries(usersByRole.map((r) => [r.role, r._count as number]));
 
     return {
       totalUsers,
