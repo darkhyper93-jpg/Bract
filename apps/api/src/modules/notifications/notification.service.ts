@@ -1,12 +1,13 @@
 import type { Notification } from '@prisma/client';
 import { notificationRepository } from './notification.repository.js';
 import { AppError } from '../../lib/errors.js';
-import type { NotificationItem, NotificationListResponse, NotificationListQuery } from '@bract/shared';
+import type { NotificationItem, NotificationListResponse, NotificationListQuery, NotificationType } from '@bract/shared';
 
 function toItem(n: Notification): NotificationItem {
   return {
     id: n.id,
-    type: n.type,
+    // DECISIÓN: cast Prisma enum -> enum compartido (mismatch nominal de TS); mismo patrón que role/status en auth.service
+    type: n.type as NotificationType,
     title: n.title,
     body: n.body,
     data: n.data as Record<string, unknown> | null,

@@ -23,7 +23,8 @@ export const analyticsRepository = {
       prisma.user.count({ where: { status: 'DELETED' } }),
       prisma.user.count({ where: { createdAt: { gte: startOfToday } } }),
       prisma.user.count({ where: { createdAt: { gte: startOfWeek } } }),
-      prisma.user.groupBy({ by: ['role'], _count: { id: true } }),
+      // DECISIÓN: orderBy es obligatorio a nivel de tipos en Prisma.groupBy aunque no usemos take/skip — sin él, tsc falla (TS2345)
+      prisma.user.groupBy({ by: ['role'], _count: { id: true }, orderBy: { role: 'asc' } }),
     ]);
 
     const roleMap = Object.fromEntries(usersByRole.map((r) => [r.role, r._count.id]));
