@@ -80,7 +80,8 @@ apiClient.interceptors.response.use(
     } catch (refreshError) {
       processQueue(refreshError, null);
       useAuthStore.getState().logout();
-      window.location.href = '/login';
+      // Sin hard-redirect: logout() actualiza el store y el router muestra /login solo.
+      // (window.location.href causaba un loop de reloads en el bootstrap sin sesión.)
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;
