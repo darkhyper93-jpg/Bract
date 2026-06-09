@@ -54,3 +54,26 @@
 - **`PRISMA_SKIP_POSTINSTALL_GENERATE=true`** en Render para silenciar el warning de schema en el postinstall.
 - Static site (web) con regla de **rewrite `/*` → `/index.html`** (SPA).
 **Lección:** Para modelos NUEVOS, el flujo es: editar `schema.prisma` → el usuario corre `npx prisma db push` con la URL 5432 → deploy normal. No asumir migraciones automáticas.
+
+## [2026-06-09] Agente A — Contrato de datos de producto (tipos + Zod en @bract/shared)
+**Problema:** Las 3 features de estudio (planner/flashcards/chat) necesitan un contrato de datos compartido (entidades + DTOs de I/O) consumido por API y web, antes de que B/C/D/E implementen.
+**Causa:** A.2/A.3 del PLAN_AGENTES: tipos en `packages/shared/src/types/` y Zod en `schemas/`, exportados desde `@bract/shared`.
+**Solución:** 4 pares type+schema alineados a C/D/E (`subject`, `study`, `flashcard`, `chat`) + reexports en `index.ts`. Decisiones tomadas:
+- **Fechas en entidades de respuesta = `string` (ISO)**, no `Date`. Es el contrato JSON que cruza el cable (patrón de `notification`/`admin`). El mapeo `Date→string` (vía `toISOString`) vive en el service/controller de C/D/E, consistente con la fundación.
+- **Tipos de DTO de input = `z.infer<typeof schema>`** exportados desde el `.schema.ts` (sin duplicar interfaces → sin drift). Las entidades de salida sí son `interface` en `.types.ts`.
+- **`Subject.color` = paleta cerrada `z.enum(SUBJECT_COLORS)`** — 8 hex curados armonizados con los tokens del design system (§9.2 dark-first): brand indigo + estados info/success/warning/error + 3 acentos (purple/pink/teal). Exportada para reuso del frontend (swatches del selector). Descartado regex hex libre por la regla §3.3 "paleta permitida".
+- **Tablas-hijo sin DTO de `userId`:** `StudyPlanItem`/`ChatMessage` se scopean por su padre (§3.4); sus schemas validan solo `planId`/`sessionId` y el body del bloque/mensaje.
+- **Contratos de salida de la IA NO van acá:** los define y valida el Agente B (Apéndice C). A entrega solo entidades + DTOs de request.
+- **Enums espejados de Prisma como `export enum` en `.types.ts`** (patrón de `Role`/`NotificationType`): los 6 enums de producto (`TopicStatus`, `TopicDifficulty`, `StudyPlanStatus`, `StudyPlanItemStatus`, `FlashcardSource`, `ChatRole`) replican exactamente los valores del `schema.prisma`. Zod los consume con `z.nativeEnum(...)` → una sola lista de valores, sin divergencia entre DB, validación y tipos.
+- **Paginación selectiva en listados:** se paginan los de crecimiento no acotado (`chat sessions`, `flashcards?topicId`, `flashcards/due` con `limit`); `subjects`/`topics` NO se paginan porque el planner los consume como árbol completo (`SubjectWithTopics`) y paginarlos rompería el render día-por-día.
+**Lección:** El contrato compartido se entrega como *entidades de salida* (interfaces, fechas ISO) + *DTOs de input* (z.infer). Mantener una sola fuente de verdad por DTO (el schema Zod) y por enum (Prisma → `z.nativeEnum`) evita que tipo y validación se desincronicen. Tras tocar `packages/shared`, rebuildear su `dist` (export condicional `node`→`dist`) para no dejar el runtime desfasado para el agente siguiente.
+
+## [2026-06-09] `pnpm -r lint` roto a nivel fundación — eslint nunca instalado (TAREA AGENTE G)
+**Problema:** `pnpm -r lint` falla con `"eslint" no se reconoce como un comando`. Los scripts `lint` de `apps/api` (`eslint src --ext .ts`) y `apps/web` (`eslint src --ext .ts,.tsx`) referencian un binario inexistente.
+**Causa:** eslint nunca se instaló ni configuró en el repo: **0 ocurrencias en `pnpm-lock.yaml`**, no figura en ningún `package.json` (solo `typescript` como devDep raíz), y no hay `.eslintrc*` en ninguna parte. Es un script muerto del scaffolding de la fundación, preexistente al Agente A.
+**Solución (PENDIENTE — Agente G, NO Agente A):** el Agente A NO lo arregla (excede su mandato de tipos+Zod y correría el linter sobre el código preexistente de la fundación). Para el Agente G:
+1. Instalar + configurar eslint en el monorepo (config compartida + `@typescript-eslint`, reglas del CLAUDE.md: no `console.log`, no `any` sin `// DECISIÓN`).
+2. Arreglar el step de lint del CI (hoy correría contra un binario inexistente).
+3. Revisar y arreglar los hallazgos sobre el código existente de `apps/api` y `apps/web`.
+**Mitigación del Agente A:** los archivos nuevos de `packages/shared` se verificaron a mano (grep): **cero `console.log`, cero `any`**; `pnpm -r typecheck` quedó en verde. El commit del entregable A se hizo con typecheck verde y verificación manual, con el lint documentado acá como deuda de G.
+**Lección:** No declarar "lint verde" como criterio de hecho sin verificar que el linter exista y corra. Un script en `package.json` no implica que la herramienta esté instalada.
