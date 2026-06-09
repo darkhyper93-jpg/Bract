@@ -46,6 +46,13 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // El propio endpoint de refresh devolviendo 401 NO debe disparar otro refresh
+    // (si no, se re-entra al interceptor con isRefreshing=true y se cuelga la cola).
+    if (originalRequest.url?.includes('/auth/refresh')) {
+      useAuthStore.getState().logout();
+      return Promise.reject(error);
+    }
+
     // Queue subsequent 401s while refresh is in flight
     if (isRefreshing) {
       return new Promise<string>((resolve, reject) => {
