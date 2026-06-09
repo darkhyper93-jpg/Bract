@@ -30,6 +30,14 @@ model User {
   auditLogs     AuditLog[]
   sessions      Session[]
 
+  // Producto — Estudio con IA (ver §3.3)
+  subjects          Subject[]
+  topics            Topic[]
+  flashcards        Flashcard[]
+  studyAvailability StudyAvailability[]
+  studyPlans        StudyPlan[]
+  chatSessions      ChatSession[]
+
   @@index([email])
   @@map("users")
 }
@@ -160,7 +168,197 @@ model FileRecord {
 }
 
 enum FileStatus {
-  PENDING  // signed URL emitida, upload no confirmado
+  PENDING // signed URL emitida, upload no confirmado
   UPLOADED // confirmado por el cliente
-  DELETED  // marcado como eliminado (soft delete)
+  DELETED // marcado como eliminado (soft delete)
+}
+
+// ==========================================
+// ESTUDIO — Materias y Temas (contexto compartido) — §3.3
+// ==========================================
+
+model Subject {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  examDate  DateTime?
+  color     String? // token de color (hex), validado por Zod contra paleta permitida
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  topics Topic[]
+
+  @@index([userId])
+  @@index([userId, examDate]) // orden por urgencia (examen más cercano)
+  @@map("subjects")
+}
+
+model Topic {
+  id          String          @id @default(cuid())
+  subjectId   String
+  subject     Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  // DECISIÓN: userId denormalizado (inmutable) → queries "todos los temas del usuario"
+  // (chat-context, planner) y ownership directo sin join. Ver error.md.
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String? // contexto opcional → mejores flashcards/explicaciones de la IA
+  status      TopicStatus     @default(PENDING)
+  difficulty  TopicDifficulty @default(MEDIUM) // sesga el ease inicial de sus flashcards
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  flashcards Flashcard[]
+  planItems  StudyPlanItem[]
+
+  @@index([subjectId])
+  @@index([userId, status])
+  @@map("topics")
+}
+
+enum TopicStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TopicDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+// ==========================================
+// ESTUDIO — Disponibilidad y Plan — §3.3
+// ==========================================
+
+model StudyAvailability {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekday   Int // 0=Domingo ... 6=Sábado
+  minutes   Int // minutos disponibles ese día (UI muestra horas; se guarda en minutos)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, weekday]) // una config por día
+  @@index([userId])
+  @@map("study_availability")
+}
+
+model StudyPlan {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      StudyPlanStatus @default(ACTIVE) // regenerar archiva el anterior
+  generatedAt DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  items StudyPlanItem[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("study_plans")
+}
+
+enum StudyPlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model StudyPlanItem {
+  id               String              @id @default(cuid())
+  planId           String
+  plan             StudyPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  topicId          String
+  topic            Topic               @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  date             DateTime // día asignado
+  order            Int? // orden del bloque dentro del mismo día
+  estimatedMinutes Int
+  status           StudyPlanItemStatus @default(PENDING) // bloque del día (≠ Topic.status global)
+  completedAt      DateTime?
+  createdAt        DateTime            @default(now())
+
+  @@index([planId])
+  @@index([topicId])
+  @@index([planId, date]) // render día por día
+  @@map("study_plan_items")
+}
+
+enum StudyPlanItemStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+}
+
+// ==========================================
+// FLASHCARDS + SRS (SM-2 simplificado) — §3.3
+// ==========================================
+
+model Flashcard {
+  id             String          @id @default(cuid())
+  topicId        String
+  topic          Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  userId         String // denormalizado (inmutable) → índice [userId, dueDate] para "due"
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question       String
+  answer         String
+  source         FlashcardSource @default(MANUAL)
+  // Estado SRS
+  ease           Float           @default(2.5)
+  intervalDays   Int             @default(0)
+  reps           Int             @default(0) // repasos exitosos consecutivos (1º→1d, 2º→6d, ...)
+  dueDate        DateTime        @default(now())
+  lastReviewedAt DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([topicId])
+  @@index([userId, dueDate]) // hot-path: cartas due del usuario
+  @@map("flashcards")
+}
+
+enum FlashcardSource {
+  AI
+  MANUAL
+}
+
+// ==========================================
+// CHAT DE ESTUDIO — §3.3
+// ==========================================
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String? // derivado del 1er mensaje (editable)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@index([userId, updatedAt]) // lista de sesiones recientes
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      ChatRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  @@index([sessionId, createdAt]) // hilo ordenado por sesión
+  @@map("chat_messages")
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM // el system-prompt en vivo lo arma el Agente B; SYSTEM permite persistirlo si hace falta
 }

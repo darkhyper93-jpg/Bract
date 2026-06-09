@@ -329,6 +329,246 @@ enum FileStatus {
 - **Cascade deletes** en relaciones de sesión y tokens
 - **No queries N+1**: toda relación debe cargarse con `include` o `select` explícito
 
+### 3.3 Modelos de producto — Estudio con IA (Subject · Topic · Plan · Flashcard · Chat)
+
+> **Estado:** features APROBADAS (planificador, flashcards, chat) según `context.md` y
+> `PLAN_AGENTES.md`. Esta sección resuelve el gate del §0.10/§16: la spec existe, por lo tanto
+> se implementan. Definidas por el **Agente A** (modelo de datos compartido).
+>
+> **Principio rector:** `materias → temas → progreso` son **una sola fuente de verdad**. Las
+> flashcards cuelgan de `Topic`; los items del plan referencian `Topic`; el chat lee el mismo árbol.
+> Completar un tema (`Topic.status`) impacta plan + SRS + contexto del chat (efectos cruzados a cargo
+> del Agente F).
+
+```prisma
+// ==========================================
+// ESTUDIO — Materias y Temas (contexto compartido)
+// ==========================================
+
+model Subject {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  examDate  DateTime?
+  color     String?   // token de color (hex), validado por Zod contra paleta permitida
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  topics    Topic[]
+
+  @@index([userId])
+  @@index([userId, examDate])   // orden por urgencia (examen más cercano)
+  @@map("subjects")
+}
+
+model Topic {
+  id          String          @id @default(cuid())
+  subjectId   String
+  subject     Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  // DECISIÓN: userId denormalizado (inmutable) → queries "todos los temas del usuario"
+  // (chat-context, planner) y ownership directo sin join. Ver error.md.
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?         // contexto opcional → mejores flashcards/explicaciones de la IA
+  status      TopicStatus     @default(PENDING)
+  difficulty  TopicDifficulty @default(MEDIUM)   // sesga el ease inicial de sus flashcards
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  flashcards  Flashcard[]
+  planItems   StudyPlanItem[]
+
+  @@index([subjectId])
+  @@index([userId, status])
+  @@map("topics")
+}
+
+enum TopicStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TopicDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+// ==========================================
+// ESTUDIO — Disponibilidad y Plan
+// ==========================================
+
+model StudyAvailability {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekday   Int      // 0=Domingo ... 6=Sábado
+  minutes   Int      // minutos disponibles ese día (UI muestra horas; se guarda en minutos)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, weekday])   // una config por día
+  @@index([userId])
+  @@map("study_availability")
+}
+
+model StudyPlan {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      StudyPlanStatus @default(ACTIVE)   // regenerar archiva el anterior
+  generatedAt DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  items       StudyPlanItem[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("study_plans")
+}
+
+enum StudyPlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model StudyPlanItem {
+  id               String              @id @default(cuid())
+  planId           String
+  plan             StudyPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  topicId          String
+  topic            Topic               @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  date             DateTime            // día asignado
+  order            Int?                // orden del bloque dentro del mismo día
+  estimatedMinutes Int
+  status           StudyPlanItemStatus @default(PENDING)  // bloque del día (≠ Topic.status global)
+  completedAt      DateTime?
+  createdAt        DateTime            @default(now())
+
+  @@index([planId])
+  @@index([topicId])
+  @@index([planId, date])   // render día por día
+  @@map("study_plan_items")
+}
+
+enum StudyPlanItemStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+}
+
+// ==========================================
+// FLASHCARDS + SRS (SM-2 simplificado)
+// ==========================================
+
+model Flashcard {
+  id             String          @id @default(cuid())
+  topicId        String
+  topic          Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  userId         String          // denormalizado (inmutable) → índice [userId, dueDate] para "due"
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question       String
+  answer         String
+  source         FlashcardSource @default(MANUAL)
+  // Estado SRS
+  ease           Float           @default(2.5)
+  intervalDays   Int             @default(0)
+  reps           Int             @default(0)   // repasos exitosos consecutivos (1º→1d, 2º→6d, ...)
+  dueDate        DateTime        @default(now())
+  lastReviewedAt DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([topicId])
+  @@index([userId, dueDate])   // hot-path: cartas due del usuario
+  @@map("flashcards")
+}
+
+enum FlashcardSource {
+  AI
+  MANUAL
+}
+
+// ==========================================
+// CHAT DE ESTUDIO
+// ==========================================
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String?       // derivado del 1er mensaje (editable)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  messages  ChatMessage[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])   // lista de sesiones recientes
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      ChatRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  @@index([sessionId, createdAt])   // hilo ordenado por sesión
+  @@map("chat_messages")
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM    // el system-prompt en vivo lo arma el Agente B; SYSTEM permite persistirlo si hace falta
+}
+```
+
+**Back-relations en `User`** (solo relaciones, sin columnas nuevas):
+```prisma
+  subjects          Subject[]
+  topics            Topic[]
+  flashcards        Flashcard[]
+  studyAvailability StudyAvailability[]
+  studyPlans        StudyPlan[]
+  chatSessions      ChatSession[]
+```
+
+### 3.4 Reglas del modelo de producto
+
+- **Ownership en árbol, raíz `User`, todo `onDelete: Cascade`:** Subject→User; Topic→Subject + Topic→User;
+  Flashcard→Topic + Flashcard→User; StudyAvailability→User; StudyPlan→User; StudyPlanItem→Plan +
+  StudyPlanItem→Topic; ChatSession→User; ChatMessage→Session. (Postgres soporta múltiples paths de cascade.)
+- **DECISIÓN — `userId` denormalizado en `Topic` y `Flashcard`:** el owner de un tema/carta es inmutable.
+  Habilita `@@index([userId, status])` (temas del usuario) y `@@index([userId, dueDate])` (hot-path SRS:
+  cartas due del usuario) sin joins. Documentado en `error.md`.
+- **Índices obligatorios (además de los del §3.2):** todo modelo por-usuario indexa `userId`; SRS indexa
+  `[userId, dueDate]`; plan indexa `[planId, date]`; chat indexa `[sessionId, createdAt]` y `[userId, updatedAt]`.
+- **`userId` denormalizado en las 6 raíces consultadas por usuario** (Subject, Topic, StudyAvailability,
+  StudyPlan, Flashcard, ChatSession). `StudyPlanItem` y `ChatMessage` son tablas-hijo puras: se acceden
+  siempre vía su padre (`planId` / `sessionId`), por lo que se scopean por ese FK y **no** llevan `userId`
+  propio (evita redundancia, back-relations extra en `User` y paths de cascade adicionales sin query que
+  lo justifique). El `userId` se setea al crear y **nunca** se transfiere pertenencia.
+- **Verificación de pertenencia de tablas-hijo:** los Agentes **C** (`StudyPlanItem` vía `planId`→`StudyPlan.userId`)
+  y **E** (`ChatMessage` vía `sessionId`→`ChatSession.userId`) validan ownership en sus repos/services a
+  través del padre — nunca confían en un `userId` propio (no existe en esas tablas).
+- **Unidad de tiempo:** todo en **minutos** (`StudyAvailability.minutes`, `StudyPlanItem.estimatedMinutes`).
+  La UI muestra horas; la conversión es de presentación.
+- **`Topic.status` (global) ≠ `StudyPlanItem.status` (bloque del día):** el primero es el dominio del temario;
+  el segundo, el cumplimiento del cronograma. Los efectos cruzados (completar tema → recalcular plan,
+  ajustar SRS, refrescar contexto del chat) son responsabilidad del **Agente F**.
+- **`@@map` snake_case** en todas las tablas, consistente con el resto del schema.
+- **Contratos de IA** (salida JSON de generar plan / generar flashcards): los define y valida con Zod el
+  **Agente B** (Apéndice C de `PLAN_AGENTES.md`), no esta sección.
+
 ---
 
 ## 4. AUTH SYSTEM
@@ -527,7 +767,47 @@ ADMIN
 GET    /api/v1/admin/users        [ADMIN]
 GET    /api/v1/admin/audit-logs   [ADMIN]
 GET    /api/v1/admin/stats        [ADMIN]
+
+PLANIFICADOR — Materias (Agente C)
+GET    /api/v1/subjects                         [self]
+POST   /api/v1/subjects                         [self]
+GET    /api/v1/subjects/:id                     [self]
+PATCH  /api/v1/subjects/:id                     [self]
+DELETE /api/v1/subjects/:id                     [self]
+
+PLANIFICADOR — Temas (Agente C)
+GET    /api/v1/subjects/:subjectId/topics       [self]
+POST   /api/v1/subjects/:subjectId/topics       [self]
+PATCH  /api/v1/topics/:id                        [self]
+DELETE /api/v1/topics/:id                        [self]
+PATCH  /api/v1/topics/:id/status                 [self]   // completar/cambiar estado → dispara recálculo
+
+PLANIFICADOR — Disponibilidad y Plan (Agente C)
+GET    /api/v1/study/availability                [self]
+PUT    /api/v1/study/availability                [self]   // set bulk (7 días, en minutos)
+GET    /api/v1/study/plan                         [self]   // plan ACTIVE, día por día
+POST   /api/v1/study/plan/generate                [self]   // genera/regenera (usa IA vía Agente B)
+PATCH  /api/v1/study/plan/items/:id               [self]   // marcar bloque del día (COMPLETED/SKIPPED)
+
+FLASHCARDS + SRS (Agente D)
+GET    /api/v1/flashcards?topicId=...             [self]   // cartas de un tema
+GET    /api/v1/flashcards/due                      [self]   // cartas due del usuario (SRS)
+POST   /api/v1/flashcards                           [self]   // crear manual
+POST   /api/v1/topics/:topicId/flashcards/generate  [self]   // generar con IA (vía Agente B)
+PATCH  /api/v1/flashcards/:id                       [self]
+DELETE /api/v1/flashcards/:id                       [self]
+POST   /api/v1/flashcards/:id/review                [self]   // calificar SM-2: { quality: 0|3|4|5 }
+
+CHAT DE ESTUDIO (Agente E)
+GET    /api/v1/chat/sessions                        [self]
+POST   /api/v1/chat/sessions                        [self]
+GET    /api/v1/chat/sessions/:id                    [self]   // sesión + mensajes
+DELETE /api/v1/chat/sessions/:id                    [self]
+POST   /api/v1/chat/sessions/:id/messages           [self]   // enviar mensaje (stream vía Agente B)
 ```
+
+> Todas las rutas de producto son `[self]`: protegidas con `authenticate` y scopeadas a `req.user.id`.
+> El contrato (rutas + DTOs Zod) lo define el Agente A; la implementación por capas es de C/D/E.
 
 ---
 
@@ -659,6 +939,22 @@ queryKeys.users.list(filters)  // ['users', 'list', filters]
 // <AuthRoute />    → redirige a /login si no autenticado
 // <RoleRoute role="ADMIN" /> → redirige a /403 si sin permiso
 ```
+
+### 8.6 Features de producto — Estudio con IA
+
+Tres features nuevas en `src/features/`, cada una con la estructura del §8.1, los 4 estados del §0.3
+(`loading · empty · error · success`), entrada en el sidebar del `DashboardShell` (con i18n es/en) y
+consumo de contratos desde `@bract/shared`:
+
+| Feature | Carpeta | Agente | Contenido |
+|---------|---------|--------|-----------|
+| Planificador | `features/planner/` | C | materias/temas/disponibilidad, vista día por día, marcar tema completado → recálculo reactivo |
+| Flashcards | `features/flashcards/` | D | estudio SRS (mostrar → revelar → calificar), CRUD manual, generación con IA |
+| Chat de estudio | `features/chat/` | E | hilo por sesión, streaming, contexto del estudiante |
+
+**Contexto compartido (Agente F):** invalidaciones/refetch cruzados de React Query — completar un tema en
+el planner refresca el contexto del chat y la frecuencia SRS de sus flashcards; las flashcards se generan
+solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (§3.3).
 
 ---
 
@@ -1035,6 +1331,33 @@ Este archivo en la raíz del repo es el log manual de decisiones y errores de ar
 - [ ] CI/CD configurado
 - [ ] Documentación de API (OpenAPI / Swagger)
 - [ ] README actualizado
+
+---
+
+## 15-BIS. FASES DE PRODUCTO — Estudio con IA
+
+> Features APROBADAS (`context.md` / `PLAN_AGENTES.md`). Dependencias: **A** (modelo de datos) antes de
+> todo; **B** (núcleo de IA) antes de las features; **F** integra; **H** valida end-to-end. Spec en §3.3,
+> §5.5 y §8.6.
+
+### Fase 9 — Modelo de datos compartido + núcleo de IA (Agentes A, B)
+- [ ] **A:** modelos Prisma (§3.3), tipos + Zod en `@bract/shared`, `db push` aplicado
+- [ ] **B:** `ai.service.ts` (proveedor tras `AI_API_KEY`), ensamblador de contexto, degradación sin key
+- [ ] **B:** documentar proveedor de IA en §1 (stack) y `AI_API_KEY` en §11 (env vars)
+
+### Fase 10 — Planificador (Agente C)
+- [ ] CRUD materias/temas/disponibilidad (capas Repo→Service→Controller, envelope)
+- [ ] Generación del cronograma (urgencia por examen + pendientes + minutos/día, vía B) y recálculo
+- [ ] Frontend `features/planner/` con los 4 estados + entrada en sidebar (i18n)
+
+### Fase 11 — Flashcards + SRS (Agente D)
+- [ ] CRUD + generación por tema (vía B) + motor SM-2 (review actualiza `ease`/`intervalDays`/`dueDate`)
+- [ ] Endpoint `due`; frontend `features/flashcards/` (estudiar → calificar) con 4 estados (i18n)
+
+### Fase 12 — Chat + Integración + QA (Agentes E, F, H)
+- [ ] **E:** ChatSession/ChatMessage, mensaje con contexto (vía B), streaming, frontend `features/chat/`
+- [ ] **F:** contexto compartido en vivo (invalidaciones cruzadas; un cambio se refleja en las 3 secciones)
+- [ ] **H:** QA end-to-end conectado, CI verde (typecheck/lint/build), deploy verificado en Render
 
 ---
 
