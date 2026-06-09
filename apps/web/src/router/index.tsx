@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { PublicRoute } from './PublicRoute';
 import { RoleRoute } from './RoleRoute';
 import { DashboardShell } from '../components/layout/DashboardShell';
@@ -29,6 +29,10 @@ const PageFallback = () => (
 );
 
 const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <Navigate to="/dashboard" replace />,
+  },
   {
     element: <PublicRoute />,
     children: [
