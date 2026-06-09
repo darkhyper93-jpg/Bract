@@ -41,3 +41,16 @@
 **Causa:** La especificación duplicó el endpoint por convención de prefijo /admin.
 **Solución:** No duplicar. El frontend admin usará GET /api/v1/users directamente.
 **Lección:** Revisar solapamiento de endpoints antes de implementar — si la misma data está disponible en otra ruta protegida, no crear alias innecesarios.
+
+## [2026-06-09] Estado REAL del deploy (corrige entradas previas sobre migraciones y DB)
+**Problema:** Entradas anteriores (y `napkin.md`) dicen que el deploy corre `prisma migrate deploy` automático en el buildCommand y que `DATABASE_URL` usa el Transaction pooler (puerto 6543). Ninguna de las dos refleja el estado real ya deployado y verificado.
+**Causa:** El proyecto nunca generó archivos de migración, y el Transaction pooler (pgbouncer, 6543) no soporta DDL (`db push`/migrate) porque el schema no define `directUrl`.
+**Solución (estado actual verificado en producción):**
+- **Sin archivos de migración.** El esquema se aplica con `npx prisma db push` corrido **manualmente** por el usuario. El buildCommand de Render **NO** corre migrate.
+- **`DATABASE_URL` = Session pooler, puerto 5432** (`...pooler.supabase.com:5432/postgres`, sin `pgbouncer=true`). Sirve para runtime y para `db push`.
+- **Build command real de la API:** `pnpm install --frozen-lockfile --prod=false && pnpm --filter @bract/shared build && pnpm --filter @bract/api build`. Se quitó `corepack enable` (rompía con EROFS: pnpm ya viene en la imagen). `--prod=false` instala devDeps (typescript/prisma) necesarias para buildear.
+- **`NODE_VERSION=20`** seteado por env var (sin pin, Render agarraba Node 26).
+- **`packages/shared`**: exports condicionales (`node`→`dist`, `default`→`src`). **`apps/web/tsconfig.json`**: `declaration:false`. `packages/shared/tsconfig.json`: `ignoreDeprecations:"5.0"`.
+- **`PRISMA_SKIP_POSTINSTALL_GENERATE=true`** en Render para silenciar el warning de schema en el postinstall.
+- Static site (web) con regla de **rewrite `/*` → `/index.html`** (SPA).
+**Lección:** Para modelos NUEVOS, el flujo es: editar `schema.prisma` → el usuario corre `npx prisma db push` con la URL 5432 → deploy normal. No asumir migraciones automáticas.
