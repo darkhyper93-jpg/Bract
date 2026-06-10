@@ -43,6 +43,12 @@
 2. **[2026-06-05] No hardcoded colors**
    Do instead: use only CSS tokens defined in the README design system section.
 
+3. **[2026-06-10] i18next plurals need `_one`/`_other` suffixed keys (not a bare base key)**
+   Do instead: define `key_one` + `key_other` and call `t('key', { count })`. A bare `key` + `key_other` fails for count===1 (looks for `key_one`).
+
+4. **[2026-06-10] `Record<K, ComponentProps['variant']>` leaks `undefined` under exactOptionalPropertyTypes**
+   Do instead: type lookup maps as `Record<K, NonNullable<Props['variant']>>`; and pass strict-boolean props as `loading={val ?? false}` (not `loading={maybeUndefined}`).
+
 ## Implementation Order
 1. **[2026-06-05] Always follow the 8-step implementation order**
    Do instead: types → Zod schemas → Repository → Service → Controller+Routes → frontend api/ → hooks/ → components/.

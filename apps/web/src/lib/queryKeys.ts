@@ -37,4 +37,12 @@ export const queryKeys = {
     stats:     () => ['admin', 'stats'] as const,
     auditLogs: (params?: object) => ['admin', 'audit-logs', params] as const,
   },
+
+  // Planificador (Agente C) — materias/temas, disponibilidad y plan activo (§8.6).
+  planner: {
+    all:          () => ['planner'] as const,
+    subjects:     () => ['planner', 'subjects'] as const,
+    availability: () => ['planner', 'availability'] as const,
+    plan:         () => ['planner', 'plan'] as const,
+  },
 } as const;

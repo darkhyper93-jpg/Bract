@@ -13,6 +13,7 @@ const ForgotPasswordPage = React.lazy(() => import('../features/auth/components/
 const ResetPasswordPage = React.lazy(() => import('../features/auth/components/ResetPasswordPage'));
 const VerifyEmailPage = React.lazy(() => import('../features/auth/components/VerifyEmailPage'));
 const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
+const PlannerPage = React.lazy(() => import('../features/planner/components/PlannerPage'));
 const UsersPage = React.lazy(() => import('../features/users/components/UsersPage'));
 const UserDetailPage = React.lazy(() => import('../features/users/components/UserDetailPage'));
 const ProfilePage = React.lazy(() => import('../features/profile/components/ProfilePage'));
@@ -91,6 +92,17 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: { title: 'Dashboard' },
+      },
+      {
+        path: '/planner',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <PlannerPage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { title: 'Planner', breadcrumb: [{ label: 'Planner' }] },
       },
       {
         path: '/profile',
