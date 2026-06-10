@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { Flashcard, CreateFlashcardInput } from '@bract/shared';
 import { Modal } from '../../../components/ui/Modal';
 import { Input } from '../../../components/ui/Input';
+import { Textarea } from '../../../components/ui/Textarea';
 import { Button } from '../../../components/ui/Button';
 import { useToast } from '../../../hooks/useToast';
 import { flashcardFormSchema, type FlashcardFormValues } from '../schemas/flashcards.form.schema';
@@ -73,10 +74,11 @@ export function FlashcardFormModal({ open, onClose, topicId, flashcard }: Flashc
           autoFocus
           {...register('question')}
         />
-        <Input
+        <Textarea
           label={t('flashcards.form.answer')}
           placeholder={t('flashcards.form.answerPlaceholder')}
           error={fieldError(errors.answer?.message)}
+          rows={4}
           {...register('answer')}
         />
         <div className="mt-2 flex justify-end gap-3">
