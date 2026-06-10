@@ -19,6 +19,7 @@ import { filesRouter } from './modules/files/files.routes.js';
 import { notificationRouter } from './modules/notifications/notification.routes.js';
 import { analyticsRouter } from './modules/analytics/analytics.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
+import { plannerRouter } from './modules/planner/planner.routes.js';
 import { docsRouter } from './routes/docs.routes.js';
 
 export const app: Express = express();
@@ -57,6 +58,9 @@ app.use('/api/v1/analytics', analyticsRouter);
 
 // Fase 7 — Admin module
 app.use('/api/v1/admin', adminRouter);
+
+// Fase 10 — Planificador (Agente C): materias / temas / disponibilidad / plan
+app.use('/api/v1', plannerRouter);
 
 // Fase 8 — API Documentation
 app.use('/api/v1/docs', docsRouter);

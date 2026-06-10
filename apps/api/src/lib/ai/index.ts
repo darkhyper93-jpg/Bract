@@ -10,6 +10,7 @@ export {
   chatReply,
   generateFlashcards,
   generateStudyPlan,
+  generateStudyPlanBaseline,
   streamChatReply,
 } from './ai.service.js';
 export type {

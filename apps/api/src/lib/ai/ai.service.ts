@@ -291,6 +291,17 @@ function parseStructured<T>(text: string, schema: z.ZodType<T>): T | null {
 // ---- Funciones públicas ----------------------------------------------------
 
 /**
+ * Distribución base 100% determinista (urgencia por examen + pendientes + minutos/día),
+ * SIN llamar a la IA. La usa el Agente C para el **recálculo incremental** (completar/saltar):
+ * adapta el plan al instante, sin costo de tokens ni reshuffle caótico. La IA queda reservada
+ * para la generación explícita (`generateStudyPlan`). Reusa el mismo algoritmo (fuente única).
+ * Coordinación C↔B — ver error.md.
+ */
+export function generateStudyPlanBaseline(input: GeneratePlanInput): PlanDay[] {
+  return buildBaselinePlan(input);
+}
+
+/**
  * Genera el cronograma. Degradación útil: sin `AI_API_KEY` (o si la IA falla)
  * devuelve la distribución base determinista — el planner básico sigue andando.
  */

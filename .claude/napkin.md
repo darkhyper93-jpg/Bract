@@ -63,3 +63,6 @@
 
 2. **[2026-06-07] No vite-env.d.ts existed — `import.meta.env` types were missing**
    Do instead: `apps/web/src/vite-env.d.ts` now exists with `/// <reference types="vite/client" />`. Keep it — needed for ErrorBoundary and all Vite env access.
+
+3. **[2026-06-10] Casting shared enum → Prisma `data` field under `exactOptionalPropertyTypes`**
+   Do instead: cast to the model's pure enum type `PrismaModel['field']` (e.g. `input.difficulty as PrismaTopic['status']`), NOT to `Prisma.XxxCreateInput['field']` / `Prisma.XxxUpdateInput['field']` — those include `| undefined` (and update-operations unions) and fail assignment. Date→ISO + `as` enum mapping in service mappers (notification.service pattern).
