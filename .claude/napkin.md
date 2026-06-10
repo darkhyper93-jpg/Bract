@@ -49,6 +49,12 @@
 4. **[2026-06-10] `Record<K, ComponentProps['variant']>` leaks `undefined` under exactOptionalPropertyTypes**
    Do instead: type lookup maps as `Record<K, NonNullable<Props['variant']>>`; and pass strict-boolean props as `loading={val ?? false}` (not `loading={maybeUndefined}`).
 
+5. **[2026-06-10] `Button` variants are only primary/secondary/ghost/danger (NO success)**
+   Do instead: for multi-action rows (e.g. SRS grade buttons) map to those 4 keys; don't invent `success`/`warning` Button variants — they don't exist. Badge has success/warning/info/neutral, Button does not.
+
+6. **[2026-06-10] Study/review queues must be snapshotted in client state, not read from the live query**
+   Do instead: copy the `due` list into local `useState` once, advance by index; reviewing mutates dueDate→future and a live refetch would drop items mid-session and shift indices. Re-snapshot on an explicit "study again".
+
 ## Implementation Order
 1. **[2026-06-05] Always follow the 8-step implementation order**
    Do instead: types → Zod schemas → Repository → Service → Controller+Routes → frontend api/ → hooks/ → components/.

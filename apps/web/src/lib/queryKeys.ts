@@ -45,4 +45,11 @@ export const queryKeys = {
     availability: () => ['planner', 'availability'] as const,
     plan:         () => ['planner', 'plan'] as const,
   },
+
+  // Flashcards + SRS (Agente D) — cartas por tema y cola de repaso "due" (§8.6).
+  flashcards: {
+    all:     () => ['flashcards'] as const,
+    byTopic: (topicId: string) => ['flashcards', 'topic', topicId] as const,
+    due:     () => ['flashcards', 'due'] as const,
+  },
 } as const;

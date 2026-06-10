@@ -14,6 +14,7 @@ const ResetPasswordPage = React.lazy(() => import('../features/auth/components/R
 const VerifyEmailPage = React.lazy(() => import('../features/auth/components/VerifyEmailPage'));
 const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
 const PlannerPage = React.lazy(() => import('../features/planner/components/PlannerPage'));
+const FlashcardsPage = React.lazy(() => import('../features/flashcards/components/FlashcardsPage'));
 const UsersPage = React.lazy(() => import('../features/users/components/UsersPage'));
 const UserDetailPage = React.lazy(() => import('../features/users/components/UserDetailPage'));
 const ProfilePage = React.lazy(() => import('../features/profile/components/ProfilePage'));
@@ -103,6 +104,17 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: { title: 'Planner', breadcrumb: [{ label: 'Planner' }] },
+      },
+      {
+        path: '/flashcards',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <FlashcardsPage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { title: 'Flashcards', breadcrumb: [{ label: 'Flashcards' }] },
       },
       {
         path: '/profile',

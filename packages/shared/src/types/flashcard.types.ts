@@ -21,3 +21,14 @@ export interface Flashcard {
   createdAt: string;
   updatedAt: string;
 }
+
+// Carta + contexto de su tema/materia. Usado SOLO por GET /flashcards/due: la sesión de
+// estudio cruza varios temas y muestra "Repasando: <tema> · <materia>". Coordinación D↔A
+// (extensión aditiva del contrato del Agente A) — ver error.md.
+export interface FlashcardWithTopic extends Flashcard {
+  topic: {
+    id: string;
+    name: string;
+    subjectName: string;
+  };
+}
