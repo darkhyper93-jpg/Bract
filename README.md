@@ -59,6 +59,7 @@ Estas reglas se aplican a CADA línea de código, CADA componente, CADA decisió
 | OpenTelemetry | latest | Trazabilidad y observabilidad |
 | bcrypt | latest | Hash de contraseñas |
 | jsonwebtoken | latest | Firma y verificación de JWT |
+| @anthropic-ai/sdk | latest | Núcleo de IA (Agente B): Claude para planner/flashcards/chat. Proveedor detrás de `AI_API_KEY` (§11). Única librería fuera del stack original — ver `error.md`. |
 
 ### 1.3 Data Layer
 
@@ -706,6 +707,7 @@ Request
 | `CONFLICT` | 409 | Conflicto (email duplicado, etc.) |
 | `RATE_LIMITED` | 429 | Demasiadas requests |
 | `INTERNAL_ERROR` | 500 | Error interno |
+| `AI_UNAVAILABLE` | 503 | IA no disponible: falta `AI_API_KEY` o el proveedor falló (Agente B) |
 
 ### 5.4 Rate limiting
 
@@ -1134,6 +1136,14 @@ CLOUDFLARE_R2_PUBLIC_URL=https://files.bract.app
 # Resend (email transaccional)
 RESEND_API_KEY=re_...
 EMAIL_FROM=noreply@bract.app
+
+# Núcleo de IA (Agente B) — proveedor: Anthropic Claude
+# AI_API_KEY es OPCIONAL: si falta, la app bootea igual y degrada (plan → baseline
+# determinista; flashcards/chat → error AI_UNAVAILABLE 503). Nunca rompe el build/boot.
+AI_API_KEY=sk-ant-...
+# Modelos escalonados por tarea (NO Opus para todo). Defaults si se omiten:
+AI_MODEL_GENERATION=claude-haiku-4-5   # plan + flashcards (generación, barato)
+AI_MODEL_CHAT=claude-sonnet-4-6        # chat (medio; claude-opus-4-8 para calidad máxima)
 
 # Logging
 LOG_LEVEL=debug

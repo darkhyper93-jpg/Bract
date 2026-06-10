@@ -44,6 +44,8 @@ export const ERROR_CODES = {
   CONFLICT: 'CONFLICT',
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  // Agregado por Agente B (núcleo de IA): IA no disponible (falta AI_API_KEY o falla el proveedor).
+  AI_UNAVAILABLE: 'AI_UNAVAILABLE',
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

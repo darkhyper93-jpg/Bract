@@ -8,6 +8,7 @@ const STATUS_MAP: Record<ErrorCode, number> = {
   CONFLICT: 409,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
+  AI_UNAVAILABLE: 503, // IA no disponible (Agente B) — README §5.3
 };
 
 export class AppError extends Error {

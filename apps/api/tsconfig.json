@@ -9,6 +9,9 @@
   "exclude": [
     "node_modules",
     "dist",
+    "src/**/*.test.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
     "src/jobs/queues.ts",
     "src/jobs/cleanup.worker.ts",
     "src/jobs/email.worker.ts",

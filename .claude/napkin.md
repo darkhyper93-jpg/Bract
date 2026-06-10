@@ -48,11 +48,11 @@
    Do instead: types → Zod schemas → Repository → Service → Controller+Routes → frontend api/ → hooks/ → components/.
 
 ## Deploy Architecture
-1. **[2026-06-07] Render PaaS replaces K8s+Docker (README §12)**
-   Do instead: deploy via `render.yaml` in repo root. Push to main → GitHub Actions CI → Render Deploy Hook. `prisma migrate deploy` runs automatically in buildCommand. No Docker, no SSH.
+1. **[2026-06-09] Render PaaS, NO migrate-in-build, schema via manual `db push` (corrige nota previa)**
+   Do instead: push to main → GitHub Actions → Render auto-deploy. NO hay archivos de migración y el buildCommand NO corre `prisma migrate deploy`. Para modelos nuevos: editar `schema.prisma` → el usuario corre `npx prisma db push` a mano con la URL 5432. (error.md 2026-06-09 + PLAN_AGENTES §7.)
 
-2. **[2026-06-07] Supabase DATABASE_URL must use Transaction mode (port 6543) for Render**
-   Do instead: use `postgresql://postgres.PROJECT:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres`. The direct port (5432) exhausts Supabase free tier connections on cold starts.
+2. **[2026-06-09] Supabase DATABASE_URL = Session pooler puerto 5432 (NO 6543) (corrige nota previa)**
+   Do instead: `postgresql://postgres.PROJECT:PASSWORD@aws-1-REGION.pooler.supabase.com:5432/postgres` (sin `?pgbouncer=true`). El Transaction pooler (6543) NO soporta DDL porque el schema no define `directUrl` → rompe `db push`. La 5432 sirve para runtime y para `db push`.
 
 3. **[2026-06-07] JWT keys need literal `\n` in Render env vars**
    Do instead: convert with `awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' private.pem` before pasting in Render dashboard. Multi-line values break the env var.

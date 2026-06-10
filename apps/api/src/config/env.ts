@@ -38,6 +38,14 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+
+  // Núcleo de IA (Agente B) — proveedor detrás de env var (Anthropic Claude).
+  // DECISIÓN: AI_API_KEY es OPCIONAL — la app debe bootear sin ella, degradando
+  // (plan → baseline determinista; flashcards/chat → AppError AI_UNAVAILABLE). Ver error.md.
+  AI_API_KEY: z.string().min(1).optional(),
+  // Modelos escalonados por tarea (NO Opus para todo). Strings actuales del proveedor.
+  AI_MODEL_GENERATION: z.string().min(1).default('claude-haiku-4-5'), // plan + flashcards (barato)
+  AI_MODEL_CHAT: z.string().min(1).default('claude-sonnet-4-6'), // chat (medio; opus opcional)
 });
 
 const result = envSchema.safeParse(process.env);
