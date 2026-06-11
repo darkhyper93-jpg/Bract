@@ -15,6 +15,7 @@ const VerifyEmailPage = React.lazy(() => import('../features/auth/components/Ver
 const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
 const PlannerPage = React.lazy(() => import('../features/planner/components/PlannerPage'));
 const FlashcardsPage = React.lazy(() => import('../features/flashcards/components/FlashcardsPage'));
+const ChatPage = React.lazy(() => import('../features/chat/components/ChatPage'));
 const UsersPage = React.lazy(() => import('../features/users/components/UsersPage'));
 const UserDetailPage = React.lazy(() => import('../features/users/components/UserDetailPage'));
 const ProfilePage = React.lazy(() => import('../features/profile/components/ProfilePage'));
@@ -115,6 +116,17 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: { title: 'Flashcards', breadcrumb: [{ label: 'Flashcards' }] },
+      },
+      {
+        path: '/chat',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <ChatPage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { title: 'Study chat', breadcrumb: [{ label: 'Study chat' }] },
       },
       {
         path: '/profile',

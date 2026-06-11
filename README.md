@@ -805,7 +805,7 @@ GET    /api/v1/chat/sessions                        [self]
 POST   /api/v1/chat/sessions                        [self]
 GET    /api/v1/chat/sessions/:id                    [self]   // sesión + mensajes
 DELETE /api/v1/chat/sessions/:id                    [self]
-POST   /api/v1/chat/sessions/:id/messages           [self]   // enviar mensaje (stream vía Agente B)
+POST   /api/v1/chat/sessions/:id/messages           [self]   // enviar mensaje — responde STREAMING (SSE), no envelope JSON; ver error.md (Agente E)
 ```
 
 > Todas las rutas de producto son `[self]`: protegidas con `authenticate` y scopeadas a `req.user.id`.

@@ -21,6 +21,7 @@ import { analyticsRouter } from './modules/analytics/analytics.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
 import { plannerRouter } from './modules/planner/planner.routes.js';
 import { flashcardRouter } from './modules/flashcards/flashcard.routes.js';
+import { chatRouter } from './modules/chat/chat.routes.js';
 import { docsRouter } from './routes/docs.routes.js';
 
 export const app: Express = express();
@@ -65,6 +66,9 @@ app.use('/api/v1', plannerRouter);
 
 // Fase 11 — Flashcards + SRS (Agente D): CRUD + generación IA + repaso espaciado
 app.use('/api/v1', flashcardRouter);
+
+// Fase 12 — Chat de estudio (Agente E): sesiones + mensajes con contexto y streaming (SSE)
+app.use('/api/v1', chatRouter);
 
 // Fase 8 — API Documentation
 app.use('/api/v1/docs', docsRouter);

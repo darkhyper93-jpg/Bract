@@ -52,4 +52,11 @@ export const queryKeys = {
     byTopic: (topicId: string) => ['flashcards', 'topic', topicId] as const,
     due:     () => ['flashcards', 'due'] as const,
   },
+
+  // Chat de estudio (Agente E) — lista de sesiones y sesión + hilo (§8.6).
+  chat: {
+    all:      () => ['chat'] as const,
+    sessions: () => ['chat', 'sessions'] as const,
+    session:  (id: string) => ['chat', 'session', id] as const,
+  },
 } as const;

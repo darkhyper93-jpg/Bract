@@ -24,7 +24,10 @@
    Do instead: always use `@bract/shared` package name, never `../../../packages/...`.
 
 3. **[2026-06-05] API envelope required on every endpoint**
-   Do instead: always return `{ success, data, meta? }` or `{ success, error }` — no bare responses.
+   Do instead: always return `{ success, data, meta? }` or `{ success, error }` — no bare responses. EXCEPTION: streaming (SSE) endpoints (chat messages) — documented in error.md.
+
+4. **[2026-06-11] Streaming over Express without breaking layers**
+   Do instead: service is an `AsyncGenerator` of domain events (`{type:'meta'|'token'|'done'}`); controller is the ONLY layer touching `res` (serializes to SSE frames). Persist the AI reply in a `finally` (covers natural-complete AND client-disconnect-partial), emit `done` only after the persist. Check AI availability BEFORE the first frame so a missing key returns clean JSON 503 (after first byte the status is sealed → errors go as `event: error`). On `res.on('close')` call `gen.return()` to abort the provider (propagates through the for-await).
 
 ## Code Quality Rules
 1. **[2026-06-05] No `any` without justification comment**
@@ -54,6 +57,9 @@
 
 6. **[2026-06-10] Study/review queues must be snapshotted in client state, not read from the live query**
    Do instead: copy the `due` list into local `useState` once, advance by index; reviewing mutates dueDate→future and a live refetch would drop items mid-session and shift indices. Re-snapshot on an explicit "study again".
+
+7. **[2026-06-11] Consume SSE with `fetch`, not `EventSource`**
+   Do instead: `EventSource` can't POST nor send `Authorization` (token is in-memory in authStore). Use `fetch` + `res.body.getReader()` + TextDecoder, split frames on `\n\n`. fetch bypasses axios interceptors → attach Bearer manually and do ONE refresh-retry on 401. Drive it from a hook with an `AbortController`; abort on unmount/session-change (also aborts the provider backend-side). Show user msg optimistically (local state) + accumulate assistant tokens; on done, invalidate the thread query to pull the persisted messages, then clear local state (await the invalidate first to avoid a flash).
 
 ## Implementation Order
 1. **[2026-06-05] Always follow the 8-step implementation order**
