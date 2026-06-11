@@ -16,6 +16,12 @@
 3. **[2026-06-05] Feature not in README → ask before implementing**
    Do instead: respond with the standard template from CLAUDE.md asking to define data/endpoints/phase before touching code.
 
+## Shell & Git Reliability
+1. **[2026-06-11] Bash cwd PERSISTS across calls; `cd` into node_modules breaks later git reads**
+   Do instead: after `cd`-ing into a subdir to inspect (e.g. `node_modules/...`), `cd` back to repo root before git ops. `git ls-files`/`ls-tree HEAD` are scoped to cwd prefix → return 0 inside a gitignored dir and look like a broken repo (while `git log`/`status`/`show <hash>` still work, since they're whole-repo). Prefer `git -C <abs-root>` or absolute paths; avoid bare `cd` in compound commands.
+2. **[2026-06-11] `git add -A` sweeps in unrelated untracked files (e.g. user's IDEAS_POST_MVP.md)**
+   Do instead: before committing, `git status --short` and stage explicit paths (`git add <files>`), not `-A`, when other untracked files may exist. If a stray file lands in a commit pre-push: `git rm --cached <f> && git commit --amend --no-edit` (keeps it on disk as untracked).
+
 ## Architecture Guardrails
 1. **[2026-06-05] Controller / Service / Repository separation is strict**
    Do instead: Controller = HTTP only; Service = business logic (no req); Repository = Prisma only. Never mix layers.
