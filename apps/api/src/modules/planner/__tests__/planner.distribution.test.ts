@@ -40,6 +40,10 @@ vi.mock('../../../lib/ai/ai.client.js', () => ({
   AI_MODELS: { generation: 'claude-haiku-4-5', chat: 'claude-sonnet-4-6' },
   isEffortCapable: () => false,
 }));
+// F: updateTopicStatus delega el efecto SRS al flashcardService; lo mockeamos para no tocar Prisma.
+vi.mock('../../flashcards/flashcard.service.js', () => ({
+  flashcardService: { onTopicStatusChanged: vi.fn() },
+}));
 
 import { subjectRepository } from '../subject.repository.js';
 import { topicRepository } from '../topic.repository.js';

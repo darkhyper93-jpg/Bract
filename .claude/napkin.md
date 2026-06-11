@@ -26,6 +26,15 @@
 1. **[2026-06-05] Controller / Service / Repository separation is strict**
    Do instead: Controller = HTTP only; Service = business logic (no req); Repository = Prisma only. Never mix layers.
 
+2. **[2026-06-11] Cross-module effects: delegate to the owner service, never reach into its tables**
+   Do instead: when module X must mutate module Y's data (e.g. planner completing a Topic must adjust flashcard SRS), call `yService.onSomething(...)` — X never touches Y's repo/tables. Keeps coupling clean + the boundary mockable in tests. Import direction must stay acyclic (planner→flashcard ok; flashcard must NOT import planner; chat→planner already exists). When you add such a delegated call inside a service method, EVERY existing test of that method that doesn't mock the new dependency will hit real Prisma and fail with "Can't reach database server" — add `vi.mock('../../<mod>/<svc>.service.js', ...)` to each.
+
+3. **[2026-06-11] Cross-feature React Query invalidations live in ONE central helper, not scattered**
+   Do instead: `apps/web/src/lib/invalidateStudyContext.ts` owns the cross-feature dependency graph (planner↔flashcards). Mutation hooks call `invalidateAfterTopicStatusChange`/`invalidateAfterTreeChange` instead of reaching into another feature's queryKeys ad hoc. The chat needs NO invalidation: it assembles its context server-side per message (single source of truth = `planner.subjects`, reused by flashcards' `useSubjects` and chat's `plannerService.listSubjects`).
+
+4. **[2026-06-11] SRS pause/activate by topic status moves ONLY dueDate (never ease/interval/reps)**
+   Do instead: pausing a topic's cards = set `dueDate` to far-future sentinel (`SRS_PAUSED_DUE_DATE`, year 9999 in `srs.ts`); activating = bring sentinel-dated cards back to `now` (detect via `dueDate >= SRS_PAUSED_THRESHOLD`, year 9000). Preserves learned SRS state; reversible; no `db push`. Rule: IN_PROGRESS/COMPLETED→active, PENDING→paused.
+
 2. **[2026-06-05] No cross-package relative imports**
    Do instead: always use `@bract/shared` package name, never `../../../packages/...`.
 

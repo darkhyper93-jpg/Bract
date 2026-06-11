@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma/client.js';
 import type { Prisma, Flashcard, TopicDifficulty } from '@prisma/client';
+import { SRS_PAUSED_DUE_DATE, SRS_PAUSED_THRESHOLD } from './srs.js';
 
 // Carta due + contexto de su tema/materia en UNA query (include topic→subject select name).
 // Hot-path del SRS: índice @@index([userId, dueDate]). Sin N+1.
@@ -81,6 +82,28 @@ export const flashcardRepository = {
 
   update(id: string, data: Prisma.FlashcardUpdateInput): Promise<Flashcard> {
     return prisma.flashcard.update({ where: { id }, data });
+  },
+
+  // ---- Rotación SRS por tema (Agente F — efecto de Topic.status) ----
+  // Pausa: saca de la rotación las cartas ACTIVAS del tema (dueDate → centinela). Idempotente:
+  // solo toca las que aún no están pausadas (`dueDate < umbral`). NO modifica ease/intervalDays/reps.
+  // Ownership por userId denormalizado (§3.4). Devuelve cuántas cartas movió.
+  async pauseSrsByTopic(userId: string, topicId: string): Promise<number> {
+    const res = await prisma.flashcard.updateMany({
+      where: { userId, topicId, dueDate: { lt: SRS_PAUSED_THRESHOLD } },
+      data: { dueDate: SRS_PAUSED_DUE_DATE },
+    });
+    return res.count;
+  },
+
+  // Activa: reincorpora a la rotación SOLO las cartas PAUSADAS del tema (centinela → `now`),
+  // dejando intacto el schedule de las que ya estaban activas (no pisa repasos reales).
+  async activateSrsByTopic(userId: string, topicId: string, now: Date): Promise<number> {
+    const res = await prisma.flashcard.updateMany({
+      where: { userId, topicId, dueDate: { gte: SRS_PAUSED_THRESHOLD } },
+      data: { dueDate: now },
+    });
+    return res.count;
   },
 
   async deleteById(id: string): Promise<void> {

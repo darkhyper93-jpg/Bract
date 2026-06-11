@@ -1,40 +1,40 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CreateTopicInput, UpdateTopicInput, TopicStatus } from '@bract/shared';
-import { queryKeys } from '../../../lib/queryKeys';
+import {
+  invalidateAfterTopicStatusChange,
+  invalidateAfterTreeChange,
+} from '../../../lib/invalidateStudyContext';
 import { plannerApi } from '../api/planner.api';
 
-// Mutaciones de temas. Cambiar el estado de un tema dispara recálculo del plan en el backend;
-// por eso invalidamos materias + plan en todas (el recálculo reactivo del §8.6).
+// Mutaciones de temas. Las invalidaciones cruzadas (planner + flashcards) viven en el helper
+// central `invalidateStudyContext` (grafo de dependencias en un solo lugar — Agente F). Crear/
+// editar/borrar afectan el árbol (delete cascadea a flashcards); cambiar el estado dispara
+// recálculo del plan + rotación SRS de las cartas del tema (§8.6).
 export function useTopicMutations() {
   const queryClient = useQueryClient();
-
-  function invalidate() {
-    queryClient.invalidateQueries({ queryKey: queryKeys.planner.subjects() });
-    queryClient.invalidateQueries({ queryKey: queryKeys.planner.plan() });
-  }
 
   const create = useMutation({
     mutationFn: ({ subjectId, input }: { subjectId: string; input: CreateTopicInput }) =>
       plannerApi.createTopic(subjectId, input),
-    onSuccess: invalidate,
+    onSuccess: () => invalidateAfterTreeChange(queryClient),
   });
 
   const update = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateTopicInput }) =>
       plannerApi.updateTopic(id, input),
-    onSuccess: invalidate,
+    onSuccess: () => invalidateAfterTreeChange(queryClient),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => plannerApi.deleteTopic(id),
-    onSuccess: invalidate,
+    onSuccess: () => invalidateAfterTreeChange(queryClient),
   });
 
-  // Completar/cambiar estado → recálculo reactivo del plan.
+  // Completar/cambiar estado → recálculo reactivo del plan + activar/pausar las flashcards del tema.
   const setStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TopicStatus }) =>
       plannerApi.updateTopicStatus(id, status),
-    onSuccess: invalidate,
+    onSuccess: (_data, { id }) => invalidateAfterTopicStatusChange(queryClient, id),
   });
 
   return { create, update, remove, setStatus };

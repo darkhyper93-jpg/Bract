@@ -28,6 +28,7 @@ import type {
 import { generateStudyPlan, generateStudyPlanBaseline } from '../../lib/ai/index.js';
 import type { GeneratePlanInput, PlanDay } from '../../lib/ai/index.js';
 import { AppError } from '../../lib/errors.js';
+import { flashcardService } from '../flashcards/flashcard.service.js';
 import { subjectRepository } from './subject.repository.js';
 import type { SubjectWithTopicsRow } from './subject.repository.js';
 import { topicRepository } from './topic.repository.js';
@@ -281,6 +282,10 @@ export const plannerService = {
       status: status as PrismaTopic['status'],
       completedAt,
     });
+    // F (contexto compartido): el cambio de estado del tema ajusta la rotación SRS de SUS flashcards
+    // (COMPLETED/IN_PROGRESS → activar; PENDING → pausar). Coupling limpio: el flashcardService es
+    // dueño de esa data — el planner delega, nunca toca las tablas de flashcards. Ver error.md.
+    await flashcardService.onTopicStatusChanged(userId, id, status);
     const plan = await recalcActivePlan(userId);
     return { topic: toTopic(updated), plan };
   },

@@ -21,6 +21,16 @@ export function initialEaseForDifficulty(difficulty: TopicDifficulty): number {
   return INITIAL_EASE_BY_DIFFICULTY[difficulty];
 }
 
+// Pausa de rotación SRS (Agente F — efecto de Topic.status). Una carta cuyo tema vuelve a PENDING
+// sale del `due` fijando su `dueDate` a un futuro inalcanzable. Se elige año 9999, fuera del
+// horizonte de cualquier schedule real de SM-2: alcanzar ese año exigiría ~15 repasos perfectos
+// consecutivos (interval compuesto ×ease), imposible en uso humano. NO se tocan `ease`/`intervalDays`/
+// `reps` → al reactivar el tema la carta vuelve con su aprendizaje intacto. Ver error.md.
+export const SRS_PAUSED_DUE_DATE = new Date('9999-01-01T00:00:00.000Z');
+// Umbral de detección: cualquier `dueDate ≥ umbral` se considera pausada. Margen amplio (año 9000)
+// respecto a los intervalos reales de SM-2 para distinguir "pausada" de "agendada por un repaso".
+export const SRS_PAUSED_THRESHOLD = new Date('9000-01-01T00:00:00.000Z');
+
 // Estado SRS que entra al cálculo (subconjunto del modelo Flashcard).
 export interface SrsState {
   ease: number;

@@ -1,5 +1,5 @@
 import type { Flashcard as PrismaFlashcard } from '@prisma/client';
-import { FlashcardSource, TopicDifficulty } from '@bract/shared';
+import { FlashcardSource, TopicDifficulty, TopicStatus } from '@bract/shared';
 import type {
   Flashcard,
   FlashcardWithTopic,
@@ -157,5 +157,19 @@ export const flashcardService = {
       lastReviewedAt: result.lastReviewedAt,
     });
     return toFlashcard(updated);
+  },
+
+  // ---- Integración (Agente F) — reacción al cambio de estado de un Topic ----
+  // El planner NO toca las tablas de flashcards: delega acá (coupling limpio — cada módulo dueño de
+  // su data, respeta capas). REGLA DELIBERADA (ver error.md): un tema en rotación de estudio
+  // (IN_PROGRESS/COMPLETED) tiene sus cartas ACTIVAS en el SRS para reforzar la retención; un tema
+  // PENDING las PAUSA (salen del `due`). Solo mueve `dueDate`; preserva `ease`/`intervalDays`/`reps`.
+  // Idempotente: reaplicar el mismo estado no acumula efecto. Sin error si el tema no tiene cartas.
+  async onTopicStatusChanged(userId: string, topicId: string, status: TopicStatus): Promise<void> {
+    if (status === TopicStatus.PENDING) {
+      await flashcardRepository.pauseSrsByTopic(userId, topicId);
+    } else {
+      await flashcardRepository.activateSrsByTopic(userId, topicId, new Date());
+    }
   },
 };

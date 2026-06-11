@@ -44,11 +44,17 @@ vi.mock('../../../lib/ai/index.js', () => ({
   generateStudyPlan: vi.fn(),
   generateStudyPlanBaseline: vi.fn(),
 }));
+// F: updateTopicStatus delega el efecto SRS al flashcardService (coupling limpio). Lo mockeamos
+// para aislar al planner; su regla propia se testea en flashcards/__tests__/flashcard.service.test.ts.
+vi.mock('../../flashcards/flashcard.service.js', () => ({
+  flashcardService: { onTopicStatusChanged: vi.fn() },
+}));
 
 import { subjectRepository } from '../subject.repository.js';
 import { topicRepository } from '../topic.repository.js';
 import { studyRepository } from '../study.repository.js';
 import { generateStudyPlan, generateStudyPlanBaseline } from '../../../lib/ai/index.js';
+import { flashcardService } from '../../flashcards/flashcard.service.js';
 import { plannerService } from '../planner.service.js';
 
 const now = new Date('2026-06-10T00:00:00.000Z');
@@ -174,6 +180,8 @@ describe('plannerService', () => {
     expect(generateStudyPlanBaseline).toHaveBeenCalledOnce();
     expect(generateStudyPlan).not.toHaveBeenCalled();
     expect(studyRepository.regenerateFutureItems).toHaveBeenCalledOnce();
+    // F: delega el efecto SRS al flashcardService (no toca tablas de flashcards directamente).
+    expect(flashcardService.onTopicStatusChanged).toHaveBeenCalledWith('u1', 't1', TopicStatus.COMPLETED);
     expect(result.topic.status).toBe('COMPLETED');
     expect(result.topic.completedAt).not.toBeNull();
     expect(result.plan).not.toBeNull();

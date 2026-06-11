@@ -1,16 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CreateSubjectInput, UpdateSubjectInput } from '@bract/shared';
-import { queryKeys } from '../../../lib/queryKeys';
+import { invalidateAfterTreeChange } from '../../../lib/invalidateStudyContext';
 import { plannerApi } from '../api/planner.api';
 
-// Mutaciones de materias. Invalidan el árbol de materias y el plan (borrar/editar materias
-// cambia el universo de temas que el plan distribuye).
+// Mutaciones de materias. Invalidan el árbol + el plan, y la rama flashcards: borrar una materia
+// cascadea a sus temas y a las flashcards de esos temas (Agente F — grafo central en
+// `invalidateStudyContext`). Editar/crear refresca labels y el universo de temas del plan.
 export function useSubjectMutations() {
   const queryClient = useQueryClient();
 
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: queryKeys.planner.subjects() });
-    queryClient.invalidateQueries({ queryKey: queryKeys.planner.plan() });
+    invalidateAfterTreeChange(queryClient);
   }
 
   const create = useMutation({
