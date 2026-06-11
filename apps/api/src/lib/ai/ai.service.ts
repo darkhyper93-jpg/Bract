@@ -374,14 +374,24 @@ function buildChatParams(input: ChatTurnInput): Anthropic.MessageCreateParamsNon
 /**
  * Responde el chat en streaming (deltas de texto). E lo pipea a SSE — la respuesta
  * streameada es la excepción documentada al envelope JSON. Lanza `AI_UNAVAILABLE` sin IA.
+ *
+ * `signal` (opcional, aditivo — coordinación E↔B): se pasa al SDK para abortar el request HTTP
+ * al proveedor de inmediato cuando el cliente se desconecta (E lo ata a `res.on('close')`). Sin
+ * él, cortar el `for await` consumidor igual aborta, pero recién en el próximo límite de token.
  */
-export async function* streamChatReply(input: ChatTurnInput): AsyncGenerator<string, void, unknown> {
+export async function* streamChatReply(
+  input: ChatTurnInput,
+  signal?: AbortSignal,
+): AsyncGenerator<string, void, unknown> {
   if (!isAIConfigured()) {
     throw new AppError('AI_UNAVAILABLE', 'IA no disponible: configurá AI_API_KEY');
   }
   const client = getAIClient();
   try {
-    const stream = client.messages.stream(buildChatParams(input));
+    const stream = client.messages.stream(
+      buildChatParams(input),
+      signal ? { signal } : undefined,
+    );
     for await (const event of stream) {
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
         yield event.delta.text;

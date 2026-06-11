@@ -91,14 +91,17 @@ export const chatController = {
       return;
     }
 
-    const gen = chatService.streamMessage(id, req.user!.id, content);
+    // AbortController atado al cierre de la conexión: aborta el request al proveedor de IA de
+    // INMEDIATO (no espera al próximo token). El service persiste el parcial en su `finally`.
+    const aiAbort = new AbortController();
+    const gen = chatService.streamMessage(id, req.user!.id, content, aiAbort.signal);
     let started = false;
     let clientGone = false;
 
     res.on('close', () => {
       if (!res.writableEnded) {
         clientGone = true;
-        void gen.return(undefined); // corta el for-await, aborta al proveedor y persiste el parcial
+        aiAbort.abort(); // dispara el abort del fetch al proveedor; el for-await se desarma solo
       }
     });
 

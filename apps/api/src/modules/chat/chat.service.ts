@@ -135,6 +135,7 @@ export const chatService = {
     sessionId: string,
     userId: string,
     content: string,
+    signal?: AbortSignal,
   ): AsyncGenerator<ChatStreamEvent, void, unknown> {
     const owner = await chatRepository.findOwner(sessionId);
     if (!owner || owner.userId !== userId) {
@@ -170,11 +171,17 @@ export const chatService = {
     let streamEnded = false;
     let assistant: PrismaChatMessage | null = null;
     try {
-      for await (const delta of streamChatReply({ context, history, message: content })) {
+      // `signal` atado al disconnect del cliente (E↔B): aborta el request al proveedor de inmediato.
+      for await (const delta of streamChatReply({ context, history, message: content }, signal)) {
         acc += delta;
         yield { type: 'token', data: { text: delta } };
       }
       streamEnded = true;
+    } catch (err) {
+      // Disconnect: el abort del proveedor es un corte ESPERADO, no un error. El `finally` persiste
+      // el parcial; no relanzamos (el controller no debe emitir `event: error`). Cualquier OTRO
+      // fallo del proveedor sí se propaga para que el controller lo serialice como `event: error`.
+      if (!signal?.aborted) throw err;
     } finally {
       // Persiste el reply completo (stream OK) o el parcial (disconnect a mitad). Solo si hay texto.
       if (acc.length > 0 && assistant === null) {
