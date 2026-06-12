@@ -1,15 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type Anthropic from '@anthropic-ai/sdk';
+import type { GoogleGenAI } from '@google/genai';
 import { TopicDifficulty, TopicStatus } from '@bract/shared';
 import { AppError } from '../../errors.js';
 
-// Mockeamos la capa de cliente para controlar isAIConfigured + el cliente Anthropic,
+// Mockeamos la capa de cliente para controlar isAIConfigured + el cliente Gemini,
 // sin gastar API ni tocar la red. El resto del service corre real (validación incluida).
 vi.mock('../ai.client.js', () => ({
   isAIConfigured: vi.fn(),
   getAIClient: vi.fn(),
-  AI_MODELS: { generation: 'claude-haiku-4-5', chat: 'claude-sonnet-4-6' },
-  isEffortCapable: (m: string) => m.includes('sonnet-4-6') || m.includes('opus-4'),
+  AI_MODELS: { generation: 'gemini-2.5-flash-lite', chat: 'gemini-2.5-flash' },
 }));
 
 import { getAIClient, isAIConfigured } from '../ai.client.js';
@@ -21,17 +20,17 @@ import {
   streamChatReply,
 } from '../ai.service.js';
 
-// DECISIÓN: mock parcial del cliente Anthropic en test → cast a través de unknown
-// (solo implementamos los métodos que el service usa).
-function asClient(partial: unknown): Anthropic {
-  return partial as Anthropic;
+// DECISIÓN: mock parcial del cliente Gemini en test → cast a través de unknown
+// (solo implementamos `models.generateContent` / `models.generateContentStream`, lo que usa el service).
+function asClient(partial: unknown): GoogleGenAI {
+  return partial as GoogleGenAI;
 }
 
+// `generateContentStream` del SDK devuelve Promise<AsyncGenerator>; cada chunk expone `.text`.
 async function* fakeStream(chunks: string[]): AsyncGenerator<unknown> {
   for (const text of chunks) {
-    yield { type: 'content_block_delta', delta: { type: 'text_delta', text } };
+    yield { text };
   }
-  yield { type: 'message_stop' };
 }
 
 const planInput = {
@@ -79,36 +78,31 @@ describe('generateStudyPlan', () => {
 
   it('valida la salida de la IA: descarta topicId desconocido y clampea minutos/día', async () => {
     vi.mocked(isAIConfigured).mockReturnValue(true);
-    const create = vi.fn().mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            days: [
-              {
-                date: '2026-06-16',
-                items: [
-                  { topicId: 't1', estimatedMinutes: 999 }, // excede los 60 del día
-                  { topicId: 'ghost', estimatedMinutes: 30 }, // topicId inexistente
-                ],
-              },
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        days: [
+          {
+            date: '2026-06-16',
+            items: [
+              { topicId: 't1', estimatedMinutes: 999 }, // excede los 60 del día
+              { topicId: 'ghost', estimatedMinutes: 30 }, // topicId inexistente
             ],
-          }),
-        },
-      ],
+          },
+        ],
+      }),
     });
-    vi.mocked(getAIClient).mockReturnValue(asClient({ messages: { create } }));
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     const plan = await generateStudyPlan(planInput);
 
-    expect(create).toHaveBeenCalledOnce();
+    expect(generateContent).toHaveBeenCalledOnce();
     expect(plan).toEqual([{ date: '2026-06-16', items: [{ topicId: 't1', estimatedMinutes: 60 }] }]);
   });
 
   it('si el proveedor falla, degrada a baseline (nunca lanza)', async () => {
     vi.mocked(isAIConfigured).mockReturnValue(true);
-    const create = vi.fn().mockRejectedValue(new Error('boom'));
-    vi.mocked(getAIClient).mockReturnValue(asClient({ messages: { create } }));
+    const generateContent = vi.fn().mockRejectedValue(new Error('boom'));
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     const plan = await generateStudyPlan(planInput);
 
@@ -130,21 +124,16 @@ describe('generateFlashcards', () => {
 
   it('deduplica contra existentes y entre sí, y capa la cantidad', async () => {
     vi.mocked(isAIConfigured).mockReturnValue(true);
-    const create = vi.fn().mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            cards: [
-              { question: '¿Qué es X?', answer: 'a' }, // dup de existing
-              { question: 'Definí Y', answer: 'b' },
-              { question: 'Definí Y', answer: 'dup' }, // dup interno
-            ],
-          }),
-        },
-      ],
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        cards: [
+          { question: '¿Qué es X?', answer: 'a' }, // dup de existing
+          { question: 'Definí Y', answer: 'b' },
+          { question: 'Definí Y', answer: 'dup' }, // dup interno
+        ],
+      }),
     });
-    vi.mocked(getAIClient).mockReturnValue(asClient({ messages: { create } }));
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     const cards = await generateFlashcards({
       topic: { id: 't1', name: 'Integrales' },
@@ -162,16 +151,10 @@ describe('chatReply', () => {
     await expect(chatReply(chatInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
   });
 
-  it('concatena los bloques de texto de la respuesta', async () => {
+  it('devuelve el texto de la respuesta del modelo', async () => {
     vi.mocked(isAIConfigured).mockReturnValue(true);
-    const create = vi.fn().mockResolvedValue({
-      content: [
-        { type: 'text', text: 'Hola' },
-        { type: 'thinking', thinking: 'razonando' },
-        { type: 'text', text: ' mundo' },
-      ],
-    });
-    vi.mocked(getAIClient).mockReturnValue(asClient({ messages: { create } }));
+    const generateContent = vi.fn().mockResolvedValue({ text: 'Hola mundo' });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     await expect(chatReply(chatInput)).resolves.toBe('Hola mundo');
   });
@@ -180,8 +163,8 @@ describe('chatReply', () => {
 describe('streamChatReply', () => {
   it('emite los deltas de texto del stream', async () => {
     vi.mocked(isAIConfigured).mockReturnValue(true);
-    const stream = vi.fn().mockReturnValue(fakeStream(['Hola ', 'mundo']));
-    vi.mocked(getAIClient).mockReturnValue(asClient({ messages: { stream } }));
+    const generateContentStream = vi.fn().mockResolvedValue(fakeStream(['Hola ', 'mundo']));
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContentStream } }));
 
     let out = '';
     for await (const delta of streamChatReply(chatInput)) out += delta;

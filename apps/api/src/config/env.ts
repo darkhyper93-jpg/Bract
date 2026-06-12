@@ -39,13 +39,14 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
-  // Núcleo de IA (Agente B) — proveedor detrás de env var (Anthropic Claude).
+  // Núcleo de IA (Agente B) — proveedor detrás de env var (Google Gemini, free tier).
   // DECISIÓN: AI_API_KEY es OPCIONAL — la app debe bootear sin ella, degradando
   // (plan → baseline determinista; flashcards/chat → AppError AI_UNAVAILABLE). Ver error.md.
+  // El nombre AI_API_KEY se mantiene genérico (ahora es la key de Gemini). Ver error.md (swap a Gemini).
   AI_API_KEY: z.string().min(1).optional(),
-  // Modelos escalonados por tarea (NO Opus para todo). Strings actuales del proveedor.
-  AI_MODEL_GENERATION: z.string().min(1).default('claude-haiku-4-5'), // plan + flashcards (barato)
-  AI_MODEL_CHAT: z.string().min(1).default('claude-sonnet-4-6'), // chat (medio; opus opcional)
+  // Modelos escalonados por tarea (NO el más caro para todo). Free tier sin tarjeta (verificado en docs).
+  AI_MODEL_GENERATION: z.string().min(1).default('gemini-2.5-flash-lite'), // plan + flashcards (el más barato)
+  AI_MODEL_CHAT: z.string().min(1).default('gemini-2.5-flash'), // chat (más capaz; free tier)
 });
 
 const result = envSchema.safeParse(process.env);

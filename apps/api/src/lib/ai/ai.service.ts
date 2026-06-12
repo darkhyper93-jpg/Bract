@@ -1,17 +1,17 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type { Content, GenerateContentParameters } from '@google/genai';
 import { TopicDifficulty } from '@bract/shared';
 import type { TopicStatus } from '@bract/shared';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
 import { logger } from '../logger.js';
-import { AI_MODELS, getAIClient, isAIConfigured, isEffortCapable } from './ai.client.js';
+import { AI_MODELS, getAIClient, isAIConfigured } from './ai.client.js';
 import { renderContextForPrompt } from './ai.context.js';
 import type { StudentContext } from './ai.context.js';
 import {
-  flashcardsJsonSchema,
   flashcardsOutputSchema,
-  planJsonSchema,
+  flashcardsResponseSchema,
   planOutputSchema,
+  planResponseSchema,
 } from './ai.schemas.js';
 import {
   FLASHCARDS_SYSTEM,
@@ -268,14 +268,6 @@ function mapAIError(err: unknown): AppError {
   return new AppError('AI_UNAVAILABLE', 'El proveedor de IA no está disponible en este momento');
 }
 
-/** Concatena los bloques de texto de una respuesta del modelo. */
-function extractText(res: Anthropic.Message): string {
-  return res.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
-}
-
 /** JSON.parse defensivo + validación Zod del structured output (nunca confiamos a ciegas). */
 function parseStructured<T>(text: string, schema: z.ZodType<T>): T | null {
   let json: unknown;
@@ -311,14 +303,17 @@ export async function generateStudyPlan(input: GeneratePlanInput): Promise<PlanD
 
   try {
     const client = getAIClient();
-    const res = await client.messages.create({
+    const res = await client.models.generateContent({
       model: AI_MODELS.generation,
-      max_tokens: PLAN_MAX_TOKENS,
-      system: PLAN_SYSTEM,
-      messages: [{ role: 'user', content: buildPlanUserPrompt(input, baseline) }],
-      output_config: { format: { type: 'json_schema', schema: planJsonSchema } },
+      contents: buildPlanUserPrompt(input, baseline),
+      config: {
+        systemInstruction: PLAN_SYSTEM,
+        maxOutputTokens: PLAN_MAX_TOKENS,
+        responseMimeType: 'application/json',
+        responseSchema: planResponseSchema,
+      },
     });
-    const parsed = parseStructured(extractText(res), planOutputSchema);
+    const parsed = parseStructured(res.text ?? '', planOutputSchema);
     if (!parsed) return baseline;
     const refined = validateAndClampPlan(parsed.days, input);
     return refined.length > 0 ? refined : baseline;
@@ -338,14 +333,17 @@ export async function generateFlashcards(
   const cap = Math.min(input.count ?? DEFAULT_FLASHCARD_COUNT, MAX_FLASHCARD_COUNT);
   try {
     const client = getAIClient();
-    const res = await client.messages.create({
+    const res = await client.models.generateContent({
       model: AI_MODELS.generation,
-      max_tokens: FLASHCARDS_MAX_TOKENS,
-      system: FLASHCARDS_SYSTEM,
-      messages: [{ role: 'user', content: buildFlashcardsUserPrompt(input, cap) }],
-      output_config: { format: { type: 'json_schema', schema: flashcardsJsonSchema } },
+      contents: buildFlashcardsUserPrompt(input, cap),
+      config: {
+        systemInstruction: FLASHCARDS_SYSTEM,
+        maxOutputTokens: FLASHCARDS_MAX_TOKENS,
+        responseMimeType: 'application/json',
+        responseSchema: flashcardsResponseSchema,
+      },
     });
-    const parsed = parseStructured(extractText(res), flashcardsOutputSchema);
+    const parsed = parseStructured(res.text ?? '', flashcardsOutputSchema);
     if (!parsed) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió flashcards válidas');
     }
@@ -355,29 +353,35 @@ export async function generateFlashcards(
   }
 }
 
-function buildChatParams(input: ChatTurnInput): Anthropic.MessageCreateParamsNonStreaming {
-  const model = AI_MODELS.chat;
-  const messages: Anthropic.MessageParam[] = [
-    ...input.history.map((m): Anthropic.MessageParam => ({ role: m.role, content: m.content })),
-    { role: 'user', content: input.message },
+function buildChatRequest(input: ChatTurnInput): GenerateContentParameters {
+  // Historial → `contents` de Gemini: el rol 'assistant' de Anthropic mapea a 'model'.
+  const contents: Content[] = [
+    ...input.history.map(
+      (m): Content => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }),
+    ),
+    { role: 'user', parts: [{ text: input.message }] },
   ];
-  const base: Anthropic.MessageCreateParamsNonStreaming = {
-    model,
-    max_tokens: CHAT_MAX_TOKENS,
-    system: buildChatSystemPrompt(renderContextForPrompt(input.context)),
-    messages,
+  return {
+    model: AI_MODELS.chat,
+    contents,
+    config: {
+      systemInstruction: buildChatSystemPrompt(renderContextForPrompt(input.context)),
+      maxOutputTokens: CHAT_MAX_TOKENS,
+    },
   };
-  // effort solo en modelos que lo soportan (no Haiku) — chat default es Sonnet.
-  return isEffortCapable(model) ? { ...base, output_config: { effort: 'medium' } } : base;
 }
 
 /**
  * Responde el chat en streaming (deltas de texto). E lo pipea a SSE — la respuesta
  * streameada es la excepción documentada al envelope JSON. Lanza `AI_UNAVAILABLE` sin IA.
  *
- * `signal` (opcional, aditivo — coordinación E↔B): se pasa al SDK para abortar el request HTTP
- * al proveedor de inmediato cuando el cliente se desconecta (E lo ata a `res.on('close')`). Sin
- * él, cortar el `for await` consumidor igual aborta, pero recién en el próximo límite de token.
+ * `signal` (opcional, aditivo — coordinación E↔B): se pasa al SDK como `abortSignal` para cortar
+ * el stream del proveedor de inmediato cuando el cliente se desconecta (E lo ata a `res.on('close')`).
+ * Nota: en Gemini `abortSignal` es client-only — corta el fetch/iteración local al instante (lo que
+ * necesita el controller para dejar de emitir), aunque no cancele el cómputo ya iniciado en el server.
  */
 export async function* streamChatReply(
   input: ChatTurnInput,
@@ -388,14 +392,13 @@ export async function* streamChatReply(
   }
   const client = getAIClient();
   try {
-    const stream = client.messages.stream(
-      buildChatParams(input),
-      signal ? { signal } : undefined,
+    const req = buildChatRequest(input);
+    const stream = await client.models.generateContentStream(
+      signal ? { ...req, config: { ...req.config, abortSignal: signal } } : req,
     );
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        yield event.delta.text;
-      }
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) yield text;
     }
   } catch (err) {
     throw mapAIError(err);
@@ -409,11 +412,8 @@ export async function chatReply(input: ChatTurnInput): Promise<string> {
   }
   try {
     const client = getAIClient();
-    const res = await client.messages.create(buildChatParams(input));
-    const text = res.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
+    const res = await client.models.generateContent(buildChatRequest(input));
+    const text = res.text ?? '';
     if (text.trim().length === 0) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió una respuesta');
     }

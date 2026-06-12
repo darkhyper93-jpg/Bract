@@ -1,3 +1,4 @@
+import { Type, type Schema } from '@google/genai';
 import { z } from 'zod';
 
 // Salidas JSON de la IA — validadas SIEMPRE con Zod (la IA puede devolver basura).
@@ -34,58 +35,53 @@ export const flashcardsOutputSchema = z.object({
 
 export type FlashcardsOutput = z.infer<typeof flashcardsOutputSchema>;
 
-// JSON Schemas equivalentes para `output_config.format` (structured outputs del proveedor).
-// DECISIÓN: se escriben a mano en vez de usar el helper `zodOutputFormat` del SDK, que está
-// tipado contra zod v4 y el repo usa zod v3 (mismatch de tipos). El JSON que devuelve la IA
-// se valida igual con los Zod de arriba (no confiamos en el structured output a ciegas).
-// Sin min/max/minItems: structured outputs no soporta esas constraints; los topes van en código.
-export const planJsonSchema: Record<string, unknown> = {
-  type: 'object',
+// `Schema` de Gemini (responseSchema + responseMimeType:'application/json') para forzar JSON.
+// DECISIÓN (swap a Gemini, ver error.md): es un subset de OpenAPI 3.0 — NO admite
+// `additionalProperties` (que sí usaba el JSON Schema de Anthropic); se quita. Usa el enum
+// `Type` (OBJECT/ARRAY/STRING/INTEGER). El JSON crudo se valida IGUAL con los Zod de arriba
+// (no confiamos en el structured output a ciegas). Sin min/max/minItems: los topes van en código.
+export const planResponseSchema: Schema = {
+  type: Type.OBJECT,
   properties: {
     days: {
-      type: 'array',
+      type: Type.ARRAY,
       items: {
-        type: 'object',
+        type: Type.OBJECT,
         properties: {
-          date: { type: 'string' },
+          date: { type: Type.STRING },
           items: {
-            type: 'array',
+            type: Type.ARRAY,
             items: {
-              type: 'object',
+              type: Type.OBJECT,
               properties: {
-                topicId: { type: 'string' },
-                estimatedMinutes: { type: 'integer' },
+                topicId: { type: Type.STRING },
+                estimatedMinutes: { type: Type.INTEGER },
               },
               required: ['topicId', 'estimatedMinutes'],
-              additionalProperties: false,
             },
           },
         },
         required: ['date', 'items'],
-        additionalProperties: false,
       },
     },
   },
   required: ['days'],
-  additionalProperties: false,
 };
 
-export const flashcardsJsonSchema: Record<string, unknown> = {
-  type: 'object',
+export const flashcardsResponseSchema: Schema = {
+  type: Type.OBJECT,
   properties: {
     cards: {
-      type: 'array',
+      type: Type.ARRAY,
       items: {
-        type: 'object',
+        type: Type.OBJECT,
         properties: {
-          question: { type: 'string' },
-          answer: { type: 'string' },
+          question: { type: Type.STRING },
+          answer: { type: Type.STRING },
         },
         required: ['question', 'answer'],
-        additionalProperties: false,
       },
     },
   },
   required: ['cards'],
-  additionalProperties: false,
 };

@@ -37,8 +37,7 @@ vi.mock('../study.repository.js', () => ({
 vi.mock('../../../lib/ai/ai.client.js', () => ({
   isAIConfigured: vi.fn(() => false), // sin AI_API_KEY → generate degrada al baseline
   getAIClient: vi.fn(),
-  AI_MODELS: { generation: 'claude-haiku-4-5', chat: 'claude-sonnet-4-6' },
-  isEffortCapable: () => false,
+  AI_MODELS: { generation: 'gemini-2.5-flash-lite', chat: 'gemini-2.5-flash' },
 }));
 // F: updateTopicStatus delega el efecto SRS al flashcardService; lo mockeamos para no tocar Prisma.
 vi.mock('../../flashcards/flashcard.service.js', () => ({
