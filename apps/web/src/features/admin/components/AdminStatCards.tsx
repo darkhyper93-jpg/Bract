@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { StatCard } from '../../dashboard/components/StatCard';
 import type { AdminStats } from '@bract/shared';
 
@@ -47,28 +48,29 @@ function IconActivity() {
 }
 
 export function AdminStatCards({ stats, isLoading }: AdminStatCardsProps) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
-        title="Total usuarios"
+        title={t('admin.totalUsers')}
         value={stats?.users.total ?? 0}
         icon={<IconUsers />}
         isLoading={isLoading}
       />
       <StatCard
-        title="Usuarios activos"
+        title={t('admin.activeUsers')}
         value={stats?.users.active ?? 0}
         icon={<IconUserCheck />}
         isLoading={isLoading}
       />
       <StatCard
-        title="Logins hoy"
+        title={t('admin.loginsToday')}
         value={stats?.auditLogs.loginsToday ?? 0}
         icon={<IconLogIn />}
         isLoading={isLoading}
       />
       <StatCard
-        title="Acciones esta semana"
+        title={t('admin.actionsThisWeek')}
         value={stats?.auditLogs.actionsThisWeek ?? 0}
         icon={<IconActivity />}
         isLoading={isLoading}

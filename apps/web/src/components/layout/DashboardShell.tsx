@@ -1,16 +1,24 @@
 import { Navigate, Outlet, useMatches } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Skeleton } from '../ui/Skeleton';
 import { Sidebar } from './Sidebar';
 import { Header, BreadcrumbItem } from './Header';
 
+interface RouteCrumbHandle {
+  labelKey?: string;
+  label?: string;
+  href?: string;
+}
+
 interface RouteHandle {
-  title?: string;
-  breadcrumb?: BreadcrumbItem[];
+  titleKey?: string;
+  breadcrumb?: RouteCrumbHandle[];
 }
 
 export function DashboardShell() {
+  const { t } = useTranslation();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { sidebarOpen } = useUIStore();
   const matches = useMatches();
@@ -29,8 +37,11 @@ export function DashboardShell() {
 
   const currentMatch = matches[matches.length - 1];
   const handle = currentMatch?.handle as RouteHandle | undefined;
-  const title = handle?.title;
-  const breadcrumb = handle?.breadcrumb;
+  const title = handle?.titleKey ? t(handle.titleKey) : undefined;
+  const breadcrumb: BreadcrumbItem[] | undefined = handle?.breadcrumb?.map((crumb) => ({
+    label: crumb.labelKey ? t(crumb.labelKey) : (crumb.label ?? ''),
+    ...(crumb.href !== undefined ? { href: crumb.href } : {}),
+  }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg-base">

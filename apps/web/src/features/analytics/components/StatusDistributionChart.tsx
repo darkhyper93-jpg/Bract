@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import type { AnalyticsOverview } from '@bract/shared';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -10,11 +11,12 @@ interface StatusDistributionChartProps {
 }
 
 export function StatusDistributionChart({ byStatus, isLoading }: StatusDistributionChartProps) {
+  const { t } = useTranslation();
   const data = byStatus
     ? [
-        { name: 'Activos', value: byStatus.ACTIVE, fill: 'var(--success)' },
-        { name: 'Suspendidos', value: byStatus.SUSPENDED, fill: 'var(--warning)' },
-        { name: 'Eliminados', value: byStatus.DELETED, fill: 'var(--error)' },
+        { name: t('users.statuses.ACTIVE'), value: byStatus.ACTIVE, fill: 'var(--success)' },
+        { name: t('users.statuses.SUSPENDED'), value: byStatus.SUSPENDED, fill: 'var(--warning)' },
+        { name: t('users.statuses.DELETED'), value: byStatus.DELETED, fill: 'var(--error)' },
       ].filter((d) => d.value > 0)
     : [];
 
@@ -23,7 +25,7 @@ export function StatusDistributionChart({ byStatus, isLoading }: StatusDistribut
   return (
     <div className="rounded-xl border border-border-default bg-bg-surface p-6">
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-primary">Distribución por status</h3>
+        <h3 className="text-sm font-medium text-text-primary">{t('analytics.statusDistribution')}</h3>
       </div>
 
       {isLoading && (
@@ -33,7 +35,7 @@ export function StatusDistributionChart({ byStatus, isLoading }: StatusDistribut
       )}
 
       {isEmpty && (
-        <EmptyState title="Sin datos" className="h-[280px]" />
+        <EmptyState title={t('analytics.noData')} className="h-[280px]" />
       )}
 
       {!isLoading && !isEmpty && (

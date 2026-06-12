@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   LineChart,
   Line,
@@ -24,28 +25,30 @@ function formatDate(dateStr: string): string {
 }
 
 function CustomTooltip({ active, payload, label }: TooltipProps<number, string>) {
+  const { t } = useTranslation();
   if (!active || !payload?.length) return null;
 
   return (
     <div
       style={{
-        background: '#1a1a1a',
-        border: '1px solid rgba(255,255,255,0.10)',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-default)',
         borderRadius: '8px',
         padding: '10px 14px',
       }}
     >
-      <p style={{ color: 'rgba(255,255,255,0.60)', fontSize: '12px', marginBottom: 4 }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: 4 }}>
         {label}
       </p>
-      <p style={{ color: 'rgba(255,255,255,0.95)', fontSize: '14px', fontWeight: 600 }}>
-        {payload[0]?.value?.toLocaleString()} usuarios
+      <p style={{ color: 'var(--text-primary)', fontSize: '14px', fontWeight: 600 }}>
+        {t('dashboard.usersCount', { count: payload[0]?.value ?? 0 })}
       </p>
     </div>
   );
 }
 
 export function UserGrowthChart({ data, isLoading }: UserGrowthChartProps) {
+  const { t } = useTranslation();
   if (isLoading) {
     return <Skeleton className="h-[300px] w-full" />;
   }
@@ -53,8 +56,8 @@ export function UserGrowthChart({ data, isLoading }: UserGrowthChartProps) {
   if (!data.length) {
     return (
       <EmptyState
-        title="Sin datos aún"
-        description="No hay datos de crecimiento para el período seleccionado."
+        title={t('dashboard.chartNoDataTitle')}
+        description={t('dashboard.chartGrowthNoDataDescription')}
         className="h-[300px]"
       />
     );
@@ -63,28 +66,28 @@ export function UserGrowthChart({ data, isLoading }: UserGrowthChartProps) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.10)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" />
         <XAxis
           dataKey="date"
           tickFormatter={formatDate}
-          tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 12 }}
-          axisLine={{ stroke: 'rgba(255,255,255,0.10)' }}
+          tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }}
+          axisLine={{ stroke: 'var(--border-default)' }}
           tickLine={false}
         />
         <YAxis
-          tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 12 }}
+          tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }}
           axisLine={false}
           tickLine={false}
           allowDecimals={false}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.10)' }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--border-default)' }} />
         <Line
           type="monotone"
           dataKey="count"
-          stroke="#6366f1"
+          stroke="var(--brand-primary)"
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 4, fill: '#6366f1', stroke: '#1a1a1a', strokeWidth: 2 }}
+          activeDot={{ r: 4, fill: 'var(--brand-primary)', stroke: 'var(--bg-elevated)', strokeWidth: 2 }}
         />
       </LineChart>
     </ResponsiveContainer>

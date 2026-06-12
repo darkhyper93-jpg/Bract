@@ -3,7 +3,8 @@ import type { NotificationItem, NotificationListQuery } from '@bract/shared';
 
 interface NotificationListApiResponse {
   success: true;
-  data: { items: NotificationItem[]; unreadCount: number };
+  // El backend devuelve la lista bajo data.notifications (notification.controller)
+  data: { notifications: NotificationItem[]; unreadCount: number };
   meta: { total: number; page: number; perPage: number; totalPages: number };
 }
 

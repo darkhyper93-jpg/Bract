@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../../components/ui/Avatar';
 import { Button } from '../../../components/ui/Button';
 import { useProfile } from '../hooks/useProfile';
@@ -7,6 +8,7 @@ import { useRemoveAvatar } from '../hooks/useRemoveAvatar';
 import { useUIStore } from '../../../stores/uiStore';
 
 export function AvatarUploader() {
+  const { t } = useTranslation();
   const { profile } = useProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { upload, isUploading, progress, error } = useAvatarUpload();
@@ -27,7 +29,7 @@ export function AvatarUploader() {
       addNotification({
         id: crypto.randomUUID(),
         type: 'success',
-        title: 'Foto actualizada',
+        title: t('profile.avatarUpdated'),
       });
     }
   };
@@ -38,14 +40,14 @@ export function AvatarUploader() {
         addNotification({
           id: crypto.randomUUID(),
           type: 'success',
-          title: 'Foto eliminada',
+          title: t('profile.avatarRemoved'),
         });
       },
       onError: () => {
         addNotification({
           id: crypto.randomUUID(),
           type: 'error',
-          title: 'Error al eliminar la foto',
+          title: t('profile.avatarRemoveError'),
         });
       },
     });
@@ -58,7 +60,7 @@ export function AvatarUploader() {
         onClick={handleClick}
         role="button"
         tabIndex={0}
-        aria-label="Cambiar foto de perfil"
+        aria-label={t('profile.changePhoto')}
         onKeyDown={(e) => e.key === 'Enter' && handleClick()}
       >
         <Avatar
@@ -99,7 +101,7 @@ export function AvatarUploader() {
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
             <span className="mt-0.5 text-[10px] font-medium leading-tight text-white opacity-0 group-hover:opacity-100 transition-opacity duration-[150ms]">
-              Cambiar
+              {t('profile.changePhotoShort')}
             </span>
           </div>
         )}
@@ -126,7 +128,7 @@ export function AvatarUploader() {
           onClick={handleRemove}
           className="text-error hover:text-error hover:bg-error/10"
         >
-          Eliminar foto
+          {t('profile.removeAvatar')}
         </Button>
       )}
     </div>

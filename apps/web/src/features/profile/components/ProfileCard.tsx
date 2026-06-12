@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Badge } from '../../../components/ui/Badge';
 import { useProfile } from '../hooks/useProfile';
 import { AvatarUploader } from './AvatarUploader';
@@ -16,8 +17,8 @@ function statusVariant(status: UserStatus): 'success' | 'error' | 'neutral' {
   return 'neutral';
 }
 
-function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString('es-ES', {
+function formatDate(date: Date | string, locale: string): string {
+  return new Date(date).toLocaleDateString(locale.startsWith('es') ? 'es-ES' : 'en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -25,6 +26,7 @@ function formatDate(date: Date | string): string {
 }
 
 export function ProfileCard() {
+  const { t, i18n } = useTranslation();
   const { profile } = useProfile();
 
   if (!profile) return null;
@@ -43,7 +45,7 @@ export function ProfileCard() {
         </Badge>
       </div>
       <p className="text-xs text-text-tertiary">
-        Miembro desde {formatDate(profile.createdAt)}
+        {t('profile.memberSince', { date: formatDate(profile.createdAt, i18n.language) })}
       </p>
     </div>
   );

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BarChart,
   Bar,
@@ -30,13 +31,13 @@ function CustomTooltip({ active, payload, label }: TooltipProps<number, string>)
   return (
     <div
       style={{
-        background: '#1a1a1a',
-        border: '1px solid rgba(255,255,255,0.10)',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-default)',
         borderRadius: '8px',
         padding: '10px 14px',
       }}
     >
-      <p style={{ color: 'rgba(255,255,255,0.60)', fontSize: '12px', marginBottom: 8 }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: 8 }}>
         {label}
       </p>
       {payload.map((entry) => (
@@ -52,6 +53,7 @@ function CustomTooltip({ active, payload, label }: TooltipProps<number, string>)
 }
 
 export function ActivityChart({ data, isLoading }: ActivityChartProps) {
+  const { t } = useTranslation();
   if (isLoading) {
     return <Skeleton className="h-[300px] w-full" />;
   }
@@ -59,8 +61,8 @@ export function ActivityChart({ data, isLoading }: ActivityChartProps) {
   if (!data.length) {
     return (
       <EmptyState
-        title="Sin datos aún"
-        description="No hay datos de actividad para el período seleccionado."
+        title={t('dashboard.chartNoDataTitle')}
+        description={t('dashboard.chartActivityNoDataDescription')}
         className="h-[300px]"
       />
     );
@@ -69,26 +71,26 @@ export function ActivityChart({ data, isLoading }: ActivityChartProps) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.10)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" />
         <XAxis
           dataKey="date"
           tickFormatter={formatDate}
-          tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 12 }}
-          axisLine={{ stroke: 'rgba(255,255,255,0.10)' }}
+          tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }}
+          axisLine={{ stroke: 'var(--border-default)' }}
           tickLine={false}
         />
         <YAxis
-          tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 12 }}
+          tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }}
           axisLine={false}
           tickLine={false}
           allowDecimals={false}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--bg-overlay)' }} />
         <Legend
-          wrapperStyle={{ fontSize: '12px', color: 'rgba(255,255,255,0.60)', paddingTop: '12px' }}
+          wrapperStyle={{ fontSize: '12px', color: 'var(--text-secondary)', paddingTop: '12px' }}
         />
-        <Bar dataKey="logins" name="Inicios de sesión" fill="#6366f1" radius={[3, 3, 0, 0]} />
-        <Bar dataKey="registrations" name="Registros" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="logins" name={t('analytics.logins')} fill="var(--brand-primary)" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="registrations" name={t('analytics.registrations')} fill="var(--info)" radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

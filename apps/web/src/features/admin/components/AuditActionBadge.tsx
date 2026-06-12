@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Badge } from '../../../components/ui/Badge';
 import type { BadgeProps } from '../../../components/ui/Badge';
 
@@ -8,15 +9,18 @@ interface AuditActionBadgeProps {
   action: string;
 }
 
-const ACTION_MAP: Record<string, { variant: BadgeVariant; label: string }> = {
-  LOGIN:               { variant: 'info',    label: 'Login' },
-  REGISTER:            { variant: 'success', label: 'Registro' },
-  USER_ROLE_CHANGED:   { variant: 'warning', label: 'Cambio de rol' },
-  USER_STATUS_CHANGED: { variant: 'warning', label: 'Cambio de status' },
-  USER_DELETED:        { variant: 'error',   label: 'Eliminado' },
+const ACTION_VARIANT: Record<string, BadgeVariant> = {
+  LOGIN:               'info',
+  REGISTER:            'success',
+  USER_ROLE_CHANGED:   'warning',
+  USER_STATUS_CHANGED: 'warning',
+  USER_DELETED:        'error',
 };
 
 export function AuditActionBadge({ action }: AuditActionBadgeProps) {
-  const config = ACTION_MAP[action] ?? { variant: 'neutral' as const, label: action };
-  return <Badge variant={config.variant} dot>{config.label}</Badge>;
+  const { t } = useTranslation();
+  const variant = ACTION_VARIANT[action] ?? 'neutral';
+  // Si la acción no tiene clave de traducción, se muestra el código crudo como fallback
+  const label = t(`admin.actions.${action}`, { defaultValue: action });
+  return <Badge variant={variant} dot>{label}</Badge>;
 }

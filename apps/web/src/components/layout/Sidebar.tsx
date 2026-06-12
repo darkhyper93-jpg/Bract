@@ -223,7 +223,7 @@ export function Sidebar() {
         <button
           onClick={toggleSidebar}
           className="ml-auto shrink-0 rounded-md p-1 text-text-tertiary transition-colors duration-[150ms] hover:bg-bg-elevated hover:text-text-primary"
-          aria-label={sidebarOpen ? 'Colapsar sidebar' : 'Expandir sidebar'}
+          aria-label={sidebarOpen ? t('a11y.collapseSidebar') : t('a11y.expandSidebar')}
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {showLabel ? (
@@ -236,7 +236,7 @@ export function Sidebar() {
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" aria-label="Navegación principal">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" aria-label={t('a11y.mainNav')}>
         {visibleItems.map((item) => {
           const label = t(`nav.${item.labelKey}`);
           const isActive =
@@ -297,7 +297,7 @@ export function Sidebar() {
       <div className="shrink-0 border-t border-border-subtle p-2" ref={userSectionRef}>
         <button
           onClick={openUserMenu}
-          aria-label="Menú de usuario"
+          aria-label={t('a11y.userMenu')}
           aria-haspopup="menu"
           aria-expanded={userMenuOpen}
           className={cn(

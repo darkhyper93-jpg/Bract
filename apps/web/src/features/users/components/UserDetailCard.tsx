@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { UserPublic, UserStatus } from '@bract/shared';
 import { Avatar } from '../../../components/ui/Avatar';
 import { Badge } from '../../../components/ui/Badge';
@@ -9,12 +10,6 @@ const statusVariant: Record<UserStatus, BadgeVariant> = {
   [UserStatus.ACTIVE]: 'success',
   [UserStatus.SUSPENDED]: 'warning',
   [UserStatus.DELETED]: 'neutral',
-};
-
-const roleLabel: Record<string, string> = {
-  USER: 'User',
-  ADMIN: 'Admin',
-  SUPER_ADMIN: 'Super Admin',
 };
 
 interface UserDetailCardProps {
@@ -36,6 +31,8 @@ function Field({ label, value }: FieldProps) {
 }
 
 export function UserDetailCard({ user }: UserDetailCardProps) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language.startsWith('es') ? 'es-ES' : 'en-US';
   return (
     <div className="rounded-xl border border-border-subtle bg-bg-surface p-6">
       <div className="flex items-start gap-4">
@@ -44,35 +41,35 @@ export function UserDetailCard({ user }: UserDetailCardProps) {
           <h2 className="text-lg font-semibold text-text-primary">{user.name}</h2>
           <p className="text-sm text-text-secondary">{user.email}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Badge variant="info">{roleLabel[user.role] ?? user.role}</Badge>
+            <Badge variant="info">{t(`users.roles.${user.role}`)}</Badge>
             <Badge variant={statusVariant[user.status]} dot>
-              {user.status.charAt(0) + user.status.slice(1).toLowerCase()}
+              {t(`users.statuses.${user.status}`)}
             </Badge>
             {user.emailVerified && (
-              <Badge variant="success">Email verified</Badge>
+              <Badge variant="success">{t('users.detail.emailVerified')}</Badge>
             )}
           </div>
         </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 border-t border-border-subtle pt-6 sm:grid-cols-2">
-        <Field label="User ID" value={<code className="text-xs text-text-secondary">{user.id}</code>} />
+        <Field label={t('users.detail.userId')} value={<code className="text-xs text-text-secondary">{user.id}</code>} />
         <Field
-          label="Member since"
-          value={new Date(user.createdAt).toLocaleDateString(undefined, {
+          label={t('users.detail.memberSince')}
+          value={new Date(user.createdAt).toLocaleDateString(dateLocale, {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
           })}
         />
-        <Field label="Email" value={user.email} />
+        <Field label={t('users.detail.email')} value={user.email} />
         <Field
-          label="Email verified"
+          label={t('users.detail.emailVerified')}
           value={
             user.emailVerified ? (
-              <span className="text-success">Yes</span>
+              <span className="text-success">{t('common.yes')}</span>
             ) : (
-              <span className="text-warning">No</span>
+              <span className="text-warning">{t('common.no')}</span>
             )
           }
         />

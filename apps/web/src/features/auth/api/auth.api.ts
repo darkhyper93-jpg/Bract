@@ -28,8 +28,9 @@ export const authApi = {
   },
 
   async me(): Promise<User> {
-    const res = await apiClient.get<{ data: User }>('/auth/me');
-    return res.data.data;
+    // El backend envuelve el usuario en data.user (auth.controller.me)
+    const res = await apiClient.get<{ data: { user: User } }>('/auth/me');
+    return res.data.data.user;
   },
 
   async forgotPassword(body: { email: string }): Promise<void> {

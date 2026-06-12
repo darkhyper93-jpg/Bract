@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { UserStatus } from '@bract/shared';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
@@ -14,12 +15,10 @@ interface ChangeStatusModalProps {
   userName: string;
 }
 
-const statusOptions = [
-  { value: UserStatus.ACTIVE, label: 'Active' },
-  { value: UserStatus.SUSPENDED, label: 'Suspended' },
-];
+const STATUS_VALUES: UserStatus[] = [UserStatus.ACTIVE, UserStatus.SUSPENDED];
 
 export function ChangeStatusModal({ open, onClose, userId, currentStatus, userName }: ChangeStatusModalProps) {
+  const { t } = useTranslation();
   const [selectedStatus, setSelectedStatus] = useState<UserStatus>(
     currentStatus === UserStatus.DELETED ? UserStatus.ACTIVE : currentStatus,
   );
@@ -34,8 +33,8 @@ export function ChangeStatusModal({ open, onClose, userId, currentStatus, userNa
         addNotification({
           id: crypto.randomUUID(),
           type: 'success',
-          title: 'Status updated',
-          message: `${userName}'s status changed to ${selectedStatus.toLowerCase()}`,
+          title: t('users.statusUpdated'),
+          message: t('users.statusUpdatedMessage', { name: userName, status: t(`users.statuses.${selectedStatus}`) }),
         });
         onClose();
       },
@@ -43,8 +42,8 @@ export function ChangeStatusModal({ open, onClose, userId, currentStatus, userNa
         addNotification({
           id: crypto.randomUUID(),
           type: 'error',
-          title: 'Failed to update status',
-          message: 'Please try again.',
+          title: t('users.statusUpdateError'),
+          message: t('users.tryAgain'),
         });
       },
     });
@@ -54,36 +53,37 @@ export function ChangeStatusModal({ open, onClose, userId, currentStatus, userNa
     <Modal
       open={open}
       onClose={onClose}
-      title="Change Status"
-      description={`Update status for ${userName}`}
+      title={t('users.actions.changeStatus')}
+      description={t('users.updateStatusFor', { name: userName })}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleConfirm}
             loading={mutation.isPending}
             disabled={selectedStatus === currentStatus}
           >
-            Confirm
+            {t('common.confirm')}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
         <Select
-          label="New status"
+          label={t('users.newStatus')}
           value={selectedStatus}
           onChange={(v) => setSelectedStatus(v as UserStatus)}
-          options={statusOptions.map((o) => ({
-            ...o,
-            disabled: o.value === currentStatus,
+          options={STATUS_VALUES.map((value) => ({
+            value,
+            label: t(`users.statuses.${value}`),
+            disabled: value === currentStatus,
           }))}
         />
         {isSuspending && (
           <p className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-sm text-warning">
-            This user will lose access to the platform while suspended.
+            {t('users.suspendWarning')}
           </p>
         )}
       </div>

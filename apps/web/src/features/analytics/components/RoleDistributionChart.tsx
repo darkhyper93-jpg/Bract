@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import type { AnalyticsOverview } from '@bract/shared';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -10,11 +11,12 @@ interface RoleDistributionChartProps {
 }
 
 export function RoleDistributionChart({ byRole, isLoading }: RoleDistributionChartProps) {
+  const { t } = useTranslation();
   const data = byRole
     ? [
-        { name: 'Usuario', value: byRole.USER, fill: 'var(--brand-primary)' },
-        { name: 'Admin', value: byRole.ADMIN, fill: 'var(--info)' },
-        { name: 'Super Admin', value: byRole.SUPER_ADMIN, fill: 'var(--warning)' },
+        { name: t('users.roles.USER'), value: byRole.USER, fill: 'var(--brand-primary)' },
+        { name: t('users.roles.ADMIN'), value: byRole.ADMIN, fill: 'var(--info)' },
+        { name: t('users.roles.SUPER_ADMIN'), value: byRole.SUPER_ADMIN, fill: 'var(--warning)' },
       ].filter((d) => d.value > 0)
     : [];
 
@@ -23,7 +25,7 @@ export function RoleDistributionChart({ byRole, isLoading }: RoleDistributionCha
   return (
     <div className="rounded-xl border border-border-default bg-bg-surface p-6">
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-primary">Distribución por rol</h3>
+        <h3 className="text-sm font-medium text-text-primary">{t('analytics.roleDistribution')}</h3>
       </div>
 
       {isLoading && (
@@ -33,7 +35,7 @@ export function RoleDistributionChart({ byRole, isLoading }: RoleDistributionCha
       )}
 
       {isEmpty && (
-        <EmptyState title="Sin datos" className="h-[280px]" />
+        <EmptyState title={t('analytics.noData')} className="h-[280px]" />
       )}
 
       {!isLoading && !isEmpty && (

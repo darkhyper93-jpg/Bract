@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageWrapper } from '../../../components/layout/PageWrapper';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorState } from '../../../components/ui/ErrorState';
@@ -8,58 +9,59 @@ import { ActivityChart } from './ActivityChart';
 import { useAnalyticsOverview, useUserGrowth, useActivity } from '../hooks/useAnalytics';
 import { useAuthStore } from '../../../stores/authStore';
 
-function getGreeting(): string {
+function greetingKey(): 'greetingMorning' | 'greetingAfternoon' | 'greetingEvening' {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Buenos días';
-  if (hour < 18) return 'Buenas tardes';
-  return 'Buenas noches';
+  if (hour < 12) return 'greetingMorning';
+  if (hour < 18) return 'greetingAfternoon';
+  return 'greetingEvening';
 }
 
 export function DashboardPage() {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const overview = useAnalyticsOverview();
   const userGrowth = useUserGrowth(30);
   const activity = useActivity(14);
 
-  const firstName = user?.name?.split(' ')[0] ?? 'usuario';
+  const firstName = user?.name?.split(' ')[0] ?? t('dashboard.greetingUser');
 
   return (
-    <PageWrapper title="Dashboard" description="Resumen de actividad y métricas del sistema">
+    <PageWrapper title={t('dashboard.title')} description={t('dashboard.description')}>
       {/* Greeting */}
       <div className="flex flex-col gap-0.5">
         <h2 className="text-xl font-semibold text-text-primary">
-          {getGreeting()}, {firstName}
+          {t(`dashboard.${greetingKey()}`)}, {firstName}
         </h2>
         <p className="text-sm text-text-secondary">
-          Aquí está el resumen de actividad del sistema
+          {t('dashboard.subtitle')}
         </p>
       </div>
 
       {overview.isError ? (
         <ErrorState
-          title="Error al cargar estadísticas"
-          message="No se pudo obtener el resumen de métricas."
+          title={t('dashboard.errorStatsTitle')}
+          message={t('dashboard.errorStatsMessage')}
           onRetry={() => overview.refetch()}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            title="Total usuarios"
+            title={t('dashboard.stats.totalUsers')}
             value={overview.data?.totalUsers ?? 0}
             isLoading={overview.isLoading}
           />
           <StatCard
-            title="Usuarios activos"
+            title={t('dashboard.stats.activeUsers')}
             value={overview.data?.activeUsers ?? 0}
             isLoading={overview.isLoading}
           />
           <StatCard
-            title="Nuevos hoy"
+            title={t('dashboard.stats.newToday')}
             value={overview.data?.newUsersToday ?? 0}
             isLoading={overview.isLoading}
           />
           <StatCard
-            title="Nuevos esta semana"
+            title={t('dashboard.stats.newThisWeek')}
             value={overview.data?.newUsersThisWeek ?? 0}
             isLoading={overview.isLoading}
           />
@@ -69,12 +71,12 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-border-default bg-bg-surface p-6">
           <h2 className="mb-4 text-sm font-medium text-text-primary">
-            Crecimiento de usuarios — últimos 30 días
+            {t('dashboard.userGrowthTitle')}
           </h2>
           {!userGrowth.isLoading && (userGrowth.data?.length ?? 0) === 0 ? (
             <EmptyState
-              title="Sin datos de crecimiento"
-              description="Los datos aparecerán aquí cuando haya actividad de usuarios."
+              title={t('dashboard.emptyGrowthTitle')}
+              description={t('dashboard.emptyGrowthDescription')}
               icon={
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="18" y1="20" x2="18" y2="10" />
@@ -93,12 +95,12 @@ export function DashboardPage() {
 
         <div className="rounded-lg border border-border-default bg-bg-surface p-6">
           <h2 className="mb-4 text-sm font-medium text-text-primary">
-            Actividad — últimos 14 días
+            {t('dashboard.activityTitle')}
           </h2>
           {!activity.isLoading && (activity.data?.length ?? 0) === 0 ? (
             <EmptyState
-              title="Sin actividad reciente"
-              description="Los datos de actividad aparecerán aquí en cuanto haya registros."
+              title={t('dashboard.emptyActivityTitle')}
+              description={t('dashboard.emptyActivityDescription')}
               icon={
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />

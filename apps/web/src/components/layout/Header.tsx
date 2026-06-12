@@ -7,7 +7,6 @@ import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { Dropdown, DropdownMenuItem } from '../ui/Dropdown';
 import { NotificationBell } from '../../features/notifications';
-import i18n from '../../lib/i18n';
 
 export interface BreadcrumbItem {
   label: string;
@@ -21,8 +20,9 @@ interface HeaderProps {
 }
 
 export function Header({ title, breadcrumb, className }: HeaderProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, logout } = useAuthStore();
+  const isSpanish = i18n.language.startsWith('es');
   const { toggleSidebar } = useUIStore();
 
   const userMenuItems: DropdownMenuItem[] = [
@@ -52,7 +52,7 @@ export function Header({ title, breadcrumb, className }: HeaderProps) {
   const hasBreadcrumb = breadcrumb && breadcrumb.length > 0;
 
   function toggleLanguage() {
-    i18n.changeLanguage(i18n.language === 'es' ? 'en' : 'es');
+    void i18n.changeLanguage(isSpanish ? 'en' : 'es');
   }
 
   return (
@@ -68,7 +68,7 @@ export function Header({ title, breadcrumb, className }: HeaderProps) {
         <button
           onClick={toggleSidebar}
           className="shrink-0 rounded-md p-1.5 text-text-tertiary transition-colors duration-[150ms] hover:bg-bg-elevated hover:text-text-primary"
-          aria-label="Alternar sidebar"
+          aria-label={t('a11y.toggleSidebar')}
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
@@ -76,7 +76,7 @@ export function Header({ title, breadcrumb, className }: HeaderProps) {
         </button>
 
         {hasBreadcrumb ? (
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm">
+          <nav aria-label={t('a11y.breadcrumb')} className="flex items-center gap-1.5 text-sm">
             {breadcrumb!.map((crumb, i) => {
               const isLast = i === breadcrumb!.length - 1;
               return (
@@ -111,10 +111,11 @@ export function Header({ title, breadcrumb, className }: HeaderProps) {
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={toggleLanguage}
-          className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-default)] rounded-md px-2 py-1 transition-colors duration-150"
-          title="Switch language"
+          className="text-xs text-text-secondary hover:text-text-primary border border-border-default rounded-md px-2 py-1 transition-colors duration-150"
+          title={t('common.switchLanguage')}
+          aria-label={t('common.switchLanguage')}
         >
-          {i18n.language === 'es' ? 'EN' : 'ES'}
+          {isSpanish ? 'ES' : 'EN'}
         </button>
 
         <NotificationBell />
@@ -124,7 +125,7 @@ export function Header({ title, breadcrumb, className }: HeaderProps) {
           trigger={
             <button
               className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50"
-              aria-label="Menú de usuario"
+              aria-label={t('a11y.userMenu')}
             >
               <Avatar src={user?.avatarUrl ?? null} name={user?.name ?? null} size="sm" />
             </button>

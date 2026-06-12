@@ -26,7 +26,7 @@ export function useNotifications(params: UseNotificationsParams = {}): {
   });
 
   return {
-    notifications: query.data?.data.items ?? [],
+    notifications: query.data?.data.notifications ?? [],
     unreadCount: query.data?.data.unreadCount ?? 0,
     meta: query.data?.meta,
     isLoading: query.isLoading,

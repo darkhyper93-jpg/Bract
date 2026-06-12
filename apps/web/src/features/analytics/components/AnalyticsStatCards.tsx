@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AnalyticsOverview } from '@bract/shared';
 import { StatCard } from '../../dashboard/components/StatCard';
 
@@ -51,38 +52,30 @@ function IconUserX() {
   );
 }
 
-function getNewUsersLabel(days: number): string {
-  return days <= 7 ? `Nuevos (últimos ${days} días)` : 'Esta semana';
-}
-
-function getNewUsersValue(overview: AnalyticsOverview | undefined, days: number): number {
-  if (!overview) return 0;
-  return overview.newUsersThisWeek;
-}
-
 export function AnalyticsStatCards({ overview, isLoading, days }: AnalyticsStatCardsProps) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
-        title="Total usuarios"
+        title={t('analytics.totalUsers')}
         value={overview?.totalUsers ?? 0}
         isLoading={isLoading}
         icon={<IconUsers />}
       />
       <StatCard
-        title="Usuarios activos"
+        title={t('analytics.activeUsers')}
         value={overview?.activeUsers ?? 0}
         isLoading={isLoading}
         icon={<IconUserCheck />}
       />
       <StatCard
-        title={getNewUsersLabel(days)}
-        value={getNewUsersValue(overview, days)}
+        title={t('analytics.newUsersLastDays', { days })}
+        value={overview?.newUsersThisWeek ?? 0}
         isLoading={isLoading}
         icon={<IconUserPlus />}
       />
       <StatCard
-        title="Suspendidos"
+        title={t('analytics.suspended')}
         value={overview?.suspendedUsers ?? 0}
         isLoading={isLoading}
         icon={<IconUserX />}

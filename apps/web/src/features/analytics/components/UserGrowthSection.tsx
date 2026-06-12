@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
 import { useUserGrowth } from '../../dashboard/hooks/useAnalytics';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { EmptyState } from '../../../components/ui/EmptyState';
@@ -23,21 +24,22 @@ function formatChartDate(dateStr: string): string {
 }
 
 export function UserGrowthSection({ days }: UserGrowthSectionProps) {
+  const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = useUserGrowth(days);
 
   return (
     <div className="rounded-xl border border-border-default bg-bg-surface p-6">
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-primary">Crecimiento de usuarios</h3>
-        <p className="mt-1 text-sm text-text-secondary">Últimos {days} días</p>
+        <h3 className="text-sm font-medium text-text-primary">{t('analytics.userGrowth')}</h3>
+        <p className="mt-1 text-sm text-text-secondary">{t('analytics.lastDays', { days })}</p>
       </div>
 
       {isLoading && <Skeleton className="h-[280px] w-full" />}
 
       {isError && !isLoading && (
         <ErrorState
-          title="Error al cargar datos"
-          message="No se pudo obtener el crecimiento de usuarios."
+          title={t('analytics.errorLoadData')}
+          message={t('analytics.errorGrowthMessage')}
           onRetry={() => refetch()}
           className="h-[280px]"
         />
@@ -45,7 +47,7 @@ export function UserGrowthSection({ days }: UserGrowthSectionProps) {
 
       {!isLoading && !isError && (!data || data.length === 0) && (
         <EmptyState
-          title="Sin datos para este período"
+          title={t('analytics.noDataPeriod')}
           className="h-[280px]"
         />
       )}
@@ -77,7 +79,7 @@ export function UserGrowthSection({ days }: UserGrowthSectionProps) {
                 fontSize: '13px',
               }}
               cursor={{ stroke: 'var(--border-strong)', strokeWidth: 1 }}
-              formatter={(value: number) => [value, 'Usuarios']}
+              formatter={(value: number) => [value, t('analytics.usersAxis')]}
               labelFormatter={formatChartDate}
             />
             <Line

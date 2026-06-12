@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { UserListItem, Role, UserStatus } from '@bract/shared';
 import { Table, Column } from '../../../components/ui/Table';
 import { Badge } from '../../../components/ui/Badge';
@@ -28,12 +29,6 @@ const roleVariant: Record<Role, BadgeVariant> = {
   [Role.SUPER_ADMIN]: 'warning',
 };
 
-const roleLabel: Record<Role, string> = {
-  [Role.USER]: 'User',
-  [Role.ADMIN]: 'Admin',
-  [Role.SUPER_ADMIN]: 'Super Admin',
-};
-
 interface UsersTableProps {
   users: UserListItem[];
   isLoading: boolean;
@@ -44,6 +39,8 @@ interface UsersTableProps {
 }
 
 export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageChange }: UsersTableProps) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language.startsWith('es') ? 'es-ES' : 'en-US';
   const navigate = useNavigate();
   const authUser = useAuthStore((s) => s.user);
   const addNotification = useUIStore((s) => s.addNotification);
@@ -62,8 +59,8 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
         addNotification({
           id: crypto.randomUUID(),
           type: 'success',
-          title: 'User deleted',
-          message: `${deleteModalUser.name} has been removed.`,
+          title: t('users.deletedTitle'),
+          message: t('users.deletedMessage', { name: deleteModalUser.name }),
         });
         setDeleteModalUser(null);
       },
@@ -71,8 +68,8 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
         addNotification({
           id: crypto.randomUUID(),
           type: 'error',
-          title: 'Failed to delete user',
-          message: 'Please try again.',
+          title: t('users.deleteErrorTitle'),
+          message: t('users.tryAgain'),
         });
       },
     });
@@ -81,7 +78,7 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
   const columns: Column<UserListItem>[] = [
     {
       key: 'user',
-      header: 'User',
+      header: t('users.table.user'),
       cell: (row) => (
         <div className="flex items-center gap-3">
           <Avatar name={row.name} size="sm" />
@@ -94,24 +91,24 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
     },
     {
       key: 'role',
-      header: 'Role',
-      cell: (row) => <Badge variant={roleVariant[row.role]}>{roleLabel[row.role]}</Badge>,
+      header: t('users.table.role'),
+      cell: (row) => <Badge variant={roleVariant[row.role]}>{t(`users.roles.${row.role}`)}</Badge>,
     },
     {
       key: 'status',
-      header: 'Status',
+      header: t('users.table.status'),
       cell: (row) => (
         <Badge variant={statusVariant[row.status]} dot>
-          {row.status.charAt(0) + row.status.slice(1).toLowerCase()}
+          {t(`users.statuses.${row.status}`)}
         </Badge>
       ),
     },
     {
       key: 'createdAt',
-      header: 'Joined',
+      header: t('users.table.joined'),
       cell: (row) => (
         <span className="text-sm text-text-secondary">
-          {new Date(row.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          {new Date(row.createdAt).toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit', year: 'numeric' })}
         </span>
       ),
     },
@@ -125,7 +122,7 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
         const menuItems = [
           {
             key: 'view',
-            label: 'View detail',
+            label: t('users.actions.viewDetail'),
             icon: (
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
@@ -137,7 +134,7 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
             ? [
                 {
                   key: 'role',
-                  label: 'Change role',
+                  label: t('users.actions.changeRole'),
                   icon: (
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
@@ -149,7 +146,7 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
             : []),
           {
             key: 'status',
-            label: 'Change status',
+            label: t('users.actions.changeStatus'),
             icon: (
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -162,7 +159,7 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
                 { key: 'sep', separator: true as const },
                 {
                   key: 'delete',
-                  label: 'Delete user',
+                  label: t('users.actions.delete'),
                   danger: true,
                   icon: (
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -199,10 +196,10 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
         data={users}
         rowKey={(row) => row.id}
         loading={isLoading}
-        error={isError ? 'Failed to load users' : null}
+        error={isError ? t('users.errorLoad') : null}
         onRetry={onRetry}
-        emptyTitle="No users found"
-        emptyDescription="Try adjusting your search or filters."
+        emptyTitle={t('users.empty')}
+        emptyDescription={t('users.emptyDescription')}
         skeletonRows={5}
       />
 
@@ -239,8 +236,8 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
       <Modal
         open={Boolean(deleteModalUser)}
         onClose={() => setDeleteModalUser(null)}
-        title="Delete user"
-        description={`Are you sure you want to delete ${deleteModalUser?.name ?? 'this user'}? This action cannot be undone.`}
+        title={t('users.actions.delete')}
+        description={t('users.confirmDeleteName', { name: deleteModalUser?.name ?? t('users.thisUser') })}
         footer={
           <>
             <Button
@@ -248,20 +245,20 @@ export function UsersTable({ users, isLoading, isError, meta, onRetry, onPageCha
               onClick={() => setDeleteModalUser(null)}
               disabled={deleteMutation.isPending}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant="danger"
               onClick={handleDelete}
               loading={deleteMutation.isPending}
             >
-              Delete
+              {t('common.delete')}
             </Button>
           </>
         }
       >
         <p className="text-sm text-text-secondary">
-          The user will be soft-deleted and will no longer have access to the platform.
+          {t('users.deleteSoftNote')}
         </p>
       </Modal>
     </div>

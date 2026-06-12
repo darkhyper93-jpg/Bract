@@ -1,4 +1,6 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Table } from '../../../components/ui/Table';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorState } from '../../../components/ui/ErrorState';
@@ -40,16 +42,17 @@ function IconFilter() {
   );
 }
 
-const columns: Column<AuditLogItem>[] = [
+function getColumns(t: TFunction, locale: string): Column<AuditLogItem>[] {
+  return [
   {
     key: 'action',
-    header: 'Acción',
+    header: t('admin.table.action'),
     cell: (row) => <AuditActionBadge action={row.action} />,
     className: 'w-40',
   },
   {
     key: 'user',
-    header: 'Usuario',
+    header: t('admin.table.user'),
     cell: (row) =>
       row.userName ? (
         <div className="flex flex-col gap-0.5">
@@ -57,12 +60,12 @@ const columns: Column<AuditLogItem>[] = [
           <span className="text-xs text-text-tertiary leading-tight">{row.userEmail}</span>
         </div>
       ) : (
-        <span className="text-sm text-text-tertiary italic">Sistema</span>
+        <span className="text-sm text-text-tertiary italic">{t('admin.system')}</span>
       ),
   },
   {
     key: 'resource',
-    header: 'Recurso',
+    header: t('admin.table.resource'),
     cell: (row) => (
       <span className="font-mono text-xs text-text-secondary">
         {row.resource}
@@ -74,7 +77,7 @@ const columns: Column<AuditLogItem>[] = [
   },
   {
     key: 'ip',
-    header: 'IP',
+    header: t('admin.table.ip'),
     cell: (row) => {
       if (!row.ipAddress) {
         return <span className="text-text-tertiary">—</span>;
@@ -101,10 +104,10 @@ const columns: Column<AuditLogItem>[] = [
   },
   {
     key: 'when',
-    header: 'Cuándo',
+    header: t('admin.table.when'),
     cell: (row) => (
       <Tooltip
-        content={new Date(row.createdAt).toLocaleString('es-ES', {
+        content={new Date(row.createdAt).toLocaleString(locale, {
           day: 'numeric',
           month: 'long',
           year: 'numeric',
@@ -120,7 +123,8 @@ const columns: Column<AuditLogItem>[] = [
     ),
     className: 'w-32',
   },
-];
+  ];
+}
 
 export function AuditLogTable({
   data,
@@ -132,14 +136,16 @@ export function AuditLogTable({
   hasActiveFilters,
   onClearFilters,
 }: AuditLogTableProps) {
+  const { t, i18n } = useTranslation();
   const items = data?.data ?? [];
   const meta  = data?.meta;
+  const columns = getColumns(t, i18n.language.startsWith('es') ? 'es-ES' : 'en-US');
 
   if (isError) {
     return (
       <ErrorState
-        title="Error al cargar el audit log"
-        message="No se pudo obtener el historial de actividad."
+        title={t('admin.errorLoadTitle')}
+        message={t('admin.errorLoadMessage')}
         onRetry={onRetry}
       />
     );
@@ -150,11 +156,11 @@ export function AuditLogTable({
       return (
         <EmptyState
           icon={<IconFilter />}
-          title="Sin resultados para estos filtros"
-          description="Prueba con otros criterios de búsqueda o limpia los filtros."
+          title={t('admin.emptyFilteredTitle')}
+          description={t('admin.emptyFilteredDescription')}
           action={
             <Button variant="secondary" size="sm" onClick={onClearFilters}>
-              Limpiar filtros
+              {t('admin.clearFilters')}
             </Button>
           }
         />
@@ -163,8 +169,8 @@ export function AuditLogTable({
     return (
       <EmptyState
         icon={<IconClipboard />}
-        title="No hay actividad registrada aún"
-        description="Las acciones del sistema aparecerán aquí."
+        title={t('admin.emptyTitle')}
+        description={t('admin.emptyDescription')}
       />
     );
   }

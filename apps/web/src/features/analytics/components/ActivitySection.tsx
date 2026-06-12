@@ -9,6 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
 import { useActivity } from '../../dashboard/hooks/useAnalytics';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { EmptyState } from '../../../components/ui/EmptyState';
@@ -24,21 +25,22 @@ function formatChartDate(dateStr: string): string {
 }
 
 export function ActivitySection({ days }: ActivitySectionProps) {
+  const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = useActivity(days);
 
   return (
     <div className="rounded-xl border border-border-default bg-bg-surface p-6">
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-primary">Actividad diaria</h3>
-        <p className="mt-1 text-sm text-text-secondary">Últimos {days} días</p>
+        <h3 className="text-sm font-medium text-text-primary">{t('analytics.dailyActivity')}</h3>
+        <p className="mt-1 text-sm text-text-secondary">{t('analytics.lastDays', { days })}</p>
       </div>
 
       {isLoading && <Skeleton className="h-[280px] w-full" />}
 
       {isError && !isLoading && (
         <ErrorState
-          title="Error al cargar datos"
-          message="No se pudo obtener la actividad diaria."
+          title={t('analytics.errorLoadData')}
+          message={t('analytics.errorActivityMessage')}
           onRetry={() => refetch()}
           className="h-[280px]"
         />
@@ -46,7 +48,7 @@ export function ActivitySection({ days }: ActivitySectionProps) {
 
       {!isLoading && !isError && (!data || data.length === 0) && (
         <EmptyState
-          title="Sin datos para este período"
+          title={t('analytics.noDataPeriod')}
           className="h-[280px]"
         />
       )}
@@ -82,8 +84,8 @@ export function ActivitySection({ days }: ActivitySectionProps) {
             <Legend
               wrapperStyle={{ fontSize: '13px', color: 'var(--text-secondary)', paddingTop: '16px' }}
             />
-            <Bar dataKey="logins" name="Logins" fill="var(--brand-primary)" radius={[3, 3, 0, 0]} maxBarSize={24} />
-            <Bar dataKey="registrations" name="Registros" fill="var(--info)" radius={[3, 3, 0, 0]} maxBarSize={24} />
+            <Bar dataKey="logins" name={t('analytics.logins')} fill="var(--brand-primary)" radius={[3, 3, 0, 0]} maxBarSize={24} />
+            <Bar dataKey="registrations" name={t('analytics.registrations')} fill="var(--info)" radius={[3, 3, 0, 0]} maxBarSize={24} />
           </BarChart>
         </ResponsiveContainer>
       )}

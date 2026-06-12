@@ -93,7 +93,7 @@ const router = createBrowserRouter([
             </Suspense>
           </ErrorBoundary>
         ),
-        handle: { title: 'Dashboard' },
+        handle: { titleKey: 'nav.dashboard' },
       },
       {
         path: '/planner',
@@ -104,7 +104,7 @@ const router = createBrowserRouter([
             </Suspense>
           </ErrorBoundary>
         ),
-        handle: { title: 'Planner', breadcrumb: [{ label: 'Planner' }] },
+        handle: { titleKey: 'nav.planner', breadcrumb: [{ labelKey: 'nav.planner' }] },
       },
       {
         path: '/flashcards',
@@ -115,7 +115,7 @@ const router = createBrowserRouter([
             </Suspense>
           </ErrorBoundary>
         ),
-        handle: { title: 'Flashcards', breadcrumb: [{ label: 'Flashcards' }] },
+        handle: { titleKey: 'nav.flashcards', breadcrumb: [{ labelKey: 'nav.flashcards' }] },
       },
       {
         path: '/chat',
@@ -126,7 +126,7 @@ const router = createBrowserRouter([
             </Suspense>
           </ErrorBoundary>
         ),
-        handle: { title: 'Study chat', breadcrumb: [{ label: 'Study chat' }] },
+        handle: { titleKey: 'nav.chat', breadcrumb: [{ labelKey: 'nav.chat' }] },
       },
       {
         path: '/profile',
@@ -138,8 +138,8 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: {
-          title: 'Mi perfil',
-          breadcrumb: [{ label: 'Mi perfil' }],
+          titleKey: 'nav.profile',
+          breadcrumb: [{ labelKey: 'nav.profile' }],
         },
       },
       {
@@ -152,8 +152,8 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: {
-          title: 'Notificaciones',
-          breadcrumb: [{ label: 'Notificaciones' }],
+          titleKey: 'nav.notifications',
+          breadcrumb: [{ labelKey: 'nav.notifications' }],
         },
       },
       {
@@ -168,7 +168,7 @@ const router = createBrowserRouter([
                 </Suspense>
               </ErrorBoundary>
             ),
-            handle: { title: 'Analytics' },
+            handle: { titleKey: 'nav.analytics' },
           },
           {
             path: '/users',
@@ -180,8 +180,8 @@ const router = createBrowserRouter([
               </ErrorBoundary>
             ),
             handle: {
-              title: 'Usuarios',
-              breadcrumb: [{ label: 'Usuarios' }],
+              titleKey: 'nav.users',
+              breadcrumb: [{ labelKey: 'nav.users' }],
             },
           },
           {
@@ -194,10 +194,10 @@ const router = createBrowserRouter([
               </ErrorBoundary>
             ),
             handle: {
-              title: 'Detalle de usuario',
+              titleKey: 'nav.userDetail',
               breadcrumb: [
-                { label: 'Usuarios', href: '/users' },
-                { label: 'Detalle' },
+                { labelKey: 'nav.users', href: '/users' },
+                { labelKey: 'nav.userDetail' },
               ],
             },
           },
@@ -210,7 +210,7 @@ const router = createBrowserRouter([
                 </Suspense>
               </ErrorBoundary>
             ),
-            handle: { title: 'Admin' },
+            handle: { titleKey: 'nav.admin' },
           },
         ],
       },

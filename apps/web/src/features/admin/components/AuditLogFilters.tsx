@@ -10,14 +10,6 @@ interface AuditLogFiltersProps {
   onChange: (filters: Partial<AuditLogQuery>) => void;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  LOGIN:               'Login',
-  REGISTER:            'Registro',
-  USER_ROLE_CHANGED:   'Cambio de rol',
-  USER_STATUS_CHANGED: 'Cambio de status',
-  USER_DELETED:        'Eliminado',
-};
-
 const DATE_INPUT_CLASS =
   'h-9 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] ' +
   'text-[var(--text-primary)] text-sm px-3 focus:outline-none ' +
@@ -45,7 +37,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 
   const actionOptions = [
     { value: '', label: t('admin.allActions') },
-    ...AUDIT_ACTIONS.map((a) => ({ value: a, label: ACTION_LABELS[a] ?? a })),
+    ...AUDIT_ACTIONS.map((a) => ({ value: a, label: t(`admin.actions.${a}`, { defaultValue: a }) })),
   ];
 
   function handleUserIdChange(e: React.ChangeEvent<HTMLInputElement>) {

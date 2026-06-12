@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Role, UserStatus } from '@bract/shared';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
@@ -10,21 +11,22 @@ interface UsersFiltersProps {
   onFiltersChange: (updates: Partial<FiltersState>) => void;
 }
 
-const roleOptions = [
-  { value: '', label: 'All roles' },
-  { value: Role.USER, label: 'User' },
-  { value: Role.ADMIN, label: 'Admin' },
-  { value: Role.SUPER_ADMIN, label: 'Super Admin' },
-];
-
-const statusOptions = [
-  { value: '', label: 'All statuses' },
-  { value: UserStatus.ACTIVE, label: 'Active' },
-  { value: UserStatus.SUSPENDED, label: 'Suspended' },
-  { value: UserStatus.DELETED, label: 'Deleted' },
-];
-
 export function UsersFilters({ filters, onFiltersChange }: UsersFiltersProps) {
+  const { t } = useTranslation();
+  const roleOptions = [
+    { value: '', label: t('users.allRoles') },
+    { value: Role.USER, label: t('users.roles.USER') },
+    { value: Role.ADMIN, label: t('users.roles.ADMIN') },
+    { value: Role.SUPER_ADMIN, label: t('users.roles.SUPER_ADMIN') },
+  ];
+
+  const statusOptions = [
+    { value: '', label: t('users.allStatuses') },
+    { value: UserStatus.ACTIVE, label: t('users.statuses.ACTIVE') },
+    { value: UserStatus.SUSPENDED, label: t('users.statuses.SUSPENDED') },
+    { value: UserStatus.DELETED, label: t('users.statuses.DELETED') },
+  ];
+
   const [searchInput, setSearchInput] = useState(filters.search ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,7 +59,7 @@ export function UsersFilters({ filters, onFiltersChange }: UsersFiltersProps) {
     <div className="flex flex-wrap items-end gap-3">
       <div className="min-w-[200px] flex-1">
         <Input
-          placeholder="Search by name or email…"
+          placeholder={t('users.searchPlaceholder')}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           leftAddon={
@@ -69,7 +71,7 @@ export function UsersFilters({ filters, onFiltersChange }: UsersFiltersProps) {
       </div>
       <div className="w-40">
         <Select
-          placeholder="All roles"
+          placeholder={t('users.allRoles')}
           value={filters.role ?? ''}
           onChange={handleRoleChange}
           options={roleOptions}
@@ -77,7 +79,7 @@ export function UsersFilters({ filters, onFiltersChange }: UsersFiltersProps) {
       </div>
       <div className="w-44">
         <Select
-          placeholder="All statuses"
+          placeholder={t('users.allStatuses')}
           value={filters.status ?? ''}
           onChange={handleStatusChange}
           options={statusOptions}
@@ -85,7 +87,7 @@ export function UsersFilters({ filters, onFiltersChange }: UsersFiltersProps) {
       </div>
       {hasActiveFilters && (
         <Button variant="ghost" size="sm" onClick={handleClear}>
-          Clear filters
+          {t('users.clearFilters')}
         </Button>
       )}
     </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Role } from '@bract/shared';
 import { PageWrapper } from '../../../components/layout/PageWrapper';
 import { Button } from '../../../components/ui/Button';
@@ -15,6 +16,7 @@ import { ChangeRoleModal } from './ChangeRoleModal';
 import { ChangeStatusModal } from './ChangeStatusModal';
 
 export default function UserDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const authUser = useAuthStore((s) => s.user);
@@ -37,8 +39,8 @@ export default function UserDetailPage() {
         addNotification({
           id: crypto.randomUUID(),
           type: 'success',
-          title: 'User deleted',
-          message: `${user?.name ?? 'User'} has been removed.`,
+          title: t('users.deletedTitle'),
+          message: t('users.deletedMessage', { name: user?.name ?? t('users.thisUser') }),
         });
         navigate('/users');
       },
@@ -46,15 +48,15 @@ export default function UserDetailPage() {
         addNotification({
           id: crypto.randomUUID(),
           type: 'error',
-          title: 'Failed to delete user',
-          message: 'Please try again.',
+          title: t('users.deleteErrorTitle'),
+          message: t('users.tryAgain'),
         });
       },
     });
   }
 
   return (
-    <PageWrapper title={user?.name ?? 'Detalle de usuario'}>
+    <PageWrapper title={user?.name ?? t('nav.userDetail')}>
       {/* Loading state */}
       {isLoading && (
         <div className="flex flex-col gap-4">
@@ -65,7 +67,7 @@ export default function UserDetailPage() {
 
       {/* Error state */}
       {isError && !isLoading && (
-        <ErrorState message="Failed to load user details" onRetry={refetch} />
+        <ErrorState message={t('users.errorLoadDetail')} onRetry={refetch} />
       )}
 
       {/* Success state */}
@@ -76,15 +78,15 @@ export default function UserDetailPage() {
           <div className="flex flex-wrap gap-3">
             {isSuperAdmin && (
               <Button variant="secondary" onClick={() => setRoleModalOpen(true)}>
-                Change role
+                {t('users.actions.changeRole')}
               </Button>
             )}
             <Button variant="secondary" onClick={() => setStatusModalOpen(true)}>
-              Change status
+              {t('users.actions.changeStatus')}
             </Button>
             {!isSelf && (
               <Button variant="danger" onClick={() => setDeleteModalOpen(true)}>
-                Delete user
+                {t('users.actions.delete')}
               </Button>
             )}
           </div>
@@ -108,8 +110,8 @@ export default function UserDetailPage() {
           <Modal
             open={deleteModalOpen}
             onClose={() => setDeleteModalOpen(false)}
-            title="Delete user"
-            description={`Are you sure you want to delete ${user.name}? This action cannot be undone.`}
+            title={t('users.actions.delete')}
+            description={t('users.confirmDeleteName', { name: user.name })}
             footer={
               <>
                 <Button
@@ -117,20 +119,20 @@ export default function UserDetailPage() {
                   onClick={() => setDeleteModalOpen(false)}
                   disabled={deleteMutation.isPending}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   variant="danger"
                   onClick={handleDelete}
                   loading={deleteMutation.isPending}
                 >
-                  Delete
+                  {t('common.delete')}
                 </Button>
               </>
             }
           >
             <p className="text-sm text-text-secondary">
-              The user will be soft-deleted and will no longer have access to the platform.
+              {t('users.deleteSoftNote')}
             </p>
           </Modal>
         </>
