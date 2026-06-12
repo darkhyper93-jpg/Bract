@@ -16,6 +16,7 @@ const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
 const PlannerPage = React.lazy(() => import('../features/planner/components/PlannerPage'));
 const FlashcardsPage = React.lazy(() => import('../features/flashcards/components/FlashcardsPage'));
 const ChatPage = React.lazy(() => import('../features/chat/components/ChatPage'));
+const ImportPage = React.lazy(() => import('../features/import/components/ImportPage'));
 const UsersPage = React.lazy(() => import('../features/users/components/UsersPage'));
 const UserDetailPage = React.lazy(() => import('../features/users/components/UserDetailPage'));
 const ProfilePage = React.lazy(() => import('../features/profile/components/ProfilePage'));
@@ -127,6 +128,17 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: { titleKey: 'nav.chat', breadcrumb: [{ labelKey: 'nav.chat' }] },
+      },
+      {
+        path: '/import',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <ImportPage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { titleKey: 'nav.import', breadcrumb: [{ labelKey: 'nav.import' }] },
       },
       {
         path: '/profile',

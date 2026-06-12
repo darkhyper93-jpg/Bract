@@ -12,11 +12,15 @@ import {
   flashcardsResponseSchema,
   planOutputSchema,
   planResponseSchema,
+  topicsOutputSchema,
+  topicsResponseSchema,
 } from './ai.schemas.js';
 import {
+  EXTRACT_TOPICS_SYSTEM,
   FLASHCARDS_SYSTEM,
   PLAN_SYSTEM,
   buildChatSystemPrompt,
+  buildExtractTopicsUserPrompt,
   buildFlashcardsUserPrompt,
   buildPlanUserPrompt,
 } from './ai.prompts.js';
@@ -71,15 +75,28 @@ export interface ChatTurnInput {
   message: string;
 }
 
+export interface ExtractTopicsInput {
+  text: string;
+  subjectName?: string;
+  max?: number; // default/tope duro MAX_EXTRACT_TOPICS
+}
+
+export interface ExtractedTopicAI {
+  name: string;
+  difficulty: TopicDifficulty;
+}
+
 // ---- Constantes -----------------------------------------------------------
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_HORIZON_DAYS = 14;
 const DEFAULT_FLASHCARD_COUNT = 10;
 const MAX_FLASHCARD_COUNT = 10;
+const MAX_EXTRACT_TOPICS = 50; // tope duro de temas por importación (Agente K)
 const PLAN_MAX_TOKENS = 8192;
 const FLASHCARDS_MAX_TOKENS = 2048;
 const CHAT_MAX_TOKENS = 4096;
+const EXTRACT_TOPICS_MAX_TOKENS = 4096;
 
 // Minutos base por dificultad (sesga la duración del bloque y el orden).
 const DIFFICULTY_MINUTES: Record<TopicDifficulty, number> = {
@@ -255,6 +272,33 @@ function dedupeAndCap(
   return out;
 }
 
+// Normaliza la dificultad cruda de la IA a un TopicDifficulty (laxo: "medium"/"media"/minúsculas →
+// MEDIUM; cualquier cosa desconocida cae a MEDIUM). Nunca falla el parse por esto.
+function normalizeDifficulty(raw: string): TopicDifficulty {
+  const v = raw.trim().toUpperCase();
+  if (v === TopicDifficulty.EASY) return TopicDifficulty.EASY;
+  if (v === TopicDifficulty.HARD) return TopicDifficulty.HARD;
+  return TopicDifficulty.MEDIUM;
+}
+
+function dedupeAndCapTopics(
+  topics: { name: string; difficulty: string }[],
+  cap: number,
+): ExtractedTopicAI[] {
+  const seen = new Set<string>();
+  const out: ExtractedTopicAI[] = [];
+  for (const t of topics) {
+    const name = t.name.trim();
+    if (name.length === 0) continue;
+    const key = normalizeQuestion(name);
+    if (key.length === 0 || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, difficulty: normalizeDifficulty(t.difficulty) });
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
 // ---- Manejo de errores / degradación --------------------------------------
 
 function errorMessage(err: unknown): string {
@@ -348,6 +392,38 @@ export async function generateFlashcards(
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió flashcards válidas');
     }
     return dedupeAndCap(parsed.cards, input.existing ?? [], cap);
+  } catch (err) {
+    throw mapAIError(err);
+  }
+}
+
+/**
+ * Extrae temas estructurados (+ dificultad) desde texto pegado (Agente K). Inherente a IA: lanza
+ * `AI_UNAVAILABLE` si falta la key. La salida se valida con Zod, se normaliza la dificultad, se
+ * deduplica y se capa a `MAX_EXTRACT_TOPICS`. NO escribe en DB ni interpreta intención de borrado.
+ */
+export async function extractTopics(input: ExtractTopicsInput): Promise<ExtractedTopicAI[]> {
+  if (!isAIConfigured()) {
+    throw new AppError('AI_UNAVAILABLE', 'IA no disponible: configurá AI_API_KEY');
+  }
+  const cap = Math.min(input.max ?? MAX_EXTRACT_TOPICS, MAX_EXTRACT_TOPICS);
+  try {
+    const client = getAIClient();
+    const res = await client.models.generateContent({
+      model: AI_MODELS.generation,
+      contents: buildExtractTopicsUserPrompt(input, cap),
+      config: {
+        systemInstruction: EXTRACT_TOPICS_SYSTEM,
+        maxOutputTokens: EXTRACT_TOPICS_MAX_TOKENS,
+        responseMimeType: 'application/json',
+        responseSchema: topicsResponseSchema,
+      },
+    });
+    const parsed = parseStructured(res.text ?? '', topicsOutputSchema);
+    if (!parsed) {
+      throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió temas válidos');
+    }
+    return dedupeAndCapTopics(parsed.topics, cap);
   } catch (err) {
     throw mapAIError(err);
   }

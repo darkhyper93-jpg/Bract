@@ -806,7 +806,20 @@ POST   /api/v1/chat/sessions                        [self]
 GET    /api/v1/chat/sessions/:id                    [self]   // sesión + mensajes
 DELETE /api/v1/chat/sessions/:id                    [self]
 POST   /api/v1/chat/sessions/:id/messages           [self]   // enviar mensaje — responde STREAMING (SSE), no envelope JSON; ver error.md (Agente E)
+
+IMPORTACIÓN MASIVA DE TEMAS — por texto (Agente K)
+POST   /api/v1/import/topics/extract                 [self]   // { text, subjectName? } → la IA extrae temas + dificultad → PREVIEW (no escribe en DB)
+POST   /api/v1/import/topics/commit                  [self]   // { topics[], mode: 'ADD'|'REPLACE', subjectId | subjectName } → persiste (add deduplica; replace borra y reemplaza)
 ```
+
+> **Importación de temas (Agente K) — IDEAS_POST_MVP §"Agente K".** Cargar temas de a uno es tedioso:
+> esta feature permite pegar TEXTO grande y que la IA (vía `lib/ai`, Gemini) extraiga los temas y los
+> clasifique por dificultad (EASY/MEDIUM/HARD), con salida JSON validada con Zod, tope de 50 temas y dedup.
+> Flujo en **2 pasos con PREVIEW obligatorio**: (1) `extract` devuelve el preview sin tocar la DB; (2) tras
+> que el usuario revisa/edita los temas y elige materia destino + modo, `commit` persiste. **El borrado lo
+> decide el MODE (toggle de UI: agregar vs reemplazar), NUNCA la IA interpretando intención** (riesgo de
+> perder temas por una frase ambigua). Reusa `Subject`/`Topic` (§3.3) — sin modelos nuevos ni `db push`.
+> Frontend en `features/import/`. Importar archivos (PDF/.pptx/.txt/.md) es follow-up, fuera de alcance.
 
 > Todas las rutas de producto son `[self]`: protegidas con `authenticate` y scopeadas a `req.user.id`.
 > El contrato (rutas + DTOs Zod) lo define el Agente A; la implementación por capas es de C/D/E.

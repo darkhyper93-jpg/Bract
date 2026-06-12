@@ -8,6 +8,7 @@ export type {
 } from './ai.context.js';
 export {
   chatReply,
+  extractTopics,
   generateFlashcards,
   generateStudyPlan,
   generateStudyPlanBaseline,
@@ -15,6 +16,8 @@ export {
 } from './ai.service.js';
 export type {
   ChatTurnInput,
+  ExtractedTopicAI,
+  ExtractTopicsInput,
   GeneratedFlashcard,
   GenerateFlashcardsInput,
   GeneratePlanInput,

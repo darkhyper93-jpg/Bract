@@ -85,3 +85,35 @@ export const flashcardsResponseSchema: Schema = {
   },
   required: ['cards'],
 };
+
+// IMPORT — extracción de temas (Agente K): [{ name, difficulty }]. `difficulty` se valida como
+// string laxo y se normaliza a EASY/MEDIUM/HARD en código (la IA podría devolver "media"/"medium"/
+// minúsculas → no queremos que falle todo el parse). Los topes (≤50 temas, dedup) van en código.
+const extractedTopicSchema = z.object({
+  name: z.string().min(1),
+  difficulty: z.string().min(1),
+});
+
+export const topicsOutputSchema = z.object({
+  topics: z.array(extractedTopicSchema),
+});
+
+export type TopicsOutput = z.infer<typeof topicsOutputSchema>;
+
+export const topicsResponseSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    topics: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          difficulty: { type: Type.STRING },
+        },
+        required: ['name', 'difficulty'],
+      },
+    },
+  },
+  required: ['topics'],
+};

@@ -35,6 +35,9 @@
 4. **[2026-06-11] SRS pause/activate by topic status moves ONLY dueDate (never ease/interval/reps)**
    Do instead: pausing a topic's cards = set `dueDate` to far-future sentinel (`SRS_PAUSED_DUE_DATE`, year 9999 in `srs.ts`); activating = bring sentinel-dated cards back to `now` (detect via `dueDate >= SRS_PAUSED_THRESHOLD`, year 9000). Preserves learned SRS state; reversible; no `db push`. Rule: IN_PROGRESS/COMPLETED→active, PENDING→paused.
 
+5. **[2026-06-12] AI-extraction features: split EXTRACT (preview, no DB) from COMMIT; UI mode decides deletion, never the AI**
+   Do instead: step 1 endpoint returns a preview without writing; step 2 persists confirmed/edited data. Destructive ops (replace/delete) are driven by an explicit UI toggle (`ImportMode` ADD/REPLACE), NOT by the AI interpreting free text — a vague phrase must never destroy data. New feature = self-contained module with its OWN repo (don't reach into another feature's repo/tables). Add the AI call as an additive `lib/ai` function with a stable signature (pattern: `extractTopics`/`generateStudyPlanBaseline`). Treat AI output as untrusted: Zod `safeParse` + normalize lax enum fields in code (e.g. difficulty "media"/lowercase → MEDIUM, unknown → MEDIUM) + dedup/cap in code; throw `AI_UNAVAILABLE` (503) when the feature is inherently AI.
+
 2. **[2026-06-05] No cross-package relative imports**
    Do instead: always use `@bract/shared` package name, never `../../../packages/...`.
 

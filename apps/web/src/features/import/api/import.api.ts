@@ -1,0 +1,29 @@
+import apiClient from '../../../lib/axios';
+import type {
+  ExtractTopicsInput,
+  CommitImportInput,
+  ImportPreview,
+  ImportCommitResult,
+} from '@bract/shared';
+
+// Capa api/ de Importación de temas (Agente K). Funciones tipadas que consumen las rutas
+// /import/topics/*. Devuelven el `data` desempaquetado del envelope `{ success, data }`.
+
+interface Envelope<T> {
+  success: true;
+  data: T;
+}
+
+export const importApi = {
+  // Paso 1 — EXTRACT: preview de temas (no escribe en DB).
+  async extract(input: ExtractTopicsInput): Promise<ImportPreview> {
+    const res = await apiClient.post<Envelope<ImportPreview>>('/import/topics/extract', input);
+    return res.data.data;
+  },
+
+  // Paso 2 — COMMIT: persiste los temas confirmados (add/replace) y devuelve la materia + conteos.
+  async commit(input: CommitImportInput): Promise<ImportCommitResult> {
+    const res = await apiClient.post<Envelope<ImportCommitResult>>('/import/topics/commit', input);
+    return res.data.data;
+  },
+};

@@ -1,4 +1,5 @@
 import type {
+  ExtractTopicsInput,
   GenerateFlashcardsInput,
   GeneratePlanInput,
   PlanDay,
@@ -48,6 +49,30 @@ export function buildFlashcardsUserPrompt(input: GenerateFlashcardsInput, cap: n
     `Tema: ${input.topic.name}`,
     `Contexto del tema: ${input.topic.description ?? '—'}`,
     `Preguntas ya existentes (no repetir): ${JSON.stringify(existing)}`,
+  ].join('\n');
+}
+
+// IMPORT — extracción de temas desde texto pegado (Agente K). La IA SOLO extrae y clasifica:
+// NUNCA interpreta intención de borrado (eso lo decide el MODE de la UI en el commit).
+export const EXTRACT_TOPICS_SYSTEM = [
+  'Sos un asistente que extrae el temario de un texto de estudio (apuntes, índice, programa, lista).',
+  'Tu única tarea es identificar los TEMAS y clasificar la dificultad de cada uno.',
+  'REGLAS DURAS (no las violes):',
+  '- Devolvé cada tema como un título corto y autocontenido (no oraciones largas ni párrafos).',
+  '- No inventes temas que no estén implícitos en el texto. No agregues relleno.',
+  '- No repitas temas (deduplicá los equivalentes).',
+  '- Clasificá la dificultad de cada tema como exactamente uno de: EASY, MEDIUM, HARD.',
+  '- Si no podés inferir la dificultad, usá MEDIUM.',
+  '- Respondé en el mismo idioma del texto.',
+  'Devolvé los temas en el formato estructurado pedido, sin texto adicional.',
+].join('\n');
+
+export function buildExtractTopicsUserPrompt(input: ExtractTopicsInput, cap: number): string {
+  return [
+    `Cantidad máxima de temas: ${cap}.`,
+    `Materia (contexto, puede faltar): ${input.subjectName ?? '—'}`,
+    'Texto del que extraer los temas:',
+    input.text,
   ].join('\n');
 }
 

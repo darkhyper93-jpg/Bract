@@ -12,6 +12,7 @@ export * from './schemas/subject.schema';
 export * from './schemas/study.schema';
 export * from './schemas/flashcard.schema';
 export * from './schemas/chat.schema';
+export * from './schemas/import.schema';
 
 // Types
 export * from './types/auth.types';
@@ -26,3 +27,4 @@ export * from './types/subject.types';
 export * from './types/study.types';
 export * from './types/flashcard.types';
 export * from './types/chat.types';
+export * from './types/import.types';

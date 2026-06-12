@@ -15,6 +15,7 @@ import { getAIClient, isAIConfigured } from '../ai.client.js';
 import { assembleStudentContext } from '../ai.context.js';
 import {
   chatReply,
+  extractTopics,
   generateFlashcards,
   generateStudyPlan,
   streamChatReply,
@@ -142,6 +143,48 @@ describe('generateFlashcards', () => {
     });
 
     expect(cards).toEqual([{ question: 'Definí Y', answer: 'b' }]);
+  });
+});
+
+describe('extractTopics', () => {
+  it('sin AI_API_KEY lanza AI_UNAVAILABLE (es inherente a IA)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(false);
+    await expect(extractTopics({ text: 'apuntes' })).rejects.toMatchObject({
+      code: 'AI_UNAVAILABLE',
+    });
+  });
+
+  it('normaliza la dificultad laxa, deduplica por nombre y filtra vacíos', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        topics: [
+          { name: 'Integrales', difficulty: 'hard' }, // minúsculas → HARD
+          { name: 'integrales', difficulty: 'EASY' }, // dup (normalizado) → se omite
+          { name: 'Derivadas', difficulty: 'media' }, // desconocida → MEDIUM
+          { name: '   ', difficulty: 'EASY' }, // vacío → se omite
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const topics = await extractTopics({ text: 'apuntes', subjectName: 'Mate' });
+
+    expect(topics).toEqual([
+      { name: 'Integrales', difficulty: TopicDifficulty.HARD },
+      { name: 'Derivadas', difficulty: TopicDifficulty.MEDIUM },
+    ]);
+  });
+
+  it('capa la cantidad al máximo pedido', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const many = Array.from({ length: 10 }, (_, i) => ({ name: `Tema ${i}`, difficulty: 'MEDIUM' }));
+    const generateContent = vi.fn().mockResolvedValue({ text: JSON.stringify({ topics: many }) });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const topics = await extractTopics({ text: 'apuntes', max: 3 });
+
+    expect(topics).toHaveLength(3);
   });
 });
 

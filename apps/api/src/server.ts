@@ -22,6 +22,7 @@ import { adminRouter } from './modules/admin/admin.routes.js';
 import { plannerRouter } from './modules/planner/planner.routes.js';
 import { flashcardRouter } from './modules/flashcards/flashcard.routes.js';
 import { chatRouter } from './modules/chat/chat.routes.js';
+import { importRouter } from './modules/import/import.routes.js';
 import { docsRouter } from './routes/docs.routes.js';
 
 export const app: Express = express();
@@ -69,6 +70,9 @@ app.use('/api/v1', flashcardRouter);
 
 // Fase 12 — Chat de estudio (Agente E): sesiones + mensajes con contexto y streaming (SSE)
 app.use('/api/v1', chatRouter);
+
+// Importación masiva de temas POR TEXTO (Agente K): extract (preview IA) + commit (add/replace)
+app.use('/api/v1', importRouter);
 
 // Fase 8 — API Documentation
 app.use('/api/v1/docs', docsRouter);
