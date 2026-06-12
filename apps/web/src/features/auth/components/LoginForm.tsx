@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { useLogin } from '../hooks/useLogin';
@@ -10,7 +11,7 @@ import {
   LoginFormValues,
 } from '../schemas/auth.form.schema';
 
-function getApiErrorMessage(error: unknown): string {
+function getApiErrorMessage(error: unknown, fallback: string): string {
   if (
     error &&
     typeof error === 'object' &&
@@ -22,12 +23,13 @@ function getApiErrorMessage(error: unknown): string {
     const data = error.response.data as {
       error?: { message?: string };
     };
-    return data?.error?.message ?? 'Login failed. Please try again.';
+    return data?.error?.message ?? fallback;
   }
-  return 'Login failed. Please try again.';
+  return fallback;
 }
 
 export function LoginForm() {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
   const location = useLocation();
   const passwordReset = (location.state as { passwordReset?: boolean } | null)
@@ -51,37 +53,37 @@ export function LoginForm() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-semibold text-text-primary">
-          Welcome back
+          {t('auth.welcomeBack')}
         </h1>
-        <p className="text-sm text-text-secondary">Sign in to your account</p>
+        <p className="text-sm text-text-secondary">{t('auth.signInSubtitle')}</p>
       </div>
 
       {passwordReset && (
         <div className="rounded-lg border border-success/20 bg-success/10 px-4 py-3">
           <p className="text-sm text-success">
-            Password updated successfully. Sign in with your new password.
+            {t('auth.passwordResetSuccess')}
           </p>
         </div>
       )}
 
       {error && (
         <div className="rounded-lg border border-error/20 bg-error/10 px-4 py-3">
-          <p className="text-sm text-error">{getApiErrorMessage(error)}</p>
+          <p className="text-sm text-error">{getApiErrorMessage(error, t('auth.loginError'))}</p>
         </div>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
         <Input
-          label="Email"
+          label={t('auth.email')}
           type="email"
           autoComplete="email"
-          placeholder="you@example.com"
+          placeholder={t('auth.emailPlaceholder')}
           error={errors.email?.message}
           {...register('email')}
         />
 
         <Input
-          label="Password"
+          label={t('auth.password')}
           type={showPassword ? 'text' : 'password'}
           autoComplete="current-password"
           placeholder="••••••••"
@@ -91,7 +93,7 @@ export function LoginForm() {
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               className="text-text-tertiary hover:text-text-secondary transition-colors duration-[150ms]"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
             >
               {showPassword ? (
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -113,22 +115,22 @@ export function LoginForm() {
             to="/forgot-password"
             className="text-xs text-brand-primary hover:text-brand-hover transition-colors duration-[150ms]"
           >
-            Forgot your password?
+            {t('auth.forgotPassword')}
           </Link>
         </div>
 
         <Button type="submit" loading={isPending} className="w-full mt-1">
-          Sign in
+          {t('auth.login')}
         </Button>
       </form>
 
       <p className="text-center text-sm text-text-secondary">
-        Don&apos;t have an account?{' '}
+        {t('auth.noAccount')}{' '}
         <Link
           to="/register"
           className="text-brand-primary hover:text-brand-hover transition-colors duration-[150ms] font-medium"
         >
-          Create one
+          {t('auth.createOne')}
         </Link>
       </p>
     </div>

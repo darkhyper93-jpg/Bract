@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { useRegister } from '../hooks/useRegister';
@@ -11,7 +12,7 @@ import {
 } from '../schemas/auth.form.schema';
 import { VerifyEmailNotice } from './VerifyEmailNotice';
 
-function getApiErrorMessage(error: unknown): string {
+function getApiErrorMessage(error: unknown, fallback: string): string {
   if (
     error &&
     typeof error === 'object' &&
@@ -23,12 +24,13 @@ function getApiErrorMessage(error: unknown): string {
     const data = error.response.data as {
       error?: { message?: string };
     };
-    return data?.error?.message ?? 'Registration failed. Please try again.';
+    return data?.error?.message ?? fallback;
   }
-  return 'Registration failed. Please try again.';
+  return fallback;
 }
 
 export function RegisterForm() {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
@@ -59,50 +61,50 @@ export function RegisterForm() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-semibold text-text-primary">
-          Create an account
+          {t('auth.createAccountTitle')}
         </h1>
         <p className="text-sm text-text-secondary">
-          Get started with Bract today
+          {t('auth.getStartedSubtitle')}
         </p>
       </div>
 
       {error && (
         <div className="rounded-lg border border-error/20 bg-error/10 px-4 py-3">
-          <p className="text-sm text-error">{getApiErrorMessage(error)}</p>
+          <p className="text-sm text-error">{getApiErrorMessage(error, t('auth.registerError'))}</p>
         </div>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
         <Input
-          label="Name"
+          label={t('auth.name')}
           type="text"
           autoComplete="name"
-          placeholder="Jane Smith"
+          placeholder={t('auth.namePlaceholder')}
           error={errors.name?.message}
           {...register('name')}
         />
 
         <Input
-          label="Email"
+          label={t('auth.email')}
           type="email"
           autoComplete="email"
-          placeholder="you@example.com"
+          placeholder={t('auth.emailPlaceholder')}
           error={errors.email?.message}
           {...register('email')}
         />
 
         <Input
-          label="Password"
+          label={t('auth.password')}
           type={showPassword ? 'text' : 'password'}
           autoComplete="new-password"
-          placeholder="Min. 8 characters"
+          placeholder={t('auth.passwordMinPlaceholder')}
           error={errors.password?.message}
           rightAddon={
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               className="text-text-tertiary hover:text-text-secondary transition-colors duration-[150ms]"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
             >
               {showPassword ? (
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -120,26 +122,26 @@ export function RegisterForm() {
         />
 
         <Input
-          label="Confirm Password"
+          label={t('auth.confirmPassword')}
           type={showPassword ? 'text' : 'password'}
           autoComplete="new-password"
-          placeholder="Repeat your password"
+          placeholder={t('auth.repeatPassword')}
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
         />
 
         <Button type="submit" loading={isPending} className="w-full mt-1">
-          Create account
+          {t('auth.register')}
         </Button>
       </form>
 
       <p className="text-center text-sm text-text-secondary">
-        Already have an account?{' '}
+        {t('auth.alreadyHaveAccount')}{' '}
         <Link
           to="/login"
           className="text-brand-primary hover:text-brand-hover transition-colors duration-[150ms] font-medium"
         >
-          Sign in
+          {t('auth.login')}
         </Link>
       </p>
     </div>

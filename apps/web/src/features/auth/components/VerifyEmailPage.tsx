@@ -1,14 +1,16 @@
 import React, { useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { authApi } from '../api/auth.api';
 import { Skeleton } from '../../../components/ui/Skeleton';
 
 export default function VerifyEmailPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
 
-  const { mutate, isPending, isSuccess, isError, error } = useMutation({
+  const { mutate, isPending, isSuccess, isError } = useMutation({
     mutationFn: () => authApi.verifyEmail(token),
   });
 
@@ -23,13 +25,13 @@ export default function VerifyEmailPage() {
       <div className="flex min-h-screen items-center justify-center bg-bg-base px-4">
         <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
           <p className="text-sm text-error">
-            Invalid verification link. Please request a new one.
+            {t('auth.verifyInvalidLink')}
           </p>
           <Link
             to="/login"
             className="text-sm text-brand-primary hover:text-brand-hover transition-colors duration-[150ms]"
           >
-            Back to sign in
+            {t('auth.backToLogin')}
           </Link>
         </div>
       </div>
@@ -67,17 +69,17 @@ export default function VerifyEmailPage() {
             </div>
             <div className="flex flex-col gap-2">
               <h1 className="text-xl font-semibold text-text-primary">
-                Email verified
+                {t('auth.verifySuccessTitle')}
               </h1>
               <p className="text-sm text-text-secondary">
-                Your account is now active.
+                {t('auth.verifySuccessBody')}
               </p>
             </div>
             <Link
               to="/login"
               className="text-sm text-brand-primary hover:text-brand-hover transition-colors duration-[150ms] font-medium"
             >
-              Sign in →
+              {t('auth.login')} →
             </Link>
           </>
         )}
@@ -102,17 +104,17 @@ export default function VerifyEmailPage() {
             </div>
             <div className="flex flex-col gap-2">
               <h1 className="text-xl font-semibold text-text-primary">
-                Verification failed
+                {t('auth.verifyFailedTitle')}
               </h1>
               <p className="text-sm text-text-secondary">
-                The link may have expired or already been used.
+                {t('auth.verifyFailedBody')}
               </p>
             </div>
             <Link
               to="/login"
               className="text-sm text-brand-primary hover:text-brand-hover transition-colors duration-[150ms]"
             >
-              Back to sign in
+              {t('auth.backToLogin')}
             </Link>
           </>
         )}

@@ -40,6 +40,9 @@ export function UsersFilters({ filters, onFiltersChange }: UsersFiltersProps) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+    // DECISIÓN: solo depende de searchInput — incluir onFiltersChange (prop nueva en cada render)
+    // rompería el debounce al re-disparar el efecto en cada render del padre.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
   function handleRoleChange(value: string) {

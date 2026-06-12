@@ -1,7 +1,6 @@
 import { Navigate, Outlet, useMatches } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
-import { useUIStore } from '../../stores/uiStore';
 import { Skeleton } from '../ui/Skeleton';
 import { Sidebar } from './Sidebar';
 import { Header, BreadcrumbItem } from './Header';
@@ -20,7 +19,6 @@ interface RouteHandle {
 export function DashboardShell() {
   const { t } = useTranslation();
   const { isAuthenticated, isLoading } = useAuthStore();
-  const { sidebarOpen } = useUIStore();
   const matches = useMatches();
 
   if (isLoading) {

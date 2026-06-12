@@ -1,10 +1,12 @@
 import React from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 
 interface VerifyEmailNoticeProps {
   email?: string | undefined;
 }
 
 export function VerifyEmailNotice({ email }: VerifyEmailNoticeProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-6 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-muted">
@@ -26,22 +28,23 @@ export function VerifyEmailNotice({ email }: VerifyEmailNoticeProps) {
 
       <div className="flex flex-col gap-2">
         <h2 className="text-xl font-semibold text-text-primary">
-          Check your email
+          {t('auth.verifyEmailTitle')}
         </h2>
         <p className="text-sm text-text-secondary">
-          We sent a verification link
           {email ? (
-            <>
-              {' '}to{' '}
-              <span className="font-medium text-text-primary">{email}</span>
-            </>
-          ) : null}
-          . Click it to activate your account.
+            <Trans
+              i18nKey="auth.verifyEmailSentTo"
+              values={{ email }}
+              components={{ b: <span className="font-medium text-text-primary" /> }}
+            />
+          ) : (
+            t('auth.verifyEmailSentGeneric')
+          )}
         </p>
       </div>
 
       <p className="text-xs text-text-tertiary">
-        Didn&apos;t receive it? Check your spam folder or contact support.
+        {t('auth.verifyEmailSpam')}
       </p>
     </div>
   );

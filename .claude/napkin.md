@@ -54,6 +54,9 @@
 3. **[2026-06-05] Every Prisma query with relations must avoid N+1**
    Do instead: use explicit `select` or `include` — never lazy-load in loops.
 
+4. **[2026-06-12] ESLint = v8 + `.eslintrc.cjs` at repo ROOT (NOT flat config), typescript-eslint v7, NO `parserOptions.project`**
+   Do instead: flat config breaks the existing `eslint src --ext` scripts; ESLint 8 + eslintrc keeps them. typescript-eslint v7 (TS 5.4; v8 needs ≥5.5). Skip `parserOptions.project` — the ERROR rules (`no-console`, `@typescript-eslint/no-explicit-any`) need no type-info → fast, no tsconfig friction. ONE root config (`root:true`) + `overrides` by path (apps/web→browser+react-hooks, apps/api/packages→node). Install at root with `pnpm add -w -D` (nested scripts resolve the binary via ancestor `.bin`). Relax noise to warn/off; justified `any` → `eslint-disable-next-line` + `// DECISIÓN`. CI lint steps fail only because ESLint is missing → install + commit lockfile makes `--frozen-lockfile` green.
+
 ## Frontend Rules
 1. **[2026-06-05] Every component needs all 4 states**
    Do instead: implement loading (skeleton) + empty (EmptyState) + error + success before marking component done.
@@ -75,6 +78,9 @@
 
 7. **[2026-06-11] Consume SSE with `fetch`, not `EventSource`**
    Do instead: `EventSource` can't POST nor send `Authorization` (token is in-memory in authStore). Use `fetch` + `res.body.getReader()` + TextDecoder, split frames on `\n\n`. fetch bypasses axios interceptors → attach Bearer manually and do ONE refresh-retry on 401. Drive it from a hook with an `AbortController`; abort on unmount/session-change (also aborts the provider backend-side). Show user msg optimistically (local state) + accumulate assistant tokens; on done, invalidate the thread query to pull the persisted messages, then clear local state (await the invalidate first to avoid a flash).
+
+8. **[2026-06-12] "UI bugs" are often front↔backend envelope-shape mismatches, not rendering bugs**
+   Do instead: when a value renders as Invalid Date / blank / empty-list despite data existing, check the controller's EXACT response shape before debugging the component. Backend wraps under nested keys: `/auth/me` and `/profile` → `data.user` (not `data`); notifications list → `data.notifications` (not `data.items`). Fix the `*.api.ts` unwrap to match the controller, not the component.
 
 ## Implementation Order
 1. **[2026-06-05] Always follow the 8-step implementation order**

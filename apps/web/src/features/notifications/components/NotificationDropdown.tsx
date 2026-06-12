@@ -28,8 +28,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
-      className="w-[380px] overflow-hidden rounded-xl border border-border-default bg-bg-surface"
-      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+      className="w-[380px] overflow-hidden rounded-xl border border-border-default bg-bg-surface shadow-2xl shadow-black/40"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">

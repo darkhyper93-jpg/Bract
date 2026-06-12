@@ -193,7 +193,8 @@ export function SubjectCard({ subject, onEditSubject, onDeleteSubject }: Subject
       <div className="flex items-start gap-3 border-b border-border-subtle p-4">
         <span
           className="mt-1 h-3 w-3 shrink-0 rounded-full"
-          style={{ backgroundColor: subject.color ?? '#6366f1' }}
+          // subject.color es dato de usuario (hex en DB); fallback al token de marca
+          style={{ backgroundColor: subject.color ?? 'var(--brand-primary)' }}
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { useResetPassword } from '../hooks/useResetPassword';
@@ -10,7 +11,7 @@ import {
   ResetPasswordFormValues,
 } from '../schemas/auth.form.schema';
 
-function getApiErrorMessage(error: unknown): string {
+function getApiErrorMessage(error: unknown, fallback: string): string {
   if (
     error &&
     typeof error === 'object' &&
@@ -22,12 +23,13 @@ function getApiErrorMessage(error: unknown): string {
     const data = error.response.data as {
       error?: { message?: string };
     };
-    return data?.error?.message ?? 'Failed to reset password. The link may have expired.';
+    return data?.error?.message ?? fallback;
   }
-  return 'Failed to reset password. The link may have expired.';
+  return fallback;
 }
 
 export function ResetPasswordForm() {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
@@ -50,13 +52,13 @@ export function ResetPasswordForm() {
     return (
       <div className="flex flex-col gap-4 text-center">
         <p className="text-sm text-error">
-          Invalid or missing reset token. Please request a new reset link.
+          {t('auth.invalidToken')}
         </p>
         <Link
           to="/forgot-password"
           className="text-sm text-brand-primary hover:text-brand-hover transition-colors duration-[150ms]"
         >
-          Request new link
+          {t('auth.requestNewLink')}
         </Link>
       </div>
     );
@@ -66,32 +68,32 @@ export function ResetPasswordForm() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-semibold text-text-primary">
-          Set new password
+          {t('auth.setNewPasswordTitle')}
         </h1>
         <p className="text-sm text-text-secondary">
-          Choose a strong password for your account.
+          {t('auth.setNewPasswordSubtitle')}
         </p>
       </div>
 
       {error && (
         <div className="rounded-lg border border-error/20 bg-error/10 px-4 py-3">
-          <p className="text-sm text-error">{getApiErrorMessage(error)}</p>
+          <p className="text-sm text-error">{getApiErrorMessage(error, t('auth.resetError'))}</p>
         </div>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
         <Input
-          label="New Password"
+          label={t('auth.newPassword')}
           type={showPassword ? 'text' : 'password'}
           autoComplete="new-password"
-          placeholder="Min. 8 characters"
+          placeholder={t('auth.passwordMinPlaceholder')}
           error={errors.password?.message}
           rightAddon={
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               className="text-text-tertiary hover:text-text-secondary transition-colors duration-[150ms]"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
             >
               {showPassword ? (
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -109,16 +111,16 @@ export function ResetPasswordForm() {
         />
 
         <Input
-          label="Confirm New Password"
+          label={t('auth.confirmNewPassword')}
           type={showPassword ? 'text' : 'password'}
           autoComplete="new-password"
-          placeholder="Repeat your new password"
+          placeholder={t('auth.repeatNewPassword')}
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
         />
 
         <Button type="submit" loading={isPending} className="w-full mt-1">
-          Update password
+          {t('auth.updatePassword')}
         </Button>
       </form>
     </div>

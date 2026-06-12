@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../utils/cn';
 import { Button } from './Button';
 
@@ -10,11 +11,12 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = 'Something went wrong',
+  title,
   message,
   onRetry,
   className,
 }: ErrorStateProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -41,14 +43,14 @@ export function ErrorState({
         </svg>
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-text-primary">{title}</p>
+        <p className="text-sm font-medium text-text-primary">{title ?? t('common.error')}</p>
         {message && (
           <p className="text-sm text-text-tertiary max-w-sm">{message}</p>
         )}
       </div>
       {onRetry && (
         <Button variant="secondary" size="sm" onClick={onRetry}>
-          Try again
+          {t('common.retry')}
         </Button>
       )}
     </div>
