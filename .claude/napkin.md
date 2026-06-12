@@ -96,6 +96,9 @@
 3. **[2026-06-07] JWT keys need literal `\n` in Render env vars**
    Do instead: convert with `awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' private.pem` before pasting in Render dashboard. Multi-line values break the env var.
 
+4. **[2026-06-12] Full CI (`ci.yml`: lint+typecheck+build) is PR-ONLY; main pushes run typecheck-only**
+   Do instead: don't assume a green checkmark on a `main` commit means lint/build/tests passed. `ci.yml` triggers on `pull_request` only; direct-to-main pushes (the project's actual flow) run `deploy.yml`'s pre-deploy job = **typecheck only** (no lint, no build, no vitest). NO workflow runs vitest. Before trusting "CI green" on main, reproduce locally: `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`. Query live status via public API (no gh): `curl -s "https://api.github.com/repos/darkhyper93-jpg/Bract/actions/runs?per_page=6"`.
+
 ## TypeScript Config Gotchas
 1. **[2026-06-07] `exactOptionalPropertyTypes: true` + `noImplicitOverride: true` + `noPropertyAccessFromIndexSignature: true` are ALL active**
    Do instead: use `override` on class method overrides; spread optional props conditionally `{...(val != null ? { prop: val } : {})}`; access Vite env vars with bracket notation `import.meta.env['VITE_X']`.

@@ -40,6 +40,26 @@ jobs:
       - name: Typecheck Web
         run: pnpm --filter @bract/web typecheck
 
+      - name: Lint API
+        run: pnpm --filter @bract/api lint
+
+      - name: Lint Web
+        run: pnpm --filter @bract/web lint
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build API
+        run: pnpm --filter @bract/api build
+
+      - name: Build Web
+        run: pnpm --filter @bract/web build
+        env:
+          # Variables de build mínimas para que Vite no falle
+          VITE_API_URL: http://localhost:4000/api/v1
+          VITE_APP_NAME: Bract
+          VITE_APP_URL: http://localhost:5173
+
   # ============================================================
   # Trigger deploy en Render via API
   # ============================================================
