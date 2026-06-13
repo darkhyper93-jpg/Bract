@@ -22,7 +22,9 @@ function Bubble({ role, content }: { role: 'user' | 'assistant'; content: string
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[80%] whitespace-pre-wrap rounded-lg px-3.5 py-2.5 text-sm',
+          // pre-line (no pre-wrap): preserva los saltos de línea entre ítems/párrafos
+          // pero COLAPSA runs de espacios/tabs, evitando el padding gigante tras el "·".
+          'max-w-[80%] whitespace-pre-line rounded-lg px-3.5 py-2.5 text-sm',
           isUser
             ? 'bg-brand-muted text-text-primary'
             : 'bg-bg-elevated text-text-secondary',
