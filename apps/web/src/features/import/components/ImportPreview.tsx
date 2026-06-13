@@ -20,6 +20,7 @@ interface EditableTopic {
 interface ImportPreviewProps {
   target: ImportTarget;
   initialTopics: ExtractedTopic[];
+  truncated?: boolean;
   onBack: () => void;
   onCommitted: (result: ImportCommitResult) => void;
 }
@@ -43,7 +44,13 @@ function IconTrash() {
 
 // Paso 2 — revisar/editar los temas extraídos (nombre + dificultad), elegir add/replace y confirmar.
 // El borrado lo decide el MODE (toggle), nunca la IA. Para materias nuevas, replace no aplica (ADD).
-export function ImportPreview({ target, initialTopics, onBack, onCommitted }: ImportPreviewProps) {
+export function ImportPreview({
+  target,
+  initialTopics,
+  truncated = false,
+  onBack,
+  onCommitted,
+}: ImportPreviewProps) {
   const { t } = useTranslation();
   const toast = useToast();
   const { commit } = useImport();
@@ -90,6 +97,13 @@ export function ImportPreview({ target, initialTopics, onBack, onCommitted }: Im
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Aviso de truncado: el texto del archivo superó el tope y se procesó parcialmente */}
+      {truncated && (
+        <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
+          {t('import.preview.truncated')}
+        </div>
+      )}
+
       {/* Materia destino */}
       <div className="rounded-lg border border-border-subtle bg-bg-surface/40 p-4">
         <p className="text-xs text-text-tertiary">{t('import.preview.target')}</p>

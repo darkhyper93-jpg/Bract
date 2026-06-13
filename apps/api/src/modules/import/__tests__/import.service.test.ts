@@ -14,10 +14,17 @@ vi.mock('../import.repository.js', () => ({
 vi.mock('../../../lib/ai/index.js', () => ({
   extractTopics: vi.fn(),
 }));
+// Mockeamos la extracción de texto del archivo (parsers reales se testean en file-text.test.ts).
+vi.mock('../file-text.js', () => ({
+  detectFileKind: vi.fn(),
+  extractTextFromFile: vi.fn(),
+}));
 
 import { importRepository } from '../import.repository.js';
 import { extractTopics } from '../../../lib/ai/index.js';
+import { detectFileKind, extractTextFromFile } from '../file-text.js';
 import { importService } from '../import.service.js';
+import { MAX_IMPORT_FILE_TEXT_LENGTH } from '@bract/shared';
 
 const now = new Date('2026-06-12T00:00:00.000Z');
 
@@ -55,6 +62,65 @@ describe('extractPreview', () => {
     // EXTRACT nunca persiste.
     expect(importRepository.applyImport).not.toHaveBeenCalled();
     expect(importRepository.createSubject).not.toHaveBeenCalled();
+  });
+});
+
+describe('extractPreviewFromFile', () => {
+  const fileInput = { filename: 'apuntes.pdf', buffer: Buffer.from('x'), subjectName: 'Mate' };
+
+  it('tipo no soportado → VALIDATION_ERROR, no llama a la IA', async () => {
+    vi.mocked(detectFileKind).mockReturnValue(null);
+
+    await expect(
+      importService.extractPreviewFromFile({ ...fileInput, filename: 'foto.png' }),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(extractTextFromFile).not.toHaveBeenCalled();
+    expect(extractTopics).not.toHaveBeenCalled();
+  });
+
+  it('archivo sin texto (ej. PDF escaneado) → VALIDATION_ERROR, no llama a la IA', async () => {
+    vi.mocked(detectFileKind).mockReturnValue('pdf');
+    vi.mocked(extractTextFromFile).mockResolvedValue('   \n  '); // solo whitespace
+
+    await expect(importService.extractPreviewFromFile(fileInput)).rejects.toBeInstanceOf(AppError);
+    expect(extractTopics).not.toHaveBeenCalled();
+  });
+
+  it('convierte a texto y reusa el pipeline (extractTopics con el texto + subjectName)', async () => {
+    vi.mocked(detectFileKind).mockReturnValue('pdf');
+    vi.mocked(extractTextFromFile).mockResolvedValue('  Integrales y derivadas  ');
+    vi.mocked(extractTopics).mockResolvedValue([
+      { name: 'Integrales', difficulty: TopicDifficulty.HARD },
+    ]);
+
+    const preview = await importService.extractPreviewFromFile(fileInput);
+
+    expect(extractTopics).toHaveBeenCalledWith({
+      text: 'Integrales y derivadas',
+      subjectName: 'Mate',
+    });
+    expect(preview.topics).toHaveLength(1);
+    expect(preview.truncated).toBeUndefined(); // no se truncó
+    expect(importRepository.applyImport).not.toHaveBeenCalled(); // EXTRACT no persiste
+  });
+
+  it('texto más largo que el tope → trunca y marca truncated=true', async () => {
+    vi.mocked(detectFileKind).mockReturnValue('txt');
+    const long = 'a'.repeat(MAX_IMPORT_FILE_TEXT_LENGTH + 500);
+    vi.mocked(extractTextFromFile).mockResolvedValue(long);
+    vi.mocked(extractTopics).mockResolvedValue([
+      { name: 'Tema', difficulty: TopicDifficulty.MEDIUM },
+    ]);
+
+    const preview = await importService.extractPreviewFromFile({
+      filename: 'enorme.txt',
+      buffer: Buffer.from('x'),
+    });
+
+    const [arg] = vi.mocked(extractTopics).mock.calls[0]!;
+    expect(arg.text).toHaveLength(MAX_IMPORT_FILE_TEXT_LENGTH); // recortado al tope
+    expect(arg.subjectName).toBeUndefined(); // sin materia → no se manda
+    expect(preview.truncated).toBe(true);
   });
 });
 

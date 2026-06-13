@@ -14,10 +14,25 @@ interface Envelope<T> {
   data: T;
 }
 
+export interface ExtractFileInput {
+  file: File;
+  subjectName?: string;
+}
+
 export const importApi = {
   // Paso 1 — EXTRACT: preview de temas (no escribe en DB).
   async extract(input: ExtractTopicsInput): Promise<ImportPreview> {
     const res = await apiClient.post<Envelope<ImportPreview>>('/import/topics/extract', input);
+    return res.data.data;
+  },
+
+  // Paso 1 (variante ARCHIVO) — sube el archivo (multipart) y devuelve el MISMO preview. axios pone
+  // el Content-Type con boundary solo al recibir un FormData.
+  async extractFile(input: ExtractFileInput): Promise<ImportPreview> {
+    const form = new FormData();
+    form.append('file', input.file);
+    if (input.subjectName) form.append('subjectName', input.subjectName);
+    const res = await apiClient.post<Envelope<ImportPreview>>('/import/topics/extract-file', form);
     return res.data.data;
   },
 

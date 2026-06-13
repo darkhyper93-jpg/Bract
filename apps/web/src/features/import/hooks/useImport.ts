@@ -12,10 +12,15 @@ export function useImport() {
     mutationFn: importApi.extract,
   });
 
+  // Variante desde archivo: también es un preview, no toca cache (igual que `extract`).
+  const extractFile = useMutation({
+    mutationFn: importApi.extractFile,
+  });
+
   const commit = useMutation({
     mutationFn: importApi.commit,
     onSuccess: () => invalidateAfterTreeChange(queryClient),
   });
 
-  return { extract, commit };
+  return { extract, extractFile, commit };
 }

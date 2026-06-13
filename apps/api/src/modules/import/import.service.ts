@@ -1,5 +1,5 @@
 import type { Prisma, Subject as PrismaSubject, Topic as PrismaTopic } from '@prisma/client';
-import { ImportMode } from '@bract/shared';
+import { ImportMode, MAX_IMPORT_FILE_TEXT_LENGTH } from '@bract/shared';
 import type {
   CommitImportInput,
   ExtractTopicsInput,
@@ -10,6 +10,16 @@ import type {
 import { extractTopics } from '../../lib/ai/index.js';
 import { AppError } from '../../lib/errors.js';
 import { importRepository } from './import.repository.js';
+import { detectFileKind, extractTextFromFile } from './file-text.js';
+
+// DTO del EXTRACT desde archivo: el buffer + metadatos que entrega multer, más la materia opcional
+// (da contexto a la IA, igual que el flujo por texto). No es un DTO de @bract/shared porque el
+// archivo no cruza el contrato JSON — se convierte a texto acá y de ahí reusa el pipeline existente.
+export interface ExtractFromFileInput {
+  filename: string;
+  buffer: Buffer;
+  subjectName?: string;
+}
 
 // ============================================================================
 // Importación masiva de temas POR TEXTO (Agente K) — lógica de negocio. Recibe DTOs (nunca req),
@@ -43,6 +53,34 @@ export const importService = {
       ...(input.subjectName !== undefined ? { subjectName: input.subjectName } : {}),
     });
     return { topics };
+  },
+
+  // Paso 1 (variante ARCHIVO) — convierte el archivo a texto y reusa `extractPreview`. El archivo se
+  // vuelve texto y de ahí sigue el MISMO flujo (preview editable → add/replace → commit). Errores
+  // manejados: tipo no soportado y archivo sin texto (ej. PDF escaneado) → VALIDATION_ERROR (400).
+  // Si el texto extraído supera el tope, se trunca y se marca `truncated` (aviso en el frontend).
+  async extractPreviewFromFile(input: ExtractFromFileInput): Promise<ImportPreview> {
+    const kind = detectFileKind(input.filename);
+    if (kind === null) {
+      throw new AppError('VALIDATION_ERROR', 'Tipo de archivo no soportado (PDF, .txt, .md o .pptx)');
+    }
+
+    const raw = (await extractTextFromFile(input.buffer, kind)).trim();
+    if (raw.length === 0) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'No se pudo extraer texto del archivo. Si es un PDF escaneado (imagen), no está soportado.',
+      );
+    }
+
+    const truncated = raw.length > MAX_IMPORT_FILE_TEXT_LENGTH;
+    const text = truncated ? raw.slice(0, MAX_IMPORT_FILE_TEXT_LENGTH) : raw;
+
+    const preview = await this.extractPreview({
+      text,
+      ...(input.subjectName !== undefined ? { subjectName: input.subjectName } : {}),
+    });
+    return truncated ? { ...preview, truncated: true } : preview;
   },
 
   // Paso 2 — COMMIT: persiste los temas confirmados sobre la materia destino.

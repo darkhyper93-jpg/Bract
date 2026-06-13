@@ -21,8 +21,11 @@ export interface ExtractedTopic {
 }
 
 // Respuesta del EXTRACT: el preview de temas (no se escribió nada en DB).
+// `truncated` (importación desde archivo): true si el texto extraído superó el tope y se recortó
+// antes de mandarlo a la IA → el frontend lo muestra como aviso. La importación por texto lo omite.
 export interface ImportPreview {
   topics: ExtractedTopic[];
+  truncated?: boolean;
 }
 
 // Respuesta del COMMIT: la materia destino + cuántos temas se crearon / se omitieron por dedup.
