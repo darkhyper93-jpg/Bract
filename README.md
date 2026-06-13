@@ -971,6 +971,44 @@ consumo de contratos desde `@bract/shared`:
 el planner refresca el contexto del chat y la frecuencia SRS de sus flashcards; las flashcards se generan
 solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (§3.3).
 
+### 8.7 Temario + estudio on-demand (mayormente frontend, reusa C/D/E)
+
+> Da **agencia** al estudiante: además de seguir el plan del día (planner), poder elegir "hoy quiero
+> estudiar ESTE tema ahora" con sus herramientas a mano. Un flujo centrado en el **tema**. Reusa los
+> endpoints/hooks existentes — **sin backend nuevo**. Origen: `IDEAS_POST_MVP.md` §"Temario + estudio
+> on-demand". Frontend en `features/syllabus/`.
+
+| Feature | Carpeta | Contenido |
+|---------|---------|-----------|
+| Temario | `features/syllabus/` | overview navegable materia→tema (estado + dificultad); detalle de tema con estudio on-demand |
+
+- **Ruta `/syllabus`**, label i18n es **Temario** / en **Syllabus**, entrada en el sidebar. Layout
+  master/detail (igual patrón que el chat): lista materias→temas a la izquierda, panel de detalle del
+  tema a la derecha (en mobile, una u otra).
+- **Fuente de verdad reusada:** `useSubjects()` (árbol `SubjectWithTopics`, `queryKeys.planner.subjects`).
+  El temario es **read-only** respecto al CRUD de temas — eso vive en el planner, no se duplica. Reusa los
+  badges `StatusBadge`/`DifficultyBadge` del planner.
+- **Detalle de tema — acciones on-demand:**
+  - *Estudiar flashcards de este tema:* estudio inline (revelar → calificar) sobre **todas** las cartas
+    del tema (`useFlashcards(topicId)`, no la cola `due`) → funciona aunque el tema esté `PENDING`/pausado
+    en SRS. Calificar sigue usando `review` (SM-2 persiste). Sin cartas → `EmptyState` con "Generar con IA".
+  - *Preguntar al chat sobre este tema:* deep-link a `/chat` con el tema como foco (ver abajo).
+- **Reuso del estudio (refactor mínimo):** se extrae de `flashcards/StudySession` un presentacional
+  `StudyDeck` (recibe `cards` + `onReview` + copys i18n). La pestaña "Estudiar" global lo envuelve con
+  `useDueFlashcards` (comportamiento **idéntico**, sin regresión); el temario lo envuelve con
+  `useFlashcards(topicId)`. Una sola fuente del UI revelar→calificar.
+- **Foco del chat por tema — SOLO frontend (no toca el contrato ni el streaming del chat):** el botón
+  navega a `/chat` con `state.focusTopic`; `ChatPage` crea una sesión (título = nombre del tema) y pasa un
+  `initialMessage?` opcional a `ChatThread`, que lo auto-envía **una sola vez** (guard `useRef`) vía el
+  `send` existente. El backend ya ensambla el árbol completo en cada mensaje, así que nombrar el tema en el
+  primer mensaje lo enfoca. Props nuevas son opcionales y aditivas. El foco "real" en el contexto
+  (`focusTopic` en `assembleStudentContext`) queda como **follow-up**, fuera de alcance.
+- **Interacción cruzada conocida (documentada en `error.md`):** calificar on-demand una carta de un tema
+  pausado en SRS le mueve el `dueDate` a `now+interval`, reincorporándola a la cola global. Es coherente
+  con la agencia del estudiante (interactuar con un tema lo activa); no se intenta re-pausar.
+- 4 estados (`loading · empty · error · success`), i18n es/en sin hardcodear (`nav.syllabus` + bloque
+  `syllabus.*`), ruta lazy con `ErrorBoundary`. **Sin modelos ni endpoints nuevos.**
+
 ---
 
 ## 9. UI DESIGN SYSTEM
@@ -1381,6 +1419,12 @@ Este archivo en la raíz del repo es el log manual de decisiones y errores de ar
 - [ ] **E:** ChatSession/ChatMessage, mensaje con contexto (vía B), streaming, frontend `features/chat/`
 - [ ] **F:** contexto compartido en vivo (invalidaciones cruzadas; un cambio se refleja en las 3 secciones)
 - [ ] **H:** QA end-to-end conectado, CI verde (typecheck/lint/build), deploy verificado en Render
+
+### Fase 13 — Temario + estudio on-demand (§8.7, mayormente frontend, reusa C/D/E)
+- [ ] Refactor `StudyDeck` extraído de `flashcards/StudySession` — pestaña "Estudiar" global **idéntica** (sin regresión, tests de flashcards verdes)
+- [ ] `features/syllabus/` overview materia→tema (badges reusados) + 4 estados + ruta `/syllabus` + sidebar (i18n)
+- [ ] Detalle de tema: estudio inline por tema (`useFlashcards`) + generar IA + botón "Preguntar al chat"
+- [ ] Deep-link al chat con foco por tema (`focusTopic` state + `initialMessage` auto-enviado una vez) — sin tocar el contrato/streaming del chat
 
 ---
 
