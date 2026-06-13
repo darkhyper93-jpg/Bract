@@ -14,6 +14,10 @@ import { MessageComposer } from './MessageComposer';
 interface ChatThreadProps {
   sessionId: string;
   onBack: () => void;
+  // Mensaje a auto-enviar una sola vez al abrir el hilo (deep-link del Temario §8.7, foco por tema).
+  // Opcional y aditivo: no cambia el flujo normal del chat. Ver chat/types.ts.
+  initialMessage?: string | undefined;
+  onInitialConsumed?: (() => void) | undefined;
 }
 
 function Bubble({ role, content }: { role: 'user' | 'assistant'; content: string }) {
@@ -52,12 +56,24 @@ function TypingDots() {
   );
 }
 
-export function ChatThread({ sessionId, onBack }: ChatThreadProps) {
+export function ChatThread({ sessionId, onBack, initialMessage, onInitialConsumed }: ChatThreadProps) {
   const { t } = useTranslation();
   const { messages, isLoading, isError, refetch } = useChatSession(sessionId);
   const { send, retry, isStreaming, streamingText, pendingUserContent, error } =
     useChatStream(sessionId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const initialSentRef = useRef(false);
+
+  // Auto-envío del mensaje inicial (foco por tema), una sola vez por hilo. El componente se remonta
+  // por `key={sessionId}` en ChatPage, así que cada sesión nueva tiene su propio guard en false.
+  useEffect(() => {
+    if (initialMessage && !initialSentRef.current) {
+      initialSentRef.current = true;
+      void send(initialMessage);
+      onInitialConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMessage]);
 
   // Auto-scroll al fondo cuando llegan tokens o mensajes nuevos.
   useEffect(() => {

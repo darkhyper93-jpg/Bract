@@ -27,6 +27,14 @@ function IconCalendar() {
   );
 }
 
+function IconBook() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+    </svg>
+  );
+}
+
 function IconLayers() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -96,6 +104,7 @@ interface NavItemDef {
 const NAV_ITEMS: NavItemDef[] = [
   { to: '/dashboard', labelKey: 'dashboard', icon: <IconLayoutDashboard /> },
   { to: '/planner', labelKey: 'planner', icon: <IconCalendar /> },
+  { to: '/syllabus', labelKey: 'syllabus', icon: <IconBook /> },
   { to: '/flashcards', labelKey: 'flashcards', icon: <IconLayers /> },
   { to: '/chat', labelKey: 'chat', icon: <IconMessageCircle /> },
   { to: '/import', labelKey: 'import', icon: <IconImport /> },

@@ -41,6 +41,7 @@ const resources = {
       nav: {
         dashboard: 'Dashboard',
         planner: 'Planner',
+        syllabus: 'Syllabus',
         flashcards: 'Flashcards',
         chat: 'Study chat',
         import: 'Import topics',
@@ -483,6 +484,7 @@ const resources = {
         description: 'Ask your AI tutor — it knows your subjects, progress and next exam',
         errorLoad: 'Failed to load the chat',
         newChat: 'New chat',
+        focusInitial: 'Help me study the topic «{{topic}}» from «{{subject}}»: explain it to me and ask me some practice questions.',
         sessions: {
           title: 'Conversations',
           empty: 'No conversations yet',
@@ -509,6 +511,26 @@ const resources = {
         toast: {
           sessionDeleted: 'Conversation deleted',
           error: 'Something went wrong. Try again.',
+        },
+      },
+      syllabus: {
+        title: 'Syllabus',
+        description: 'Browse all your subjects and topics — study any topic on demand',
+        errorLoad: 'Failed to load your syllabus',
+        empty: 'No subjects yet',
+        emptyDescription: 'Your syllabus is built from your planner. Add a subject with topics first.',
+        goToPlanner: 'Go to planner',
+        noTopics: 'No topics in this subject yet',
+        topicsCount_one: '{{count}} topic',
+        topicsCount_other: '{{count}} topics',
+        detail: {
+          pickTitle: 'Pick a topic',
+          pickDescription: 'Select a topic on the left to study it on demand.',
+          back: 'Syllabus',
+          askChat: 'Ask the chat about this topic',
+          studyTitle: 'Study its flashcards',
+          noCards: 'No cards for this topic yet',
+          noCardsDescription: 'Generate them with AI to start studying this topic.',
         },
       },
       import: {
@@ -605,6 +627,7 @@ const resources = {
       nav: {
         dashboard: 'Dashboard',
         planner: 'Planificador',
+        syllabus: 'Temario',
         flashcards: 'Flashcards',
         chat: 'Chat de estudio',
         import: 'Importar temas',
@@ -1047,6 +1070,7 @@ const resources = {
         description: 'Preguntale a tu tutor IA — conoce tus materias, tu progreso y tu próximo examen',
         errorLoad: 'No se pudo cargar el chat',
         newChat: 'Nuevo chat',
+        focusInitial: 'Ayudame a estudiar el tema «{{topic}}» de «{{subject}}»: explicámelo y hacéme algunas preguntas de práctica.',
         sessions: {
           title: 'Conversaciones',
           empty: 'Todavía no hay conversaciones',
@@ -1073,6 +1097,26 @@ const resources = {
         toast: {
           sessionDeleted: 'Conversación eliminada',
           error: 'Algo salió mal. Intentá de nuevo.',
+        },
+      },
+      syllabus: {
+        title: 'Temario',
+        description: 'Recorré todas tus materias y temas — estudiá cualquier tema cuando quieras',
+        errorLoad: 'No se pudo cargar el temario',
+        empty: 'Todavía no hay materias',
+        emptyDescription: 'El temario se arma desde tu planificador. Agregá una materia con temas primero.',
+        goToPlanner: 'Ir al planificador',
+        noTopics: 'Esta materia todavía no tiene temas',
+        topicsCount_one: '{{count}} tema',
+        topicsCount_other: '{{count}} temas',
+        detail: {
+          pickTitle: 'Elegí un tema',
+          pickDescription: 'Seleccioná un tema a la izquierda para estudiarlo cuando quieras.',
+          back: 'Temario',
+          askChat: 'Preguntarle al chat sobre este tema',
+          studyTitle: 'Estudiar sus flashcards',
+          noCards: 'Este tema todavía no tiene tarjetas',
+          noCardsDescription: 'Generalas con IA para empezar a estudiar este tema.',
         },
       },
       import: {

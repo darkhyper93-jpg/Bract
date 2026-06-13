@@ -14,6 +14,7 @@ const ResetPasswordPage = React.lazy(() => import('../features/auth/components/R
 const VerifyEmailPage = React.lazy(() => import('../features/auth/components/VerifyEmailPage'));
 const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
 const PlannerPage = React.lazy(() => import('../features/planner/components/PlannerPage'));
+const SyllabusPage = React.lazy(() => import('../features/syllabus/components/SyllabusPage'));
 const FlashcardsPage = React.lazy(() => import('../features/flashcards/components/FlashcardsPage'));
 const ChatPage = React.lazy(() => import('../features/chat/components/ChatPage'));
 const ImportPage = React.lazy(() => import('../features/import/components/ImportPage'));
@@ -106,6 +107,17 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: { titleKey: 'nav.planner', breadcrumb: [{ labelKey: 'nav.planner' }] },
+      },
+      {
+        path: '/syllabus',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <SyllabusPage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { titleKey: 'nav.syllabus', breadcrumb: [{ labelKey: 'nav.syllabus' }] },
       },
       {
         path: '/flashcards',

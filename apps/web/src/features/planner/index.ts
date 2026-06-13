@@ -1,4 +1,5 @@
 export { default as PlannerPage } from './components/PlannerPage';
+export { StatusBadge, DifficultyBadge } from './components/badges';
 export { plannerApi } from './api/planner.api';
 export { useSubjects } from './hooks/useSubjects';
 export { usePlan } from './hooks/usePlan';
