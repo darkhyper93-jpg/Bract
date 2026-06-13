@@ -26,13 +26,21 @@ export const importApi = {
     return res.data.data;
   },
 
-  // Paso 1 (variante ARCHIVO) — sube el archivo (multipart) y devuelve el MISMO preview. axios pone
-  // el Content-Type con boundary solo al recibir un FormData.
+  // Paso 1 (variante ARCHIVO) — sube el archivo (multipart) y devuelve el MISMO preview.
+  // DECISIÓN: el apiClient tiene un default global Content-Type: application/json, que pisaría
+  // la autodetección de FormData de axios y rompería el multipart (multer no parsea → req.file
+  // undefined → 400). Anulamos el header SOLO en esta request para que el browser ponga
+  // `multipart/form-data` con su boundary. Usamos `null` (no `undefined`) porque axios lo trata
+  // igual —`toJSON` descarta los headers con valor null/undefined antes de enviarlos— y `null`
+  // sí es un valor válido del tipo de header (compatible con `exactOptionalPropertyTypes`).
+  // El resto de requests JSON no se ven afectadas.
   async extractFile(input: ExtractFileInput): Promise<ImportPreview> {
     const form = new FormData();
     form.append('file', input.file);
     if (input.subjectName) form.append('subjectName', input.subjectName);
-    const res = await apiClient.post<Envelope<ImportPreview>>('/import/topics/extract-file', form);
+    const res = await apiClient.post<Envelope<ImportPreview>>('/import/topics/extract-file', form, {
+      headers: { 'Content-Type': null },
+    });
     return res.data.data;
   },
 
