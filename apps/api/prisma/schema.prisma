@@ -37,6 +37,8 @@ model User {
   studyAvailability StudyAvailability[]
   studyPlans        StudyPlan[]
   chatSessions      ChatSession[]
+  quizAttempts      QuizAttempt[]
+  quizAttemptItems  QuizAttemptItem[]
 
   @@index([email])
   @@map("users")
@@ -187,7 +189,8 @@ model Subject {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  topics Topic[]
+  topics       Topic[]
+  quizAttempts QuizAttempt[]
 
   @@index([userId])
   @@index([userId, examDate]) // orden por urgencia (examen más cercano)
@@ -210,8 +213,10 @@ model Topic {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  flashcards Flashcard[]
-  planItems  StudyPlanItem[]
+  flashcards       Flashcard[]
+  planItems        StudyPlanItem[]
+  quizAttempts     QuizAttempt[]
+  quizAttemptItems QuizAttemptItem[]
 
   @@index([subjectId])
   @@index([userId, status])
@@ -361,4 +366,69 @@ enum ChatRole {
   USER
   ASSISTANT
   SYSTEM // el system-prompt en vivo lo arma el Agente B; SYSTEM permite persistirlo si hace falta
+}
+
+// ==========================================
+// EVALUACIÓN — Quiz (Agente I) — §3.5
+// ==========================================
+
+model QuizAttempt {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope        QuizScope // TOPIC | SUBJECT
+  status       QuizAttemptStatus @default(IN_PROGRESS) // se completa al responder la última pregunta
+  // DECISIÓN: FK a Subject/Topic con onDelete: SetNull (refs de agrupación viva, NO ownership —
+  // eso es userId). Borrar un tema/materia NO borra el historial de evaluación; scopeName lo
+  // mantiene legible y el puntaje es un hecho histórico inmutable. Ver error.md.
+  subjectId    String?
+  subject      Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicId      String? // solo en scope TOPIC
+  topic        Topic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  scopeName    String // snapshot del nombre tema/materia
+  totalCount   Int // nº de preguntas
+  correctCount Int // puntaje (se recalcula en el server con cada respuesta)
+  completedAt  DateTime?
+  createdAt    DateTime          @default(now())
+
+  items QuizAttemptItem[]
+
+  @@index([userId])
+  @@index([userId, createdAt]) // historial reciente del usuario
+  @@map("quiz_attempts")
+}
+
+model QuizAttemptItem {
+  id            String      @id @default(cuid())
+  attemptId     String
+  attempt       QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  // DECISIÓN: userId denormalizado (§3.4) → índice [userId, topicId] para "puntos débiles" (I-2)
+  // sin join. Mismo patrón que Topic/Flashcard. Ver error.md.
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId       String? // subconcepto evaluado (granularidad I-2)
+  topic         Topic?      @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  order         Int // posición de la pregunta
+  question      String // snapshot
+  options       Json // snapshot [{ text, explanation }] AUTORITATIVO (la explicación nunca viaja antes de responder)
+  correctIndex  Int // AUTORITATIVO en el server; nunca se envía antes de responder
+  selectedIndex Int? // null = sin responder (lock anti-trampa: no se re-responde)
+  isCorrect     Boolean     @default(false) // lo decide el server al comparar contra correctIndex
+  createdAt     DateTime    @default(now())
+
+  @@index([attemptId])
+  @@index([attemptId, order]) // buscar la pregunta a responder
+  @@index([userId, topicId]) // I-2: % de acierto por tema, sin join
+  @@index([userId, topicId, isCorrect])
+  @@map("quiz_attempt_items")
+}
+
+enum QuizScope {
+  TOPIC
+  SUBJECT
+}
+
+enum QuizAttemptStatus {
+  IN_PROGRESS
+  COMPLETED
 }

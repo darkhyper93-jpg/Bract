@@ -17,6 +17,7 @@ import {
   chatReply,
   extractTopics,
   generateFlashcards,
+  generateQuiz,
   generateStudyPlan,
   streamChatReply,
 } from '../ai.service.js';
@@ -185,6 +186,83 @@ describe('extractTopics', () => {
     const topics = await extractTopics({ text: 'apuntes', max: 3 });
 
     expect(topics).toHaveLength(3);
+  });
+});
+
+describe('generateQuiz', () => {
+  const quizInput = {
+    scope: 'SUBJECT' as const,
+    subjectName: 'Mate',
+    topics: [
+      { id: 't1', name: 'Integrales' },
+      { id: 't2', name: 'Derivadas' },
+    ],
+  };
+  // Genera N opciones válidas (texto + explicación no vacíos).
+  const opts = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ text: `o${i}`, explanation: `e${i}` }));
+
+  it('sin AI_API_KEY lanza AI_UNAVAILABLE (es inherente a IA)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(false);
+    await expect(generateQuiz(quizInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+  });
+
+  it('valida invariantes: descarta inválidas, mapea topicId desconocido al fallback y deduplica', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          { topicId: 't2', question: 'P1', options: opts(4), correctIndex: 2 }, // válida
+          { topicId: 't1', question: 'P2', options: opts(4), correctIndex: 9 }, // correctIndex OOR → drop
+          {
+            topicId: 't1',
+            question: 'P3',
+            options: [{ text: 'a', explanation: '  ' }, ...opts(3)],
+            correctIndex: 0,
+          }, // explicación vacía → drop
+          { topicId: 't1', question: 'P4', options: opts(1), correctIndex: 0 }, // pocas opciones → drop
+          { topicId: 'ghost', question: 'P5', options: opts(3), correctIndex: 1 }, // topic desconocido → fallback t1
+          { topicId: 't2', question: 'p1', options: opts(4), correctIndex: 0 }, // dup de P1 → drop
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz(quizInput);
+
+    expect(generateContent).toHaveBeenCalledOnce();
+    expect(questions).toEqual([
+      { topicId: 't2', question: 'P1', options: opts(4), correctIndex: 2 },
+      { topicId: 't1', question: 'P5', options: opts(3), correctIndex: 1 }, // 'ghost' → fallback al 1er tema
+    ]);
+  });
+
+  it('capa la cantidad al máximo pedido', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      topicId: 't1',
+      question: `Pregunta ${i}`,
+      options: opts(4),
+      correctIndex: 0,
+    }));
+    const generateContent = vi.fn().mockResolvedValue({ text: JSON.stringify({ questions: many }) });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz({ ...quizInput, count: 3 });
+
+    expect(questions).toHaveLength(3);
+  });
+
+  it('si la IA no devuelve ninguna pregunta válida, lanza AI_UNAVAILABLE', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [{ topicId: 't1', question: 'X', options: opts(4), correctIndex: 99 }],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    await expect(generateQuiz(quizInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
   });
 });
 

@@ -59,4 +59,11 @@ export const queryKeys = {
     sessions: () => ['chat', 'sessions'] as const,
     session:  (id: string) => ['chat', 'session', id] as const,
   },
+
+  // Evaluación / Quiz (Agente I) — historial de intentos y detalle de un intento (§8.8).
+  quiz: {
+    all:      () => ['quiz'] as const,
+    attempts: (params?: Record<string, unknown>) => ['quiz', 'attempts', params] as const,
+    attempt:  (id: string) => ['quiz', 'attempt', id] as const,
+  },
 } as const;

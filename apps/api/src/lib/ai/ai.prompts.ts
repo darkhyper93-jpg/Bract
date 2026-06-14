@@ -2,6 +2,7 @@ import type {
   ExtractTopicsInput,
   GenerateFlashcardsInput,
   GeneratePlanInput,
+  GenerateQuizInput,
   PlanDay,
 } from './ai.service.js';
 
@@ -73,6 +74,39 @@ export function buildExtractTopicsUserPrompt(input: ExtractTopicsInput, cap: num
     `Materia (contexto, puede faltar): ${input.subjectName ?? '—'}`,
     'Texto del que extraer los temas:',
     input.text,
+  ].join('\n');
+}
+
+// QUIZ — evaluación (Agente I). La IA genera, en UNA sola llamada, cada pregunta de opción múltiple
+// CON su respuesta correcta y la explicación de CADA opción → la corrección es local (comparar) y la
+// explicación ya está lista, sin una 2da llamada a la IA.
+export const QUIZ_SYSTEM = [
+  'Sos un evaluador experto que crea quizzes de opción múltiple para que un estudiante se autoevalúe.',
+  'Descomponé el contenido en sus subconceptos clave y cubrílos SIN dejar huecos y SIN repetir preguntas.',
+  'REGLAS DURAS (no las violes):',
+  '- Cada pregunta tiene EXACTAMENTE 4 opciones: 1 correcta y 3 distractoras plausibles.',
+  '- "correctIndex" es el índice (0-based) de la opción correcta dentro de "options".',
+  '- TODA opción lleva una "explanation": en la correcta, por qué es correcta; en cada distractora, por qué está mal.',
+  '- Asigná a cada pregunta el "topicId" del tema (de los provistos) al que pertenece su subconcepto.',
+  '- Usá ÚNICAMENTE los topicId presentes en la entrada. No inventes temas.',
+  '- Generá COMO MÁXIMO la cantidad de preguntas pedida. Preguntas claras, concretas y autocontenidas.',
+  '- Respondé en el mismo idioma del tema/materia.',
+  'Devolvé el quiz en el formato estructurado pedido, sin texto adicional.',
+].join('\n');
+
+export function buildQuizUserPrompt(input: GenerateQuizInput, cap: number): string {
+  const scopeLabel = input.scope === 'TOPIC' ? 'un tema' : 'una materia (varios temas)';
+  return [
+    `Cantidad máxima de preguntas: ${cap}.`,
+    `Alcance del quiz: ${scopeLabel}.`,
+    `Materia: ${input.subjectName}`,
+    `Temas a evaluar (usá su id como topicId): ${JSON.stringify(
+      input.topics.map((t) => ({
+        topicId: t.id,
+        name: t.name,
+        context: t.description ?? '—',
+      })),
+    )}`,
   ].join('\n');
 }
 

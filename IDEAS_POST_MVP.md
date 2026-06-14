@@ -80,3 +80,40 @@ tema = pasarle ese tema como foco del contexto. Encaja bien con el Agente K (imp
 (evaluación: "quiz de este tema ahora").
 
 **Estado:** PENDIENTE.
+
+## Agente L — Función por voz (alta utilidad, costo casi cero)
+
+El usuario lo pidió: escribir y escribir es tedioso, sobre todo en el chat tutor. Dos partes:
+
+1. **Voz → texto (dictado)** — botón de micrófono en el input del chat (y opcionalmente en respuestas
+   de quiz a futuro). El usuario habla y se transcribe al input; puede editar antes de enviar.
+2. **Texto → voz (lectura)** — botón de "escuchar" en las respuestas del tutor, para estudiar con los
+   ojos descansados o mientras hace otra cosa.
+
+**Decisión de diseño clave — usar la Web Speech API del navegador (gratis, nativa, sin backend):**
+`SpeechRecognition` para dictado y `SpeechSynthesis` para lectura. CERO costo de tokens/API, no agrega
+infra ni dependencias de servidor — encaja con la restricción de free tier. Trade-off honesto: soporte
+desigual entre navegadores (Chrome/Edge muy bien; Firefox/Safari parcial) y requiere internet. Aceptable:
+degradar elegante (si el navegador no soporta, se oculta el botón, el chat sigue funcionando por texto).
+NO usar Whisper/Gemini-audio/ElevenLabs por ahora (cuestan plata o cómputo).
+
+**Alcance sugerido:** mayormente frontend. Empezar por el dictado en el chat (resuelve el dolor directo),
+después la lectura de respuestas. Spec-first al README. Estados claros: idle · escuchando · transcribiendo ·
+error/no-soportado.
+
+**Estado:** PENDIENTE — alta utilidad, bajo costo. Buen candidato para después de I/I-2.
+
+## Pase estético / UI premium (transversal)
+
+El usuario quiere que la web se vea **premium**, no solo que funcione. El "G Polish" fue funcional
+(eslint, i18n, fechas); esto es lo VISUAL. Pase dedicado de diseño:
+- Consistencia de tokens (color, espaciado, tipografía, radios, sombras) en todos los componentes.
+- Micro-interacciones y transiciones suaves (hover, focus, loading skeletons con buen ritmo).
+- Jerarquía visual y respiración (densidad, alineación, estados vacíos atractivos).
+- Coherencia de la identidad en todas las secciones (planner, flashcards, chat, temario, evaluación).
+- **Referencia de diseño: codex.io** (la que más le gustó al usuario) — capturar ese feel.
+
+**Notas:** transversal, frontend. Mejor hacerlo cuando estén todas las features para no repintar dos
+veces. Reusa los tokens CSS ya definidos en el README; no hardcodear colores fuera de tokens.
+
+**Estado:** PENDIENTE — idealmente el último gran pase, una vez completas las features.

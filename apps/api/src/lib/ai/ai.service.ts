@@ -12,6 +12,8 @@ import {
   flashcardsResponseSchema,
   planOutputSchema,
   planResponseSchema,
+  quizOutputSchema,
+  quizResponseSchema,
   topicsOutputSchema,
   topicsResponseSchema,
 } from './ai.schemas.js';
@@ -19,10 +21,12 @@ import {
   EXTRACT_TOPICS_SYSTEM,
   FLASHCARDS_SYSTEM,
   PLAN_SYSTEM,
+  QUIZ_SYSTEM,
   buildChatSystemPrompt,
   buildExtractTopicsUserPrompt,
   buildFlashcardsUserPrompt,
   buildPlanUserPrompt,
+  buildQuizUserPrompt,
 } from './ai.prompts.js';
 
 // ============================================================================
@@ -86,6 +90,25 @@ export interface ExtractedTopicAI {
   difficulty: TopicDifficulty;
 }
 
+export interface GenerateQuizInput {
+  scope: 'TOPIC' | 'SUBJECT';
+  subjectName: string;
+  topics: { id: string; name: string; description?: string | null }[]; // 1 (TOPIC) o N (SUBJECT)
+  count?: number; // default DEFAULT_QUIZ_COUNT, tope duro MAX_QUIZ_COUNT
+}
+
+export interface GeneratedQuizOption {
+  text: string;
+  explanation: string;
+}
+
+export interface GeneratedQuizQuestion {
+  topicId: string;
+  question: string;
+  options: GeneratedQuizOption[];
+  correctIndex: number;
+}
+
 // ---- Constantes -----------------------------------------------------------
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -93,10 +116,15 @@ const DEFAULT_HORIZON_DAYS = 14;
 const DEFAULT_FLASHCARD_COUNT = 10;
 const MAX_FLASHCARD_COUNT = 10;
 const MAX_EXTRACT_TOPICS = 50; // tope duro de temas por importación (Agente K)
+const DEFAULT_QUIZ_COUNT = 5;
+const MAX_QUIZ_COUNT = 10; // tope duro de preguntas por quiz (Agente I)
+const MIN_QUIZ_OPTIONS = 2;
+const MAX_QUIZ_OPTIONS = 6;
 const PLAN_MAX_TOKENS = 8192;
 const FLASHCARDS_MAX_TOKENS = 2048;
 const CHAT_MAX_TOKENS = 4096;
 const EXTRACT_TOPICS_MAX_TOKENS = 4096;
+const QUIZ_MAX_TOKENS = 8192;
 
 // Minutos base por dificultad (sesga la duración del bloque y el orden).
 const DIFFICULTY_MINUTES: Record<TopicDifficulty, number> = {
@@ -299,6 +327,58 @@ function dedupeAndCapTopics(
   return out;
 }
 
+// Valida la salida cruda del quiz (la IA puede devolver basura) e impone los invariantes de negocio:
+// - cada opción con texto y explicación no vacíos; nº de opciones en [MIN, MAX];
+// - correctIndex entero dentro del rango de opciones;
+// - topicId ∈ temas de entrada (si no, cae al tema único/primero — siempre hay ≥1);
+// - dedup de preguntas por texto normalizado; cap a `cap`.
+// Descarta la pregunta entera si no cumple (nunca recorta opciones, que correría el correctIndex).
+function validateAndCapQuiz(
+  questions: { topicId: string; question: string; options: { text: string; explanation: string }[]; correctIndex: number }[],
+  input: GenerateQuizInput,
+  cap: number,
+): GeneratedQuizQuestion[] {
+  const validTopicIds = new Set(input.topics.map((t) => t.id));
+  const fallbackTopicId = input.topics[0]?.id;
+  if (fallbackTopicId === undefined) return []; // sin temas no hay quiz posible
+
+  const seen = new Set<string>();
+  const out: GeneratedQuizQuestion[] = [];
+
+  for (const q of questions) {
+    const question = q.question.trim();
+    if (question.length === 0) continue;
+
+    const options: GeneratedQuizOption[] = [];
+    let optionsOk = true;
+    for (const o of q.options) {
+      const text = o.text.trim();
+      const explanation = o.explanation.trim();
+      if (text.length === 0 || explanation.length === 0) {
+        optionsOk = false;
+        break;
+      }
+      options.push({ text, explanation });
+    }
+    if (!optionsOk) continue;
+    if (options.length < MIN_QUIZ_OPTIONS || options.length > MAX_QUIZ_OPTIONS) continue;
+
+    if (!Number.isInteger(q.correctIndex) || q.correctIndex < 0 || q.correctIndex >= options.length) {
+      continue;
+    }
+
+    const key = normalizeQuestion(question);
+    if (key.length === 0 || seen.has(key)) continue;
+    seen.add(key);
+
+    const topicId = validTopicIds.has(q.topicId) ? q.topicId : fallbackTopicId;
+    out.push({ topicId, question, options, correctIndex: q.correctIndex });
+    if (out.length >= cap) break;
+  }
+
+  return out;
+}
+
 // ---- Manejo de errores / degradación --------------------------------------
 
 function errorMessage(err: unknown): string {
@@ -424,6 +504,47 @@ export async function extractTopics(input: ExtractTopicsInput): Promise<Extracte
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió temas válidos');
     }
     return dedupeAndCapTopics(parsed.topics, cap);
+  } catch (err) {
+    throw mapAIError(err);
+  }
+}
+
+/**
+ * Genera un quiz de opción múltiple para un tema o materia (Agente I). Cada pregunta trae su
+ * respuesta correcta y la explicación POR OPCIÓN en la MISMA llamada → la corrección es local
+ * (comparar) y la explicación ya está lista, sin 2da llamada a la IA. Inherente a IA: lanza
+ * `AI_UNAVAILABLE` (503) sin la key. La salida se valida con Zod + invariantes (correctIndex en
+ * rango, topicId ∈ entrada, dedup, cap). NO escribe en DB (la persistencia del intento es del Agente I).
+ */
+export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQuizQuestion[]> {
+  if (!isAIConfigured()) {
+    throw new AppError('AI_UNAVAILABLE', 'IA no disponible: configurá AI_API_KEY');
+  }
+  if (input.topics.length === 0) {
+    throw new AppError('AI_UNAVAILABLE', 'No hay temas para generar el quiz');
+  }
+  const cap = Math.min(input.count ?? DEFAULT_QUIZ_COUNT, MAX_QUIZ_COUNT);
+  try {
+    const client = getAIClient();
+    const res = await client.models.generateContent({
+      model: AI_MODELS.generation,
+      contents: buildQuizUserPrompt(input, cap),
+      config: {
+        systemInstruction: QUIZ_SYSTEM,
+        maxOutputTokens: QUIZ_MAX_TOKENS,
+        responseMimeType: 'application/json',
+        responseSchema: quizResponseSchema,
+      },
+    });
+    const parsed = parseStructured(res.text ?? '', quizOutputSchema);
+    if (!parsed) {
+      throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió un quiz válido');
+    }
+    const questions = validateAndCapQuiz(parsed.questions, input, cap);
+    if (questions.length === 0) {
+      throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió preguntas válidas');
+    }
+    return questions;
   } catch (err) {
     throw mapAIError(err);
   }

@@ -117,3 +117,55 @@ export const topicsResponseSchema: Schema = {
   },
   required: ['topics'],
 };
+
+// QUIZ — evaluación (Agente I): preguntas de opción múltiple con explicación POR OPCIÓN generada en la
+// MISMA llamada (por qué la correcta lo es / por qué la distractora no) → corrección local, sin 2da
+// llamada a la IA. La salida cruda se valida con el Zod de abajo + invariantes en código (correctIndex
+// en rango, topicId ∈ entrada, dedup, cap). El `responseSchema` de Gemini va sin `additionalProperties`.
+const quizOptionSchema = z.object({
+  text: z.string().min(1),
+  explanation: z.string().min(1),
+});
+
+const quizQuestionSchema = z.object({
+  topicId: z.string().min(1),
+  question: z.string().min(1),
+  options: z.array(quizOptionSchema),
+  correctIndex: z.number().int(),
+});
+
+export const quizOutputSchema = z.object({
+  questions: z.array(quizQuestionSchema),
+});
+
+export type QuizOutput = z.infer<typeof quizOutputSchema>;
+
+export const quizResponseSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    questions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          topicId: { type: Type.STRING },
+          question: { type: Type.STRING },
+          options: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING },
+                explanation: { type: Type.STRING },
+              },
+              required: ['text', 'explanation'],
+            },
+          },
+          correctIndex: { type: Type.INTEGER },
+        },
+        required: ['topicId', 'question', 'options', 'correctIndex'],
+      },
+    },
+  },
+  required: ['questions'],
+};

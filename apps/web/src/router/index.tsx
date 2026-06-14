@@ -18,6 +18,7 @@ const SyllabusPage = React.lazy(() => import('../features/syllabus/components/Sy
 const FlashcardsPage = React.lazy(() => import('../features/flashcards/components/FlashcardsPage'));
 const ChatPage = React.lazy(() => import('../features/chat/components/ChatPage'));
 const ImportPage = React.lazy(() => import('../features/import/components/ImportPage'));
+const QuizPage = React.lazy(() => import('../features/quiz/components/QuizPage'));
 const UsersPage = React.lazy(() => import('../features/users/components/UsersPage'));
 const UserDetailPage = React.lazy(() => import('../features/users/components/UserDetailPage'));
 const ProfilePage = React.lazy(() => import('../features/profile/components/ProfilePage'));
@@ -151,6 +152,17 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: { titleKey: 'nav.import', breadcrumb: [{ labelKey: 'nav.import' }] },
+      },
+      {
+        path: '/quiz',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <QuizPage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { titleKey: 'nav.quiz', breadcrumb: [{ labelKey: 'nav.quiz' }] },
       },
       {
         path: '/profile',

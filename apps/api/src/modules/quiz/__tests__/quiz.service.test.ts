@@ -1,0 +1,269 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { QuizAttemptItem as PrismaQuizAttemptItem } from '@prisma/client';
+import { QuizScope } from '@bract/shared';
+import { AppError } from '../../../lib/errors.js';
+
+// Mockeamos el repo (Prisma) y la capa de IA: el service corre real, sin DB ni red.
+vi.mock('../quiz.repository.js', () => ({
+  quizRepository: {
+    findTopicContext: vi.fn(),
+    findSubjectContext: vi.fn(),
+    createAttemptWithItems: vi.fn(),
+    findAttemptOwned: vi.fn(),
+    findItemByOrder: vi.fn(),
+    recordAnswer: vi.fn(),
+    findManyCompletedByUserPaged: vi.fn(),
+    countCompletedByUser: vi.fn(),
+    findByIdAndUserWithItems: vi.fn(),
+  },
+}));
+vi.mock('../../../lib/ai/index.js', () => ({
+  generateQuiz: vi.fn(),
+}));
+
+import { quizRepository } from '../quiz.repository.js';
+import { generateQuiz } from '../../../lib/ai/index.js';
+import { quizService } from '../quiz.service.js';
+
+const now = new Date('2026-06-13T00:00:00.000Z');
+
+// Opciones COMPLETAS (text + explanation) para un item persistido.
+const fullOpts = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ text: `o${i}`, explanation: `e${i}` }));
+
+// Item persistido (fila Prisma) para los tests de answer.
+function makeItem(over: Partial<PrismaQuizAttemptItem> = {}): PrismaQuizAttemptItem {
+  return {
+    id: 'i0',
+    attemptId: 'att1',
+    userId: 'u1',
+    topicId: 't1',
+    order: 0,
+    question: 'P1',
+    // options es Json en Prisma; el service lo castea al leer.
+    options: fullOpts(4) as unknown as PrismaQuizAttemptItem['options'],
+    correctIndex: 2,
+    selectedIndex: null,
+    isCorrect: false,
+    createdAt: now,
+    ...over,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  // recordAnswer aplica por defecto (devuelve true = afectó la fila). Los tests de carrera lo overridean.
+  vi.mocked(quizRepository.recordAnswer).mockResolvedValue(true);
+});
+
+describe('generate', () => {
+  it('scope TOPIC: valida ownership, llama a la IA y persiste correctIndex AUTORITATIVO; devuelve preguntas PÚBLICAS', async () => {
+    vi.mocked(quizRepository.findTopicContext).mockResolvedValue({
+      id: 't1',
+      name: 'Integrales',
+      description: 'apuntes',
+      subjectId: 's1',
+      subject: { name: 'Mate' },
+    });
+    vi.mocked(generateQuiz).mockResolvedValue([
+      {
+        topicId: 't1',
+        question: '¿Qué es una integral?',
+        options: [
+          { text: 'a', explanation: 'correcta' },
+          { text: 'b', explanation: 'mal' },
+        ],
+        correctIndex: 0,
+      },
+    ]);
+    vi.mocked(quizRepository.createAttemptWithItems).mockImplementation((attempt, items) =>
+      Promise.resolve({
+        id: 'att1',
+        userId: attempt.userId,
+        scope: attempt.scope,
+        status: 'IN_PROGRESS',
+        subjectId: attempt.subjectId ?? null,
+        topicId: attempt.topicId ?? null,
+        scopeName: attempt.scopeName,
+        totalCount: attempt.totalCount,
+        correctCount: attempt.correctCount,
+        completedAt: null,
+        createdAt: now,
+        items: items.map((it, i) => ({
+          id: `i${i}`,
+          attemptId: 'att1',
+          userId: it.userId,
+          topicId: it.topicId ?? null,
+          order: it.order,
+          question: it.question,
+          options: it.options,
+          correctIndex: it.correctIndex,
+          selectedIndex: it.selectedIndex ?? null,
+          isCorrect: it.isCorrect ?? false,
+          createdAt: now,
+        })),
+      }),
+    );
+
+    const result = await quizService.generate('u1', { scope: QuizScope.TOPIC, topicId: 't1' });
+
+    expect(generateQuiz).toHaveBeenCalledWith({
+      scope: 'TOPIC',
+      subjectName: 'Mate',
+      topics: [{ id: 't1', name: 'Integrales', description: 'apuntes' }],
+    });
+    // Se persiste el correctIndex autoritativo + opciones con explicación, sin responder.
+    const [attempt, items] = vi.mocked(quizRepository.createAttemptWithItems).mock.calls[0]!;
+    expect(attempt).toMatchObject({
+      userId: 'u1',
+      scope: 'TOPIC',
+      subjectId: 's1',
+      topicId: 't1',
+      scopeName: 'Integrales',
+      totalCount: 1,
+      correctCount: 0,
+    });
+    expect(items[0]).toMatchObject({ userId: 'u1', topicId: 't1', order: 0, correctIndex: 0 });
+    expect((items[0]!.options as unknown as { explanation: string }[])[0]!.explanation).toBe(
+      'correcta',
+    );
+
+    // La respuesta al cliente es PÚBLICA: sin correctIndex, opciones SOLO con text.
+    expect(result).toEqual({
+      attemptId: 'att1',
+      scope: QuizScope.TOPIC,
+      subjectId: 's1',
+      topicId: 't1',
+      scopeName: 'Integrales',
+      totalCount: 1,
+      questions: [
+        { order: 0, topicId: 't1', question: '¿Qué es una integral?', options: [{ text: 'a' }, { text: 'b' }] },
+      ],
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('correctIndex');
+    expect(serialized).not.toContain('explanation');
+  });
+
+  it('scope TOPIC con tema ajeno/inexistente → NOT_FOUND, no llama a la IA ni persiste', async () => {
+    vi.mocked(quizRepository.findTopicContext).mockResolvedValue(null);
+
+    await expect(
+      quizService.generate('u1', { scope: QuizScope.TOPIC, topicId: 't1' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(generateQuiz).not.toHaveBeenCalled();
+    expect(quizRepository.createAttemptWithItems).not.toHaveBeenCalled();
+  });
+
+  it('scope SUBJECT sin temas → VALIDATION_ERROR, no llama a la IA', async () => {
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue({
+      id: 's1',
+      name: 'Mate',
+      topics: [],
+    });
+
+    await expect(
+      quizService.generate('u1', { scope: QuizScope.SUBJECT, subjectId: 's1' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(generateQuiz).not.toHaveBeenCalled();
+  });
+
+  it('si la IA falla, propaga y NO persiste el intento', async () => {
+    vi.mocked(quizRepository.findTopicContext).mockResolvedValue({
+      id: 't1',
+      name: 'Integrales',
+      description: null,
+      subjectId: 's1',
+      subject: { name: 'Mate' },
+    });
+    vi.mocked(generateQuiz).mockRejectedValue(
+      new AppError('AI_UNAVAILABLE', 'IA no disponible'),
+    );
+
+    await expect(
+      quizService.generate('u1', { scope: QuizScope.TOPIC, topicId: 't1' }),
+    ).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(quizRepository.createAttemptWithItems).not.toHaveBeenCalled();
+  });
+});
+
+describe('answer — corrección server-side + lock anti-trampa', () => {
+  it('un selectedIndex tramposo NO infla: el server compara contra el correctIndex guardado', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    // correctIndex guardado = 2; el cliente elige 0 (incorrecto).
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(makeItem({ correctIndex: 2 }));
+
+    const reveal = await quizService.answer('att1', 'u1', { order: 0, selectedIndex: 0 });
+
+    // El grading lo decide el server: incorrecto, con el correctIndex real.
+    expect(reveal.isCorrect).toBe(false);
+    expect(reveal.correctIndex).toBe(2);
+    const [attemptId, itemId, selectedIndex, isCorrect] = vi.mocked(
+      quizRepository.recordAnswer,
+    ).mock.calls[0]!;
+    expect(attemptId).toBe('att1');
+    expect(itemId).toBe('i0');
+    expect(selectedIndex).toBe(0);
+    expect(isCorrect).toBe(false);
+    // Reveal expone las explicaciones SOLO ahora (tras responder).
+    expect(reveal.options[2]).toEqual({ text: 'o2', explanation: 'e2' });
+  });
+
+  it('acierto: selectedIndex === correctIndex guardado → isCorrect true', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(makeItem({ correctIndex: 2 }));
+
+    const reveal = await quizService.answer('att1', 'u1', { order: 0, selectedIndex: 2 });
+
+    expect(reveal.isCorrect).toBe(true);
+    expect(vi.mocked(quizRepository.recordAnswer).mock.calls[0]![3]).toBe(true);
+  });
+
+  it('no se puede responder dos veces la misma pregunta → CONFLICT (lock), no persiste', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(makeItem({ selectedIndex: 1 }));
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, selectedIndex: 0 }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(quizRepository.recordAnswer).not.toHaveBeenCalled();
+  });
+
+  it('carrera de doble-respuesta: el update condicional no afectó fila (false) → CONFLICT', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(makeItem({ correctIndex: 2 }));
+    // El pre-check ve selectedIndex null, pero otra request ganó la carrera → recordAnswer aplica 0 filas.
+    vi.mocked(quizRepository.recordAnswer).mockResolvedValue(false);
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, selectedIndex: 2 }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('intento ajeno → NOT_FOUND, no busca la pregunta', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue(null);
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, selectedIndex: 0 }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(quizRepository.findItemByOrder).not.toHaveBeenCalled();
+  });
+
+  it('opción fuera de rango → VALIDATION_ERROR', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(makeItem()); // 4 opciones
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, selectedIndex: 9 }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(quizRepository.recordAnswer).not.toHaveBeenCalled();
+  });
+});
+
+describe('getAttempt', () => {
+  it('intento ajeno/inexistente → NOT_FOUND', async () => {
+    vi.mocked(quizRepository.findByIdAndUserWithItems).mockResolvedValue(null);
+
+    await expect(quizService.getAttempt('a1', 'u1')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});

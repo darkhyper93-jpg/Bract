@@ -23,6 +23,7 @@ import { plannerRouter } from './modules/planner/planner.routes.js';
 import { flashcardRouter } from './modules/flashcards/flashcard.routes.js';
 import { chatRouter } from './modules/chat/chat.routes.js';
 import { importRouter } from './modules/import/import.routes.js';
+import { quizRouter } from './modules/quiz/quiz.routes.js';
 import { docsRouter } from './routes/docs.routes.js';
 
 export const app: Express = express();
@@ -73,6 +74,9 @@ app.use('/api/v1', chatRouter);
 
 // Importación masiva de temas POR TEXTO (Agente K): extract (preview IA) + commit (add/replace)
 app.use('/api/v1', importRouter);
+
+// Fase 14 — Evaluación / Quiz (Agente I): generar quiz con IA + persistir intentos (grading server-side)
+app.use('/api/v1', quizRouter);
 
 // Fase 8 — API Documentation
 app.use('/api/v1/docs', docsRouter);
