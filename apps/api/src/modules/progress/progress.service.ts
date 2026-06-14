@@ -1,5 +1,6 @@
 import type { ProgressOverview, SubjectProgress, TopicProgress, WeakTopic } from '@bract/shared';
 import { progressRepository } from './progress.repository.js';
+import { preferencesService } from '../preferences/preferences.service.js';
 import {
   computeTopicWeakness,
   resolvePreferences,
@@ -19,9 +20,10 @@ interface TopicComputed extends WeaknessResult {
   subjectName: string;
 }
 
-// F2: prefs por defecto. F4 reemplaza el cuerpo por un fetch al preferences.repository.
-async function buildResolvedPreferences(_userId: string): Promise<ResolvedPreferences> {
-  return resolvePreferences(null);
+// F4: lee las prefs reales del usuario y las resuelve a valores concretos (firma intacta desde F2).
+async function buildResolvedPreferences(userId: string): Promise<ResolvedPreferences> {
+  const prefs = await preferencesService.get(userId);
+  return resolvePreferences(prefs);
 }
 
 // Núcleo compartido: arma la lista de temas computados (una sola pasada por la data agregada).

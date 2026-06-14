@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RemediationIntensity } from '@bract/shared';
+import type { UserStudyPreferences } from '@bract/shared';
 
 vi.mock('../progress.repository.js', () => ({
   progressRepository: {
@@ -8,14 +10,30 @@ vi.mock('../progress.repository.js', () => ({
   },
 }));
 
+// F4: el service ahora lee prefs reales vía preferencesService → Prisma. Lo mockeamos desde el arranque
+// (devuelve defaults) para que este unit test no pegue contra la DB y mantenga los resultados de F2.
+vi.mock('../../preferences/preferences.service.js', () => ({
+  preferencesService: { get: vi.fn() },
+}));
+
 import { progressRepository } from '../progress.repository.js';
+import { preferencesService } from '../../preferences/preferences.service.js';
 import { progressService } from '../progress.service.js';
+
+const DEFAULT_PREFS: UserStudyPreferences = {
+  remediationIntensity: RemediationIntensity.LOW,
+  prioritySubjectIds: [],
+  weightQuiz: null,
+  weightSrs: null,
+  dailyGoalMinutes: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(progressRepository.getSrsStatsByTopic).mockResolvedValue([]);
   vi.mocked(progressRepository.getQuizStatsByTopic).mockResolvedValue([]);
   vi.mocked(progressRepository.getSubjectTree).mockResolvedValue([]);
+  vi.mocked(preferencesService.get).mockResolvedValue(DEFAULT_PREFS);
 });
 
 describe('progressService.getOverview', () => {
