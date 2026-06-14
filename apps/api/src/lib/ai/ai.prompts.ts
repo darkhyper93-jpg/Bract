@@ -25,13 +25,26 @@ export const PLAN_SYSTEM = [
 export function buildPlanUserPrompt(input: GeneratePlanInput, baseline: PlanDay[]): string {
   const horizon = input.horizonDays ?? 14;
   const today = input.now ?? new Date().toISOString().slice(0, 10);
-  return [
+  const lines = [
     `Hoy: ${today}. Horizonte: ${horizon} días.`,
     `Materias: ${JSON.stringify(input.subjects)}`,
     `Temas pendientes (con dificultad): ${JSON.stringify(input.topics)}`,
     `Disponibilidad (minutos por día de semana, 0=Domingo): ${JSON.stringify(input.availability)}`,
     `Distribución base a refinar: ${JSON.stringify(baseline)}`,
-  ].join('\n');
+  ];
+  // I-2 (capa 2): hint ADITIVO de puntos débiles (top 5). Solo si hay temas flojos; si no, el prompt queda igual.
+  const weak = input.topics
+    .filter((t) => (t.weakness ?? 0) > 0)
+    .sort((a, b) => (b.weakness ?? 0) - (a.weakness ?? 0))
+    .slice(0, 5);
+  if (weak.length > 0) {
+    lines.push(
+      `Temas más flojos a reforzar (priorizá sin descuidar la urgencia por examen): ${JSON.stringify(
+        weak.map((t) => t.id),
+      )}`,
+    );
+  }
+  return lines.join('\n');
 }
 
 export const FLASHCARDS_SYSTEM = [

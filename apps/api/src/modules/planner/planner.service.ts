@@ -28,6 +28,10 @@ import type {
 import { generateStudyPlan, generateStudyPlanBaseline } from '../../lib/ai/index.js';
 import type { GeneratePlanInput, PlanDay } from '../../lib/ai/index.js';
 import { AppError } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
+import { progressService } from '../progress/progress.service.js';
+import { preferencesService } from '../preferences/preferences.service.js';
+import { INTENSITY_ALPHA } from '../progress/progress.formula.js';
 import { flashcardService } from '../flashcards/flashcard.service.js';
 import { subjectRepository } from './subject.repository.js';
 import type { SubjectWithTopicsRow } from './subject.repository.js';
@@ -148,6 +152,26 @@ function flattenDays(days: PlanDay[]): NewPlanItem[] {
 async function buildPlanInput(userId: string): Promise<GeneratePlanInput> {
   const subjects = await subjectRepository.findManyByUserWithTopics(userId);
   const availability = await studyRepository.getAvailability(userId);
+
+  // I-2 (capa 2): debilidad (objetiva) + intensidad + materias prioritarias (preferencia). Si algo falla,
+  // degradamos a SIN señal (mapa vacío / prioridades vacías) ⇒ el planner se comporta byte-idéntico a hoy.
+  let weaknessMap = new Map<string, number>();
+  let alpha = 0;
+  let prioritySubjectIds: string[] = [];
+  try {
+    const [map, prefs] = await Promise.all([
+      progressService.getWeaknessMap(userId),
+      preferencesService.get(userId),
+    ]);
+    weaknessMap = map;
+    alpha = INTENSITY_ALPHA[prefs.remediationIntensity];
+    prioritySubjectIds = prefs.prioritySubjectIds;
+  } catch (err) {
+    logger.error('planner: weakness/priority enrichment failed; degradando a baseline de hoy', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   return {
     subjects: subjects.map((s) => ({
       id: s.id,
@@ -161,9 +185,12 @@ async function buildPlanInput(userId: string): Promise<GeneratePlanInput> {
         name: t.name,
         status: t.status as TopicStatus,
         difficulty: t.difficulty as TopicDifficulty,
+        weakness: weaknessMap.get(t.id) ?? 0,
       })),
     ),
     availability: availability.map((a) => ({ weekday: a.weekday, minutes: a.minutes })),
+    remediationAlpha: alpha,
+    prioritySubjectIds,
   };
 }
 

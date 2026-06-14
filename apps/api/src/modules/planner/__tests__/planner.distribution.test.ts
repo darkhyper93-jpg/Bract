@@ -43,11 +43,30 @@ vi.mock('../../../lib/ai/ai.client.js', () => ({
 vi.mock('../../flashcards/flashcard.service.js', () => ({
   flashcardService: { onTopicStatusChanged: vi.fn() },
 }));
+// I-2 (capa 2): buildPlanInput consulta progreso + preferencias. Por defecto NO aportan señal (mapa vacío + LOW)
+// → el planner se comporta como hoy. Los tests de blend sobreescriben estos mocks puntualmente.
+vi.mock('../../progress/progress.service.js', () => ({
+  progressService: { getWeaknessMap: vi.fn(async () => new Map<string, number>()) },
+}));
+vi.mock('../../preferences/preferences.service.js', () => ({
+  preferencesService: {
+    get: vi.fn(async () => ({
+      remediationIntensity: 'LOW',
+      prioritySubjectIds: [],
+      weightQuiz: null,
+      weightSrs: null,
+      dailyGoalMinutes: null,
+    })),
+  },
+}));
 
 import { subjectRepository } from '../subject.repository.js';
 import { topicRepository } from '../topic.repository.js';
 import { studyRepository } from '../study.repository.js';
 import { getAIClient, isAIConfigured } from '../../../lib/ai/ai.client.js';
+import { progressService } from '../../progress/progress.service.js';
+import { preferencesService } from '../../preferences/preferences.service.js';
+import { RemediationIntensity } from '@bract/shared';
 import { plannerService } from '../planner.service.js';
 import type { NewPlanItem } from '../study.repository.js';
 
@@ -120,6 +139,15 @@ describe('plannerService — distribución determinista (lógica riesgosa, sin I
     vi.clearAllMocks();
     vi.mocked(isAIConfigured).mockReturnValue(false);
     vi.mocked(studyRepository.getAvailability).mockResolvedValue(fullWeekAvailability());
+    // I-2: por defecto sin señal de debilidad ni prioridades → orden idéntico al baseline de hoy.
+    vi.mocked(progressService.getWeaknessMap).mockResolvedValue(new Map());
+    vi.mocked(preferencesService.get).mockResolvedValue({
+      remediationIntensity: RemediationIntensity.LOW,
+      prioritySubjectIds: [],
+      weightQuiz: null,
+      weightSrs: null,
+      dailyGoalMinutes: null,
+    });
   });
 
   it('generate sin AI_API_KEY degrada al baseline (no toca el cliente de IA)', async () => {
@@ -215,5 +243,68 @@ describe('plannerService — distribución determinista (lógica riesgosa, sin I
     expect(studyRepository.regenerateFutureItems).toHaveBeenCalledOnce();
     const [, , items] = vi.mocked(studyRepository.regenerateFutureItems).mock.calls[0]!;
     expect(items.map((i) => i.topicId)).toContain('skipme');
+  });
+
+  it('GOLDEN: sin datos de debilidad Y sin materias prioritarias ⇒ orden idéntico al baseline de hoy', async () => {
+    // Misma data que el test de urgencia. weaknessMap vacío + prioritySubjectIds=[] (defaults del beforeEach):
+    // ambos términos (debilidad y prioridad) en 0 ⇒ effectiveDays=examDays ⇒ idéntico a hoy, con cualquier α.
+    vi.mocked(subjectRepository.findManyByUserWithTopics).mockResolvedValue([
+      { ...subj('urgent', 2), topics: [topic('u_a', 'urgent')] },
+      { ...subj('later', 10), topics: [topic('l_a', 'later')] },
+    ]);
+    vi.mocked(studyRepository.createActivePlan).mockResolvedValue(activePlan());
+
+    await plannerService.generatePlan('u1');
+
+    const [, items] = vi.mocked(studyRepository.createActivePlan).mock.calls[0]!;
+    // El primer bloque sigue siendo el de la materia con examen más cercano.
+    expect(items[0]!.topicId).toBe('u_a');
+  });
+
+  it('con HIGH intensity, un tema flojo con examen algo más lejano puede adelantarse', async () => {
+    // urgente: examen en 8 días, no flojo. later: examen en 10 días, muy flojo.
+    vi.mocked(subjectRepository.findManyByUserWithTopics).mockResolvedValue([
+      { ...subj('urgent', 8), topics: [topic('u_a', 'urgent')] },
+      { ...subj('later', 10), topics: [topic('l_a', 'later')] },
+    ]);
+    vi.mocked(progressService.getWeaknessMap).mockResolvedValue(new Map([['l_a', 1]]));
+    vi.mocked(preferencesService.get).mockResolvedValue({
+      remediationIntensity: RemediationIntensity.HIGH,
+      prioritySubjectIds: [],
+      weightQuiz: null,
+      weightSrs: null,
+      dailyGoalMinutes: null,
+    });
+    vi.mocked(studyRepository.createActivePlan).mockResolvedValue(activePlan());
+
+    await plannerService.generatePlan('u1');
+
+    const [, items] = vi.mocked(studyRepository.createActivePlan).mock.calls[0]!;
+    // l_a: effectiveDays = 10 - 1*7*1 = 3 < 8 ⇒ se adelanta a u_a.
+    expect(items[0]!.topicId).toBe('l_a');
+  });
+
+  it('PRIORIDAD independiente de α: en OFF, una materia prioritaria con examen algo más lejano igual se adelanta', async () => {
+    // urgente: examen en 5 días, NO prioritaria. priori: examen en 7 días, prioritaria. SIN datos de debilidad.
+    // remediationIntensity=OFF ⇒ α=0 ⇒ el nudge de DEBILIDAD se anula, pero el de PRIORIDAD (fijo) sigue aplicando.
+    vi.mocked(subjectRepository.findManyByUserWithTopics).mockResolvedValue([
+      { ...subj('urgent', 5), topics: [topic('u_a', 'urgent')] },
+      { ...subj('priori', 7), topics: [topic('p_a', 'priori')] },
+    ]);
+    vi.mocked(preferencesService.get).mockResolvedValue({
+      remediationIntensity: RemediationIntensity.OFF,
+      prioritySubjectIds: ['priori'],
+      weightQuiz: null,
+      weightSrs: null,
+      dailyGoalMinutes: null,
+    });
+    vi.mocked(studyRepository.createActivePlan).mockResolvedValue(activePlan());
+
+    await plannerService.generatePlan('u1');
+
+    const [, items] = vi.mocked(studyRepository.createActivePlan).mock.calls[0]!;
+    // p_a: effectiveDays = 7 - 0 (α=0, sin nudge de debilidad) - 3*1 (prioridad FIJA) = 4 < 5 ⇒ se adelanta a u_a.
+    // Prueba clave: la prioridad NO depende de α (vale aun en OFF) y no toca el weakness.
+    expect(items[0]!.topicId).toBe('p_a');
   });
 });

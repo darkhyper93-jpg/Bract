@@ -49,6 +49,22 @@ vi.mock('../../../lib/ai/index.js', () => ({
 vi.mock('../../flashcards/flashcard.service.js', () => ({
   flashcardService: { onTopicStatusChanged: vi.fn() },
 }));
+// I-2 (capa 2): buildPlanInput enriquece con progreso + preferencias. Las mockeamos sin señal
+// (mapa vacío + LOW) para aislar el service de Prisma → mismo comportamiento que antes de I-2.
+vi.mock('../../progress/progress.service.js', () => ({
+  progressService: { getWeaknessMap: vi.fn(async () => new Map<string, number>()) },
+}));
+vi.mock('../../preferences/preferences.service.js', () => ({
+  preferencesService: {
+    get: vi.fn(async () => ({
+      remediationIntensity: 'LOW',
+      prioritySubjectIds: [],
+      weightQuiz: null,
+      weightSrs: null,
+      dailyGoalMinutes: null,
+    })),
+  },
+}));
 
 import { subjectRepository } from '../subject.repository.js';
 import { topicRepository } from '../topic.repository.js';

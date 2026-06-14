@@ -45,10 +45,13 @@ export interface GeneratePlanInput {
     name: string;
     status: TopicStatus;
     difficulty: TopicDifficulty;
+    weakness?: number; // [0,1] — I-2 (capa 2), DEBILIDAD objetiva. Ausente/0 ⇒ sin efecto.
   }[];
   availability: { weekday: number; minutes: number }[]; // minutos/día (§3.4)
   horizonDays?: number; // default 14
   now?: string; // ISO; default hoy
+  remediationAlpha?: number; // [0,1] — I-2. 0 (default) ⇒ orden idéntico a hoy.
+  prioritySubjectIds?: string[]; // I-2 (capa 2), PRIORIDAD (preferencia). Vacío/ausente ⇒ sin efecto.
 }
 
 export interface PlanItem {
@@ -138,6 +141,13 @@ const DIFFICULTY_RANK: Record<TopicDifficulty, number> = {
   [TopicDifficulty.HARD]: 2,
 };
 
+// I-2 (capa 2) — DOS términos SEPARADOS y ADITIVOS en el orden del baseline (README §3.6): DEBILIDAD (objetiva,
+// modulada por α) y PRIORIDAD (preferencia, nudge FIJO independiente de α). Ninguno multiplica al otro; topeados.
+const NUDGE_MAX_DAYS = 7; // adelanto máx. por DEBILIDAD para temas CON examen (se modula por α)
+const NUDGE_DIFFICULTY_WEIGHT = 1.5; // cuánto mueve la DEBILIDAD dentro del grupo SIN examen (se modula por α)
+const PRIORITY_NUDGE_DAYS = 3; // adelanto FIJO por PRIORIDAD para temas CON examen (< NUDGE_MAX_DAYS) — sin α
+const PRIORITY_NOEXAM_WEIGHT = 1.0; // cuánto mueve la PRIORIDAD dentro del grupo SIN examen — sin α
+
 // ---- Helpers de fecha (UTC, date-only) ------------------------------------
 
 function startOfUTCDay(d: Date): Date {
@@ -188,11 +198,33 @@ function buildBaselinePlan(input: GeneratePlanInput): PlanDay[] {
   if (pending.length === 0) return [];
 
   // urgencia: examen más cercano primero; dificultad desc como desempate.
+  // I-2 (capa 2): dos nudges ADITIVOS al orden — DEBILIDAD (×α) y PRIORIDAD (fija, sin α). Sin señal ⇒ igual a hoy.
+  const alpha = input.remediationAlpha ?? 0;
+  const prioritySet = new Set(input.prioritySubjectIds ?? []);
+  const prio = (subjectId: string): number => (prioritySet.has(subjectId) ? 1 : 0); // factor SEPARADO de weakness
+  // effectiveDays: temas CON examen reciben DOS nudges acumulativos y topeados. La DEBILIDAD se modula por α;
+  // la PRIORIDAD es un nudge FIJO (sin α) → vale aunque alpha=0 (OFF). Adelanto total ≤ α·D + P. SIN examen ⇒ +∞.
+  const effectiveDays = (t: { subjectId: string; weakness?: number }): number => {
+    const examDays = examDaysFor(examBySubject.get(t.subjectId) ?? null, now);
+    if (examDays >= Number.MAX_SAFE_INTEGER) return Number.POSITIVE_INFINITY;
+    return (
+      examDays -
+      alpha * NUDGE_MAX_DAYS * (t.weakness ?? 0) -
+      PRIORITY_NUDGE_DAYS * prio(t.subjectId) // prioridad: nudge FIJO, independiente de α
+    );
+  };
+  // score (grupo SIN examen): dificultad de hoy + debilidad (×α) + prioridad (peso FIJO, sin α).
+  // Sin datos de debilidad y sin prioridad ⇒ = difficultyRank (idéntico a hoy); una materia prioritaria sube por Wp aun en OFF.
+  const score = (t: { subjectId: string; difficulty: TopicDifficulty; weakness?: number }): number =>
+    DIFFICULTY_RANK[t.difficulty] +
+    alpha * NUDGE_DIFFICULTY_WEIGHT * (t.weakness ?? 0) +
+    PRIORITY_NOEXAM_WEIGHT * prio(t.subjectId); // prioridad: peso FIJO, independiente de α
+
   const ordered = [...pending].sort((a, b) => {
-    const da = examDaysFor(examBySubject.get(a.subjectId) ?? null, now);
-    const db = examDaysFor(examBySubject.get(b.subjectId) ?? null, now);
-    if (da !== db) return da - db;
-    return DIFFICULTY_RANK[b.difficulty] - DIFFICULTY_RANK[a.difficulty];
+    const ea = effectiveDays(a);
+    const eb = effectiveDays(b);
+    if (ea !== eb) return ea - eb; // urgencia (con ambos nudges); +∞ = sin examen va al final
+    return score(b) - score(a); // desempate: dificultad (+ debilidad si α>0, + prioridad siempre)
   });
 
   const slots: { date: string; remaining: number; items: PlanItem[] }[] = [];
