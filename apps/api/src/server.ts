@@ -24,6 +24,7 @@ import { flashcardRouter } from './modules/flashcards/flashcard.routes.js';
 import { chatRouter } from './modules/chat/chat.routes.js';
 import { importRouter } from './modules/import/import.routes.js';
 import { quizRouter } from './modules/quiz/quiz.routes.js';
+import { progressRouter } from './modules/progress/progress.routes.js';
 import { docsRouter } from './routes/docs.routes.js';
 
 export const app: Express = express();
@@ -77,6 +78,9 @@ app.use('/api/v1', importRouter);
 
 // Fase 14 — Evaluación / Quiz (Agente I): generar quiz con IA + persistir intentos (grading server-side)
 app.use('/api/v1', quizRouter);
+
+// Fase 15 — Progreso & puntos débiles (Agente I-2): motor on-the-fly (read-only)
+app.use('/api/v1', progressRouter);
 
 // Fase 8 — API Documentation
 app.use('/api/v1/docs', docsRouter);
