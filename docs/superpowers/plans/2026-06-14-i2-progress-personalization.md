@@ -288,6 +288,33 @@ describe('progress.formula — computeTopicWeakness', () => {
     expect(b.weakness).toBe(a.weakness); // weakness 100% objetivo: prioridad/intensidad no lo tocan
   });
 
+  it('weakness SIEMPRE en [0,1] (señales máximas no se pasan de 1)', () => {
+    const r = computeTopicWeakness(
+      { ...base, answered: 10, correct: 0, totalCards: 5, dueCards: 5, avgEase: 1.3 },
+      resolvePreferences(null),
+    );
+    expect(r.weakness).toBeGreaterThanOrEqual(0);
+    expect(r.weakness).toBeLessThanOrEqual(1);
+    expect(r.weakness).toBeCloseTo(1, 5); // quizWeak=1, srsWeak=1 ⇒ 0.6 + 0.4
+  });
+
+  it('AMBOS pesos en 0 explícito ⇒ no divide por cero; cae a defaults (0.6/0.4)', () => {
+    const prefs = resolvePreferences({
+      remediationIntensity: RemediationIntensity.LOW,
+      prioritySubjectIds: [],
+      weightQuiz: 0,
+      weightSrs: 0,
+      dailyGoalMinutes: null,
+    });
+    const r = computeTopicWeakness(
+      { ...base, answered: 4, correct: 0, totalCards: 2, dueCards: 0, avgEase: 2.5 },
+      prefs,
+    );
+    expect(Number.isNaN(r.weakness)).toBe(false);
+    expect(r.weakness).toBeCloseTo(0.6, 5); // 0.6*1 (quizWeak) + 0.4*0 (srsWeak) ⇒ defaults aplicados
+    expect(r.hasData).toBe(true);
+  });
+
   it('INTENSITY_ALPHA: OFF=0, HIGH=1', () => {
     expect(INTENSITY_ALPHA[RemediationIntensity.OFF]).toBe(0);
     expect(INTENSITY_ALPHA[RemediationIntensity.HIGH]).toBe(1);
@@ -358,10 +385,18 @@ function clamp01(n: number): number {
 
 // Resuelve prefs (o null) a valores concretos con los defaults del motor.
 export function resolvePreferences(prefs: UserStudyPreferences | null): ResolvedPreferences {
+  let weightQuiz = prefs?.weightQuiz ?? DEFAULT_WEIGHT_QUIZ;
+  let weightSrs = prefs?.weightSrs ?? DEFAULT_WEIGHT_SRS;
+  // DECISIÓN: si el usuario pone AMBOS pesos en 0 explícito, un tema con datos daría 0/0. Para no dividir por
+  // cero (ni devolver weakness=0 teniendo datos), caemos a los defaults (0.6/0.4). Un solo peso en 0 sí es válido.
+  if (weightQuiz === 0 && weightSrs === 0) {
+    weightQuiz = DEFAULT_WEIGHT_QUIZ;
+    weightSrs = DEFAULT_WEIGHT_SRS;
+  }
   return {
     remediationIntensity: prefs?.remediationIntensity ?? DEFAULT_REMEDIATION_INTENSITY,
-    weightQuiz: prefs?.weightQuiz ?? DEFAULT_WEIGHT_QUIZ,
-    weightSrs: prefs?.weightSrs ?? DEFAULT_WEIGHT_SRS,
+    weightQuiz,
+    weightSrs,
   };
 }
 
@@ -410,7 +445,7 @@ export function computeTopicWeakness(s: TopicSignals, prefs: ResolvedPreferences
 - [ ] **Step 4: Correr el test y verificar que pasa**
 
 Run: `pnpm --filter ./apps/api exec vitest run src/modules/progress/__tests__/progress.formula.test.ts`
-Expected: PASS (7 tests).
+Expected: PASS (9 tests).
 
 - [ ] **Step 5: Commit**
 

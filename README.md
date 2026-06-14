@@ -767,6 +767,7 @@ srsWeak       = totalCards > 0 ? clamp01(0.6*easeGap + 0.4*overdueRatio) : AUSEN
 weakness      = weightedAvg({ quizWeak: wQuiz, srsWeak: wSrs })   // defaults 0.6 / 0.4, override por prefs
 // weakness es 100% OBJETIVO: SOLO quiz + SRS. La preferencia (prioritySubjectIds) NO lo toca — el dashboard
 // muestra siempre el weakness REAL (nunca inflado). La prioridad es un término aparte y solo del planner (abajo).
+// Caso límite: si AMBOS pesos son 0 (override explícito), se cae a los defaults (0.6/0.4) — nunca 0/0.
 ```
 
 **Blend del planner (capa 2 — modelo de "nudge en días", DEGRADA EXACTO). DOS términos SEPARADOS y ADITIVOS:
