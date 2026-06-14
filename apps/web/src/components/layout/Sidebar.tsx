@@ -67,6 +67,14 @@ function IconQuiz() {
   );
 }
 
+function IconTrendingUp() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
+    </svg>
+  );
+}
+
 function IconUsers() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -117,6 +125,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { to: '/chat', labelKey: 'chat', icon: <IconMessageCircle /> },
   { to: '/import', labelKey: 'import', icon: <IconImport /> },
   { to: '/quiz', labelKey: 'quiz', icon: <IconQuiz /> },
+  { to: '/progress', labelKey: 'progress', icon: <IconTrendingUp /> },
   { to: '/users', labelKey: 'users', icon: <IconUsers />, adminOnly: true },
   { to: '/analytics', labelKey: 'analytics', icon: <IconBarChart2 />, adminOnly: true },
   { to: '/notifications', labelKey: 'notifications', icon: <IconBell />, badge: 0 },

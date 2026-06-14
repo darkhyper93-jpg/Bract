@@ -19,6 +19,7 @@ const FlashcardsPage = React.lazy(() => import('../features/flashcards/component
 const ChatPage = React.lazy(() => import('../features/chat/components/ChatPage'));
 const ImportPage = React.lazy(() => import('../features/import/components/ImportPage'));
 const QuizPage = React.lazy(() => import('../features/quiz/components/QuizPage'));
+const ProgressPage = React.lazy(() => import('../features/progress').then((m) => ({ default: m.ProgressPage })));
 const UsersPage = React.lazy(() => import('../features/users/components/UsersPage'));
 const UserDetailPage = React.lazy(() => import('../features/users/components/UserDetailPage'));
 const ProfilePage = React.lazy(() => import('../features/profile/components/ProfilePage'));
@@ -163,6 +164,17 @@ const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         handle: { titleKey: 'nav.quiz', breadcrumb: [{ labelKey: 'nav.quiz' }] },
+      },
+      {
+        path: '/progress',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <ProgressPage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { titleKey: 'nav.progress', breadcrumb: [{ labelKey: 'nav.progress' }] },
       },
       {
         path: '/profile',
