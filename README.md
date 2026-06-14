@@ -688,6 +688,146 @@ enum QuizAttemptStatus {
 
 ---
 
+### 3.6 Progreso, puntos débiles y personalización — I-2
+
+> **Estado:** follow-up de §3.5 (`IDEAS_POST_MVP.md` "Agente I-2"), encargada **spec-first**, post-MVP.
+> Convierte los datos ya persistidos (quiz + SRS) en una señal de **debilidad por tema** y la usa para
+> (1) un **dashboard de Progreso**, (2) **priorizar** el plan del día y (3) **enriquecer** el contexto del
+> chat. Más una capa transversal de **personalización**.
+>
+> **Se construye en 3 capas; la 2 y la 3 dependen de la 1 y son ADITIVAS sobre features deployadas:**
+> - **Capa 1 — Motor + Dashboard (base).** Service de progreso/debilidad (reusable) + sección `/progress`.
+>   Solo lectura, `[self]`, capas estrictas, **sin N+1** (agrega en Prisma con `groupBy`, no trae todo a
+>   memoria — reusa los índices `@@index([userId, topicId])` / `[userId, topicId, isCorrect]` de §3.5 y
+>   `@@index([userId, dueDate])` de las flashcards).
+> - **Capa 2 — Feedback al Planner (aditivo).** El plan del día adelanta temas débiles. **Sin datos de
+>   progreso, el planner se comporta EXACTAMENTE como hoy** (degrada sin romper).
+> - **Capa 3 — Feedback al Chat (aditivo).** El contexto del tutor incluye los puntos débiles. **Sin datos,
+>   el contexto es idéntico a hoy.** No toca el streaming ni el contrato del chat.
+>
+> **Almacenamiento (DECISIÓN):** el **progreso se calcula on-the-fly** vía `groupBy` indexado — **sin tabla
+> de caché** (los índices de §3.5 existen justo para esto; evita invalidación). Lo único que requiere
+> `db push` es el modelo de **preferencias**. Una tabla materializada `TopicProgress` queda como follow-up
+> si el `groupBy` escalara mal.
+
+```prisma
+// ==========================================
+// PROGRESO & PERSONALIZACIÓN (I-2)
+// Único modelo nuevo: preferencias. El progreso/debilidad es DERIVADO (on-the-fly), no se persiste.
+// ==========================================
+
+model UserStudyPreferences {
+  id                   String               @id @default(cuid())
+  userId               String               @unique
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Intensidad de remediación: escala cuánto pesa la debilidad en el plan (ver "Blend del planner").
+  remediationIntensity RemediationIntensity @default(LOW)
+  // Materias a priorizar: multiplican el peso de sus temas en la fórmula de debilidad. [] = todas por igual.
+  prioritySubjectIds   String[]             @default([])
+  // Override opcional de los pesos de la fórmula (null = defaults wQuiz=0.6 / wSrs=0.4).
+  weightQuiz           Float?
+  weightSrs            Float?
+  // Meta informativa (objetivo de estudio); el dashboard la usa para contexto. Extensible.
+  dailyGoalMinutes     Int?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@map("user_study_preferences")
+}
+
+enum RemediationIntensity {
+  OFF    // α=0: la debilidad NO influye el plan (idéntico a hoy aunque haya datos)
+  LOW    // α≈0.33: desempate suave (DEFAULT — conservador sobre una feature deployada)
+  MEDIUM // α≈0.66
+  HIGH   // α=1.0: blend máximo urgencia+debilidad (el examen nunca se ignora del todo)
+}
+```
+
+**Back-relation** (solo relación, sin columnas nuevas):
+- `User`: `studyPreferences UserStudyPreferences?`
+
+**Fórmula de debilidad (por tema, derivada — `weakness ∈ [0,1]`, 1 = más débil):**
+
+```
+// Señal QUIZ — solo ítems contestados (selectedIndex != null); saltar ≠ fallar.
+answered      = count(QuizAttemptItem WHERE userId, topicId, selectedIndex != null)
+correct       = count(... AND isCorrect = true)
+quizWeak      = answered > 0 ? 1 - correct/answered : AUSENTE
+lowConfidence = answered < MIN_ANSWERS            // p.ej. 3 → el dashboard lo marca tenue
+
+// Señal SRS — estado real de las flashcards del tema (§3.3).
+avgEase       = _avg(Flashcard.ease)              // ease bajo ⇒ débil
+easeGap       = clamp01((2.5 - avgEase) / (2.5 - 1.3))   // 1.3 = piso de ease del SM-2
+overdueRatio  = totalCards > 0 ? dueCards / totalCards : 0   // dueDate <= now
+srsWeak       = totalCards > 0 ? clamp01(0.6*easeGap + 0.4*overdueRatio) : AUSENTE
+
+// Combinación — ignora la señal AUSENTE; ambas ausentes ⇒ el tema se OMITE (sin datos ≠ débil → EmptyState).
+weakness      = weightedAvg({ quizWeak: wQuiz, srsWeak: wSrs })   // defaults 0.6 / 0.4, override por prefs
+// Materia priorizada (prioritySubjectIds) ⇒ multiplica weakness por PRIORITY_BOOST (cap a 1).
+```
+
+**Blend del planner (capa 2 — modelo de "nudge en días", DEGRADA EXACTO):**
+
+```
+α  = map(remediationIntensity)  → OFF:0 · LOW:0.33 · MEDIUM:0.66 · HIGH:1.0
+D  = NUDGE_MAX_DAYS             // tope del adelanto por debilidad para temas CON examen (p.ej. 7 días)
+Wd = NUDGE_DIFFICULTY_WEIGHT   // cuánto puede mover la debilidad dentro del grupo SIN examen (p.ej. 1.5)
+
+// `examDays(t)` = días hasta el examen de la materia del tema (igual que hoy; sin examen ⇒ +∞).
+// — Temas CON examen: nudge en días (menor effectiveDays ⇒ antes).
+effectiveDays(t) = examDays(t) - α · D · weakness(t)
+// — Temas SIN examen (examDays=+∞): el nudge en días no aplica; se ordenan dentro de su grupo por un
+//   score que mezcla la dificultad de HOY con la debilidad, modulada por la MISMA α (mayor ⇒ antes).
+noExamScore(t)   = difficultyRank(t) + α · Wd · weakness(t)
+
+// Orden del baseline (ai.service.buildBaselinePlan):
+//   1) effectiveDays ASC  → los temas CON examen van siempre antes que los SIN examen (+∞)
+//   2) dentro de SIN examen: noExamScore DESC   (hoy = difficultyRank DESC)
+//   3) desempate final: dificultad DESC (igual que hoy)
+```
+
+Invariantes del blend (los que vas a revisar con lupa):
+- **Sin datos** ⇒ `weakness(t)=0 ∀t` ⇒ `effectiveDays = examDays` ⇒ **orden idéntico a hoy, con cualquier α**.
+- **`OFF` (α=0)** ⇒ idéntico a hoy **aunque haya** datos de debilidad.
+- **Intensidad baja** ⇒ nudge chico ⇒ la debilidad solo reordena casi-empates (≈ desempate).
+- **Intensidad alta** ⇒ blend ponderado: un tema flojo con examen algo más lejano puede adelantarse.
+- **El examen nunca se ignora del todo:** el adelanto está topado en `α·D ≤ D` días → un examen mucho más
+  cercano siempre gana, incluso en `HIGH`.
+- **Temas SIN examen (`examDays=+∞`):** el nudge en días no los mueve, así que un tema débil sin fecha NO
+  debe quedar al fondo solo por dificultad. Dentro de ese grupo se ordena por `noExamScore DESC`
+  (debilidad como criterio secundario sobre la dificultad de hoy, modulado por α): en `OFF` o sin datos
+  `noExamScore = difficultyRank` ⇒ **idéntico a hoy**; con α alto un tema suficientemente flojo puede
+  superar un escalón de dificultad. Igual van siempre **después** de los temas con examen (paso 1).
+
+> El mismo `weakness` se inyecta como **hint** al prompt de la IA del plan (`buildPlanUserPrompt`), aditivo:
+> mapa vacío ⇒ prompt sin cambios. La IA sigue validándose/clampeándose con Zod + `validateAndClampPlan`.
+
+**Enriquecimiento del chat (capa 3 — aditivo):**
+- `StudentContext` (de `lib/ai/ai.context.ts`) suma un campo **opcional** `weakTopics?: { name, weakness }[]`
+  (top N). `renderContextForPrompt` agrega un bloque "Temas flojos: …" **solo si hay datos**.
+- Sin datos ⇒ **ningún bloque nuevo** ⇒ system prompt byte-idéntico a hoy. `buildChatSystemPrompt`, el
+  historial, el SSE y el manejo de disconnect **no cambian**.
+
+**Degradación (qué falla y cómo cae):**
+
+| Falla | Comportamiento |
+| --- | --- |
+| Sin quizzes ni SRS de un tema | el tema se omite (no es "débil", es "sin datos") → `/progress` muestra `EmptyState` |
+| Sin preferencias del usuario | se usan defaults (`LOW`, pesos 0.6/0.4, sin materias priorizadas) — nunca bloquea |
+| El motor de progreso lanza error (capa 2/3) | `try/catch` ⇒ debilidad vacía ⇒ planner y chat **se comportan como hoy** (nunca tumban una feature deployada) |
+| IA falla | igual que hoy (plan → baseline determinista; chat → `AI_UNAVAILABLE` 503) — I-2 no lo toca |
+
+**Reglas (además de §3.4):**
+- **`UserStudyPreferences` es 1:1 con `User`** (`@@unique(userId)`), upsert con defaults; ownership por `userId`.
+- **El motor de progreso es read-only y reusable:** un único service expone `getOverview`, `getWeakTopics`
+  y `getWeaknessMap(userId)`; planner y chat consumen `getWeaknessMap` (no reimplementan la fórmula).
+- **Sin N+1:** el repo agrega con `groupBy` (quiz por `topicId`/`isCorrect`; flashcards por `topicId` con
+  `_avg.ease` + counts) — nunca itera trayendo todo a memoria.
+- **La fórmula es un objeto de config** (pesos, `α`, `D`, `MIN_ANSWERS`, `PRIORITY_BOOST`) → sumar más
+  ajustes de personalización no cambia las firmas.
+
+---
+
 ## 4. AUTH SYSTEM
 
 ### 4.1 Modo de auth (MODO A — Custom JWT, RECOMENDADO)
@@ -932,6 +1072,12 @@ POST   /api/v1/quiz/attempts                          [self]   // GENERAR: { sco
 POST   /api/v1/quiz/attempts/:id/answers              [self]   // RESPONDER 1 pregunta: { order, selectedIndex } → corrige en el server contra el correctIndex guardado, bloquea re-responder (CONFLICT), recalcula score; devuelve la reveal (correctIndex + explicaciones) SOLO de esa pregunta.
 GET    /api/v1/quiz/attempts                          [self]   // historial paginado (COMPLETED) del usuario (sin items)
 GET    /api/v1/quiz/attempts/:id                      [self]   // intento + items POR ESTADO (anti-trampa al reanudar): contestado → completo (options con explicación, correctIndex, selectedIndex, isCorrect); SIN contestar → público (options solo {text}, correctIndex=null, isCorrect=false, sin explicación). COMPLETED → todos contestados → todos completos.
+
+PROGRESO & PERSONALIZACIÓN (I-2)
+GET    /api/v1/progress/overview                      [self]   // % de acierto + debilidad por materia/tema (groupBy quiz + SRS, on-the-fly). 4 estados; EmptyState si no hay datos.
+GET    /api/v1/progress/weak-topics?limit=            [self]   // temas más flojos del usuario, ordenados por debilidad desc (omite temas sin datos).
+GET    /api/v1/preferences                            [self]   // preferencias de estudio del usuario (defaults si no existen).
+PUT    /api/v1/preferences                            [self]   // upsert de preferencias (Zod): remediationIntensity, prioritySubjectIds, weightQuiz/Srs?, dailyGoalMinutes?.
 ```
 
 > **Evaluación / Quiz (Agente I) — IDEAS_POST_MVP §"Agente I".** Quiz de opción múltiple por tema o materia,
@@ -1589,6 +1735,16 @@ Este archivo en la raíz del repo es el log manual de decisiones y errores de ar
 - [ ] **Backend `modules/quiz/`:** repo→service→controller→routes (envelope, Zod, `[self]`), grading server-side, ownership de tema/materia
 - [ ] **Frontend `features/quiz/`:** setup + runner (reveal local) + resultados + historial, 4 estados, i18n es/en, sidebar, ruta lazy
 - [ ] **FUERA DE ALCANCE (I-2):** dashboard de progreso agregado + detección de puntos débiles (solo se dejan los datos persistidos)
+
+### Fase 15 — Progreso, puntos débiles y personalización (Agente I-2, §3.6 · §5.5)
+> Capas 2 y 3 son ADITIVAS sobre features deployadas: cada una con un test golden "sin datos = idéntico a hoy". Orden estricto F1→F7.
+- [ ] **F1 — Shared:** tipos + Zod (`TopicWeakness`, `SubjectProgress`, `ProgressOverview`, `WeakTopic`, `UserStudyPreferences` + `UpdatePreferencesInput`, enum `RemediationIntensity`)
+- [ ] **F2 — Backend motor (capa 1):** `modules/progress/` repo (`groupBy`, sin N+1) → service (fórmula de debilidad, `getWeaknessMap` reusable) → controller → routes `[self]`; tests del cálculo. NO toca planner ni chat
+- [ ] **F3 — Dashboard (capa 1):** `features/progress/` (api + hooks + componentes), ruta `/progress` + sidebar, barras por materia/tema + lista de débiles, 4 estados + `EmptyState`, i18n es/en, color tokens
+- [ ] **F4 — Personalización:** modelo `UserStudyPreferences` + `db push`, `modules/preferences/` + UI; la fórmula de F2 lee prefs (degrada a defaults)
+- [ ] **F5 — Integración Planner (capa 2, aditivo):** `buildPlanInput` enriquece topics con `weakness`; blend "nudge en días" en `buildBaselinePlan` + hint al prompt; test golden sin-datos = hoy
+- [ ] **F6 — Integración Chat (capa 3, aditivo):** `StudentContext.weakTopics?` + render condicional en `renderContextForPrompt`; sin tocar streaming/contrato; test golden sin-datos = prompt idéntico
+- [ ] **F7 — Verificación:** tests de degradación (try/catch ⇒ comportamiento de hoy), no-N+1 (revisar SQL emitido), typecheck/lint, checklist CLAUDE.md
 
 ---
 
