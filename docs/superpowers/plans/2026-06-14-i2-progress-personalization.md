@@ -28,7 +28,7 @@
 - Create `modules/progress/__tests__/progress.formula.test.ts` y `progress.service.test.ts`.
 - Modify `prisma/schema.prisma` — modelo `UserStudyPreferences` + enum + back-relation en `User`.
 - Modify `server.ts` — montar `progressRouter` y `preferencesRouter`.
-- Modify `lib/ai/ai.service.ts` — `GeneratePlanInput` aditivo (`remediationAlpha?`, `topics[].weakness?`) + blend en `buildBaselinePlan` + constantes nudge.
+- Modify `lib/ai/ai.service.ts` — `GeneratePlanInput` aditivo (`remediationAlpha?`, `topics[].weakness?`, `prioritySubjectIds?`) + blend en `buildBaselinePlan` con DOS términos separados (debilidad + prioridad) + constantes nudge.
 - Modify `modules/planner/planner.service.ts` — `buildPlanInput` enriquece con weakness/α (try/catch).
 - Modify `lib/ai/ai.context.ts` — `StudentContext.weakTopics?` + render condicional.
 - Modify `modules/chat/chat.service.ts` — pasar weakTopics (try/catch).
@@ -272,16 +272,20 @@ describe('progress.formula — computeTopicWeakness', () => {
     expect(r.weakness).toBeCloseTo(0.6, 5); // 0.6*1 + 0.4*0
   });
 
-  it('materia priorizada ⇒ multiplica weakness por PRIORITY_BOOST (cap 1)', () => {
-    const prefs = resolvePreferences({
-      remediationIntensity: RemediationIntensity.LOW,
-      prioritySubjectIds: ['s1'],
-      weightQuiz: null,
-      weightSrs: null,
-      dailyGoalMinutes: null,
-    });
-    const r = computeTopicWeakness({ ...base, answered: 2, correct: 1 }, prefs);
-    expect(r.weakness).toBeGreaterThan(0.5); // 0.5 * 1.25 = 0.625
+  it('la PRIORIDAD no afecta el weakness (es objetivo): mismas señales ⇒ mismo weakness con cualquier pref', () => {
+    const signals = { ...base, answered: 2, correct: 1 };
+    const a = computeTopicWeakness(signals, resolvePreferences(null));
+    const b = computeTopicWeakness(
+      signals,
+      resolvePreferences({
+        remediationIntensity: RemediationIntensity.HIGH,
+        prioritySubjectIds: ['s1'], // materia "prioritaria": NO debe inflar el weakness
+        weightQuiz: null,
+        weightSrs: null,
+        dailyGoalMinutes: null,
+      }),
+    );
+    expect(b.weakness).toBe(a.weakness); // weakness 100% objetivo: prioridad/intensidad no lo tocan
   });
 
   it('INTENSITY_ALPHA: OFF=0, HIGH=1', () => {
@@ -305,13 +309,14 @@ import { DEFAULT_REMEDIATION_INTENSITY, DEFAULT_WEIGHT_QUIZ, DEFAULT_WEIGHT_SRS 
 
 // Fórmula de debilidad por tema (README §3.6). PURA: sin Prisma ni HTTP → testeable en aislamiento y
 // reusable por planner (capa 2) y chat (capa 3). El service la alimenta con señales agregadas + prefs.
+// weakness es 100% OBJETIVO: SOLO quiz + SRS. La PRIORIDAD (prioritySubjectIds) NO vive acá — es un término
+// aparte del planner (ai.service.buildBaselinePlan). El dashboard muestra siempre el weakness real.
 
 export const MIN_ANSWERS = 3; // confianza: por debajo, lowConfidence=true
 export const EASE_BASE = 2.5; // ease inicial del SM-2
 export const EASE_FLOOR = 1.3; // piso de ease del SM-2
 export const SRS_EASE_WEIGHT = 0.6;
 export const SRS_OVERDUE_WEIGHT = 0.4;
-export const PRIORITY_BOOST = 1.25; // materia priorizada sube su weakness
 
 // Mapa intensidad → α (escala el peso de la debilidad en el plan; ver ai.service.buildBaselinePlan).
 export const INTENSITY_ALPHA: Record<RemediationIntensity, number> = {
@@ -333,10 +338,11 @@ export interface TopicSignals {
 
 export interface ResolvedPreferences {
   remediationIntensity: RemediationIntensity;
-  prioritySubjectIds: Set<string>;
   weightQuiz: number;
   weightSrs: number;
 }
+// NOTA: prioritySubjectIds NO está acá a propósito — la prioridad es un término del planner, no de la
+// fórmula de debilidad (que es objetiva). El planner lee prioritySubjectIds de preferencesService directo.
 
 export interface WeaknessResult {
   weakness: number;
@@ -354,7 +360,6 @@ function clamp01(n: number): number {
 export function resolvePreferences(prefs: UserStudyPreferences | null): ResolvedPreferences {
   return {
     remediationIntensity: prefs?.remediationIntensity ?? DEFAULT_REMEDIATION_INTENSITY,
-    prioritySubjectIds: new Set(prefs?.prioritySubjectIds ?? []),
     weightQuiz: prefs?.weightQuiz ?? DEFAULT_WEIGHT_QUIZ,
     weightSrs: prefs?.weightSrs ?? DEFAULT_WEIGHT_SRS,
   };
@@ -389,10 +394,8 @@ export function computeTopicWeakness(s: TopicSignals, prefs: ResolvedPreferences
     num += prefs.weightSrs * srsWeak;
     den += prefs.weightSrs;
   }
-  let weakness = den > 0 ? num / den : 0;
-  if (prefs.prioritySubjectIds.has(s.subjectId)) {
-    weakness = clamp01(weakness * PRIORITY_BOOST);
-  }
+  // weakness OBJETIVO: solo quiz + SRS. La prioridad NO se aplica acá (es un término del planner).
+  const weakness = den > 0 ? num / den : 0;
 
   return {
     weakness,
@@ -1210,6 +1213,8 @@ progress: {
   remediationMedium: 'Medium',
   remediationHigh: 'High',
   prioritySubjects: 'Priority subjects',
+  prioritySubjectsEmpty: 'Create subjects to choose priorities.',
+  prioritySubjectsError: 'Could not load your subjects.',
   dailyGoalMinutes: 'Daily goal (minutes)',
   save: 'Save preferences',
   saved: 'Preferences saved',
@@ -1236,6 +1241,8 @@ progress: {
   remediationMedium: 'Media',
   remediationHigh: 'Alta',
   prioritySubjects: 'Materias a priorizar',
+  prioritySubjectsEmpty: 'Creá materias para elegir prioridades.',
+  prioritySubjectsError: 'No se pudieron cargar tus materias.',
   dailyGoalMinutes: 'Meta diaria (minutos)',
   save: 'Guardar preferencias',
   saved: 'Preferencias guardadas',
@@ -1257,6 +1264,15 @@ git commit -m "feat(web/progress): ruta /progress + sidebar + i18n es/en (I-2 F3
 ---
 
 ## FASE 4 — Personalización (modelo + módulo + UI)
+
+> **NOTA de diseño (debilidad ≠ prioridad, ajuste pre-F2/F4/F5):** `prioritySubjectIds` se persiste igual en
+> `UserStudyPreferences`, pero es consumido por el **planner** (F5) como término propio del orden, con **nudge
+> fijo independiente de α** (vale aun en `OFF`) — **NO** por la fórmula de debilidad (que quedó 100% objetiva,
+> solo quiz + SRS). No hay cambio de código en Task 10/11 por esto (el módulo de preferencias solo guarda/lee el
+> array; el mapper Prisma↔shared no toca prioridad).
+> **UI de prioridad SÍ en v1 (Task 12):** el multiselect de materias prioritarias va en la pantalla de
+> preferencias, con sus 4 estados (reusa `useSubjects` como fuente del árbol de materias). Sin esto la prioridad
+> no sería ejercitable y la personalización quedaría incompleta.
 
 ### Task 10: Modelo Prisma UserStudyPreferences (db push lo corre el usuario)
 
@@ -1553,10 +1569,11 @@ export function useUpdatePreferences() {
 import { z } from 'zod';
 import { RemediationIntensity } from '@bract/shared';
 
-// Form de preferencias (subset editable en la UI v1). prioritySubjectIds se edita aparte (multiselect).
+// Form de preferencias (v1). Incluye el multiselect de materias prioritarias (prioritySubjectIds).
 export const preferencesFormSchema = z.object({
   remediationIntensity: z.nativeEnum(RemediationIntensity),
   dailyGoalMinutes: z.coerce.number().int().min(0).max(1440).nullable(),
+  prioritySubjectIds: z.array(z.string().cuid()).max(50),
 });
 
 export type PreferencesFormValues = z.infer<typeof preferencesFormSchema>;
@@ -1572,6 +1589,7 @@ import { useTranslation } from 'react-i18next';
 import { RemediationIntensity } from '@bract/shared';
 import { usePreferences, useUpdatePreferences } from '../hooks/usePreferences';
 import { preferencesFormSchema, type PreferencesFormValues } from '../schemas/preferences.form.schema';
+import { useSubjects } from '../../planner/hooks/useSubjects';
 import { Skeleton } from '../../../components/ui/Skeleton';
 
 const INTENSITIES: RemediationIntensity[] = [
@@ -1591,11 +1609,16 @@ const INTENSITY_LABEL_KEY: Record<RemediationIntensity, string> = {
 export function PreferencesPanel() {
   const { t } = useTranslation();
   const prefs = usePreferences();
+  const subjects = useSubjects(); // fuente única del árbol de materias (reuso del planner)
   const update = useUpdatePreferences();
 
   const form = useForm<PreferencesFormValues>({
     resolver: zodResolver(preferencesFormSchema),
-    defaultValues: { remediationIntensity: RemediationIntensity.LOW, dailyGoalMinutes: null },
+    defaultValues: {
+      remediationIntensity: RemediationIntensity.LOW,
+      dailyGoalMinutes: null,
+      prioritySubjectIds: [],
+    },
   });
 
   useEffect(() => {
@@ -1603,6 +1626,7 @@ export function PreferencesPanel() {
       form.reset({
         remediationIntensity: prefs.data.remediationIntensity,
         dailyGoalMinutes: prefs.data.dailyGoalMinutes,
+        prioritySubjectIds: prefs.data.prioritySubjectIds,
       });
     }
   }, [prefs.data, form]);
@@ -1637,6 +1661,35 @@ export function PreferencesPanel() {
         className="mb-4 w-full rounded-lg border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
       />
 
+      {/* Multiselect de materias prioritarias — adelanta esas materias en el plan (nudge fijo, vale aun en OFF).
+          Los 4 estados de la query de materias (loading · error · empty · success). */}
+      <label className="mb-1 block text-xs text-text-secondary">{t('progress.prioritySubjects')}</label>
+      <div className="mb-4">
+        {subjects.isLoading && <Skeleton className="h-20 w-full" />}
+        {subjects.isError && <p className="text-xs text-error">{t('progress.prioritySubjectsError')}</p>}
+        {subjects.isSuccess && subjects.data.length === 0 && (
+          <p className="text-xs text-text-tertiary">{t('progress.prioritySubjectsEmpty')}</p>
+        )}
+        {subjects.isSuccess && subjects.data.length > 0 && (
+          <ul className="space-y-1">
+            {subjects.data.map((s) => (
+              <li key={s.id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id={`prio-${s.id}`}
+                  value={s.id}
+                  {...form.register('prioritySubjectIds')}
+                  className="h-4 w-4 rounded border-border-subtle bg-bg-elevated"
+                />
+                <label htmlFor={`prio-${s.id}`} className="truncate text-sm text-text-secondary">
+                  {s.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <button
         type="submit"
         disabled={update.isPending}
@@ -1649,6 +1702,11 @@ export function PreferencesPanel() {
   );
 }
 ```
+
+> **Nota de reuso (confirmar el path real):** `useSubjects` es la fuente única del árbol materias→temas que ya
+> consumen quiz/flashcards/import. Si el import real difiere de `../../planner/hooks/useSubjects` (o el hook
+> devuelve otra forma), ajustar al API existente — abrir el hook y seguir su firma. Los checkboxes nativos con
+> `register('prioritySubjectIds')` y `value={s.id}` agrupan los marcados en un array (RHF), sin dep nueva.
 
 - [ ] **Step 5: Montar el panel en la página**
 
@@ -1705,21 +1763,25 @@ export interface GeneratePlanInput {
     name: string;
     status: TopicStatus;
     difficulty: TopicDifficulty;
-    weakness?: number; // [0,1] — I-2 (capa 2). Ausente/0 ⇒ sin efecto.
+    weakness?: number; // [0,1] — I-2 (capa 2), DEBILIDAD objetiva. Ausente/0 ⇒ sin efecto.
   }[];
   availability: { weekday: number; minutes: number }[];
   horizonDays?: number;
   now?: string;
   remediationAlpha?: number; // [0,1] — I-2. 0 (default) ⇒ orden idéntico a hoy.
+  prioritySubjectIds?: string[]; // I-2 (capa 2), PRIORIDAD (preferencia). Vacío/ausente ⇒ sin efecto.
 }
 ```
 
 (b) agregar las constantes del nudge junto a `DIFFICULTY_RANK`:
 
 ```typescript
-// I-2 (capa 2) — blend de debilidad en el orden del baseline (README §3.6).
-const NUDGE_MAX_DAYS = 7; // adelanto máx. por debilidad para temas CON examen
-const NUDGE_DIFFICULTY_WEIGHT = 1.5; // cuánto mueve la debilidad dentro del grupo SIN examen
+// I-2 (capa 2) — DOS términos SEPARADOS y ADITIVOS en el orden del baseline (README §3.6): DEBILIDAD (objetiva,
+// modulada por α) y PRIORIDAD (preferencia, nudge FIJO independiente de α). Ninguno multiplica al otro; topeados.
+const NUDGE_MAX_DAYS = 7; // adelanto máx. por DEBILIDAD para temas CON examen (se modula por α)
+const NUDGE_DIFFICULTY_WEIGHT = 1.5; // cuánto mueve la DEBILIDAD dentro del grupo SIN examen (se modula por α)
+const PRIORITY_NUDGE_DAYS = 3; // adelanto FIJO por PRIORIDAD para temas CON examen (< NUDGE_MAX_DAYS) — sin α
+const PRIORITY_NOEXAM_WEIGHT = 1.0; // cuánto mueve la PRIORIDAD dentro del grupo SIN examen — sin α
 ```
 
 (c) reemplazar **solo el `.sort(...)`** dentro de `buildBaselinePlan` (el resto del algoritmo queda igual). El sort actual:
@@ -1737,21 +1799,31 @@ pasa a:
 
 ```typescript
   const alpha = input.remediationAlpha ?? 0;
-  // effectiveDays: temas CON examen reciben un nudge (≤ α·NUDGE_MAX_DAYS días); SIN examen ⇒ +∞.
+  const prioritySet = new Set(input.prioritySubjectIds ?? []);
+  const prio = (subjectId: string): number => (prioritySet.has(subjectId) ? 1 : 0); // factor SEPARADO de weakness
+  // effectiveDays: temas CON examen reciben DOS nudges acumulativos y topeados. La DEBILIDAD se modula por α;
+  // la PRIORIDAD es un nudge FIJO (sin α) → vale aunque alpha=0 (OFF). Adelanto total ≤ α·D + P. SIN examen ⇒ +∞.
   const effectiveDays = (t: { subjectId: string; weakness?: number }): number => {
     const examDays = examDaysFor(examBySubject.get(t.subjectId) ?? null, now);
     if (examDays >= Number.MAX_SAFE_INTEGER) return Number.POSITIVE_INFINITY;
-    return examDays - alpha * NUDGE_MAX_DAYS * (t.weakness ?? 0);
+    return (
+      examDays -
+      alpha * NUDGE_MAX_DAYS * (t.weakness ?? 0) -
+      PRIORITY_NUDGE_DAYS * prio(t.subjectId) // prioridad: nudge FIJO, independiente de α
+    );
   };
-  // score: dificultad de hoy + aporte de debilidad (α·Wd). En α=0 o weakness=0 ⇒ = difficultyRank (= hoy).
-  const score = (t: { difficulty: TopicDifficulty; weakness?: number }): number =>
-    DIFFICULTY_RANK[t.difficulty] + alpha * NUDGE_DIFFICULTY_WEIGHT * (t.weakness ?? 0);
+  // score (grupo SIN examen): dificultad de hoy + debilidad (×α) + prioridad (peso FIJO, sin α).
+  // Sin datos de debilidad y sin prioridad ⇒ = difficultyRank (idéntico a hoy); una materia prioritaria sube por Wp aun en OFF.
+  const score = (t: { subjectId: string; difficulty: TopicDifficulty; weakness?: number }): number =>
+    DIFFICULTY_RANK[t.difficulty] +
+    alpha * NUDGE_DIFFICULTY_WEIGHT * (t.weakness ?? 0) +
+    PRIORITY_NOEXAM_WEIGHT * prio(t.subjectId); // prioridad: peso FIJO, independiente de α
 
   const ordered = [...pending].sort((a, b) => {
     const ea = effectiveDays(a);
     const eb = effectiveDays(b);
-    if (ea !== eb) return ea - eb; // urgencia (con nudge); +∞ = sin examen va al final
-    return score(b) - score(a); // desempate: dificultad (+ debilidad si α>0)
+    if (ea !== eb) return ea - eb; // urgencia (con ambos nudges); +∞ = sin examen va al final
+    return score(b) - score(a); // desempate: dificultad (+ debilidad si α>0, + prioridad siempre)
   });
 ```
 
@@ -1777,9 +1849,11 @@ async function buildPlanInput(userId: string): Promise<GeneratePlanInput> {
   const subjects = await subjectRepository.findManyByUserWithTopics(userId);
   const availability = await studyRepository.getAvailability(userId);
 
-  // I-2 (capa 2): debilidad + intensidad. Si algo falla, degradamos a SIN señal (= comportamiento de hoy).
+  // I-2 (capa 2): debilidad (objetiva) + intensidad + materias prioritarias (preferencia). Si algo falla,
+  // degradamos a SIN señal (= comportamiento de hoy).
   let weaknessMap = new Map<string, number>();
   let alpha = 0;
+  let prioritySubjectIds: string[] = [];
   try {
     const [map, prefs] = await Promise.all([
       progressService.getWeaknessMap(userId),
@@ -1787,8 +1861,9 @@ async function buildPlanInput(userId: string): Promise<GeneratePlanInput> {
     ]);
     weaknessMap = map;
     alpha = INTENSITY_ALPHA[prefs.remediationIntensity];
+    prioritySubjectIds = prefs.prioritySubjectIds;
   } catch (err) {
-    logger.error('planner: weakness enrichment failed; degradando a baseline de hoy', {
+    logger.error('planner: weakness/priority enrichment failed; degradando a baseline de hoy', {
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -1811,6 +1886,7 @@ async function buildPlanInput(userId: string): Promise<GeneratePlanInput> {
     ),
     availability: availability.map((a) => ({ weekday: a.weekday, minutes: a.minutes })),
     remediationAlpha: alpha,
+    prioritySubjectIds,
   };
 }
 ```
@@ -1839,8 +1915,9 @@ import { RemediationIntensity } from '@bract/shared';
 Tests nuevos:
 
 ```typescript
-it('GOLDEN: sin datos de debilidad ⇒ orden idéntico al baseline de hoy (urgencia por examen)', async () => {
-  // Misma data que el test de urgencia. weaknessMap vacío (default del beforeEach).
+it('GOLDEN: sin datos de debilidad Y sin materias prioritarias ⇒ orden idéntico al baseline de hoy', async () => {
+  // Misma data que el test de urgencia. weaknessMap vacío + prioritySubjectIds=[] (defaults del beforeEach):
+  // ambos términos (debilidad y prioridad) en 0 ⇒ effectiveDays=examDays ⇒ idéntico a hoy, con cualquier α.
   vi.mocked(subjectRepository.findManyByUserWithTopics).mockResolvedValue([
     { ...subj('urgent', 2), topics: [topic('u_a', 'urgent')] },
     { ...subj('later', 10), topics: [topic('l_a', 'later')] },
@@ -1876,6 +1953,30 @@ it('con HIGH intensity, un tema flojo con examen algo más lejano puede adelanta
   // l_a: effectiveDays = 10 - 1*7*1 = 3 < 8 ⇒ se adelanta a u_a.
   expect(items[0]!.topicId).toBe('l_a');
 });
+
+it('PRIORIDAD independiente de α: en OFF, una materia prioritaria con examen algo más lejano igual se adelanta', async () => {
+  // urgente: examen en 5 días, NO prioritaria. priori: examen en 7 días, prioritaria. SIN datos de debilidad.
+  // remediationIntensity=OFF ⇒ α=0 ⇒ el nudge de DEBILIDAD se anula, pero el de PRIORIDAD (fijo) sigue aplicando.
+  vi.mocked(subjectRepository.findManyByUserWithTopics).mockResolvedValue([
+    { ...subj('urgent', 5), topics: [topic('u_a', 'urgent')] },
+    { ...subj('priori', 7), topics: [topic('p_a', 'priori')] },
+  ]);
+  vi.mocked(preferencesService.get).mockResolvedValue({
+    remediationIntensity: RemediationIntensity.OFF,
+    prioritySubjectIds: ['priori'],
+    weightQuiz: null,
+    weightSrs: null,
+    dailyGoalMinutes: null,
+  });
+  vi.mocked(studyRepository.createActivePlan).mockResolvedValue(activePlan());
+
+  await plannerService.generatePlan('u1');
+
+  const [, items] = vi.mocked(studyRepository.createActivePlan).mock.calls[0]!;
+  // p_a: effectiveDays = 7 - 0 (α=0, sin nudge de debilidad) - 3*1 (prioridad FIJA) = 4 < 5 ⇒ se adelanta a u_a.
+  // Prueba clave: la prioridad NO depende de α (vale aun en OFF) y no toca el weakness.
+  expect(items[0]!.topicId).toBe('p_a');
+});
 ```
 
 > Nota sobre los tests existentes: como ahora `buildPlanInput` llama a `progressService`/`preferencesService`, los tests previos del archivo siguen verdes gracias a los mocks por defecto del `beforeEach` (map vacío + LOW). Asegurate de que `vi.mocked(progressService.getWeaknessMap).mockResolvedValue(new Map())` y el de prefs estén en el `beforeEach`.
@@ -1896,7 +1997,7 @@ Expected: PASS.
 
 ```bash
 git add apps/api/src/lib/ai/ai.service.ts apps/api/src/lib/ai/ai.prompts.ts apps/api/src/modules/planner/planner.service.ts apps/api/src/modules/planner/__tests__/planner.distribution.test.ts
-git commit -m "feat(planner): blend de debilidad aditivo en el baseline + golden test (I-2 F5)"
+git commit -m "feat(planner): términos separados de debilidad + prioridad (aditivos) en el baseline + golden test (I-2 F5)"
 ```
 
 ---
@@ -2071,7 +2172,8 @@ git commit -m "chore(progress): verificación I-2 (tests verdes, no-N+1, degrada
 
 ## Self-Review (hecho)
 
-- **Cobertura del spec §3.6:** modelos (Task 1/10) · fórmula quiz+SRS (Task 3) · pesos/priorización por prefs (Task 3/11) · blend "nudge en días" + caso sin-examen (Task 13) · enriquecimiento chat (Task 14) · endpoints §5.5 (Task 6/11) · degradación con try/catch (Task 13/14) · dashboard 4 estados + EmptyState + i18n + tokens (Task 8/9). ✔
+- **Cobertura del spec §3.6:** modelos (Task 1/10) · fórmula quiz+SRS OBJETIVA, sin prioridad (Task 3) · pesos por prefs (Task 3/11) · blend "nudge en días" con DOS términos separados (debilidad + prioridad) + caso sin-examen (Task 13) · enriquecimiento chat (Task 14) · endpoints §5.5 (Task 6/11) · degradación con try/catch (Task 13/14) · dashboard 4 estados + EmptyState + i18n + tokens (Task 8/9). ✔
+- **Debilidad ≠ prioridad (ajuste pre-F2/F4/F5):** `weakness` 100% objetivo (quiz + SRS); `PRIORITY_BOOST` eliminado de la fórmula; la prioridad es un término propio del planner (`PRIORITY_NUDGE_DAYS`/`PRIORITY_NOEXAM_WEIGHT`), **independiente de α** (nudge fijo, vale aun en OFF), topeado, después de la urgencia de examen. Invariante "idéntico a hoy" = sin datos de debilidad **Y** sin materias prioritarias. Golden test intacto + test de prioridad en OFF. UI de prioridad (multiselect) incluida en v1 (Task 12). ✔
 - **Sin placeholders:** todo step de código incluye el código real. Las únicas instrucciones "abrí el archivo y seguí el estilo" son para `ai.prompts.ts` (hint opcional) y para confirmar nombres del design system — ambos acotados y verificables por typecheck/lint. ✔
 - **Consistencia de tipos:** `RemediationIntensity`, `UserStudyPreferences`, `TopicSignals`, `ResolvedPreferences`, `WeaknessResult`, `progressService.{getOverview,getWeakTopics,getWeaknessMap}`, `INTENSITY_ALPHA`, `GeneratePlanInput.{topics[].weakness,remediationAlpha}` se usan con el mismo nombre/firma en todas las tasks. ✔
 - **db push aislado:** Task 10 Step 3 lo delega al usuario (no lo corre el plan). ✔

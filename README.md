@@ -722,7 +722,8 @@ model UserStudyPreferences {
   user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Intensidad de remediación: escala cuánto pesa la debilidad en el plan (ver "Blend del planner").
   remediationIntensity RemediationIntensity @default(LOW)
-  // Materias a priorizar: multiplican el peso de sus temas en la fórmula de debilidad. [] = todas por igual.
+  // Materias a priorizar: el planner las adelanta un poco (término PROPIO, separado de la debilidad —
+  // NO multiplica el weakness). [] = sin preferencia de prioridad.
   prioritySubjectIds   String[]             @default([])
   // Override opcional de los pesos de la fórmula (null = defaults wQuiz=0.6 / wSrs=0.4).
   weightQuiz           Float?
@@ -746,7 +747,8 @@ enum RemediationIntensity {
 **Back-relation** (solo relación, sin columnas nuevas):
 - `User`: `studyPreferences UserStudyPreferences?`
 
-**Fórmula de debilidad (por tema, derivada — `weakness ∈ [0,1]`, 1 = más débil):**
+**Fórmula de debilidad (por tema, derivada y OBJETIVA — `weakness ∈ [0,1]`, 1 = más débil). SOLO quiz + SRS;
+la preferencia de prioridad NO la altera (se documenta aparte, en el blend del planner):**
 
 ```
 // Señal QUIZ — solo ítems contestados (selectedIndex != null); saltar ≠ fallar.
@@ -763,22 +765,29 @@ srsWeak       = totalCards > 0 ? clamp01(0.6*easeGap + 0.4*overdueRatio) : AUSEN
 
 // Combinación — ignora la señal AUSENTE; ambas ausentes ⇒ el tema se OMITE (sin datos ≠ débil → EmptyState).
 weakness      = weightedAvg({ quizWeak: wQuiz, srsWeak: wSrs })   // defaults 0.6 / 0.4, override por prefs
-// Materia priorizada (prioritySubjectIds) ⇒ multiplica weakness por PRIORITY_BOOST (cap a 1).
+// weakness es 100% OBJETIVO: SOLO quiz + SRS. La preferencia (prioritySubjectIds) NO lo toca — el dashboard
+// muestra siempre el weakness REAL (nunca inflado). La prioridad es un término aparte y solo del planner (abajo).
 ```
 
-**Blend del planner (capa 2 — modelo de "nudge en días", DEGRADA EXACTO):**
+**Blend del planner (capa 2 — modelo de "nudge en días", DEGRADA EXACTO). DOS términos SEPARADOS y ADITIVOS:
+DEBILIDAD (objetiva, modulada por α) y PRIORIDAD (preferencia, nudge FIJO independiente de α). Ninguno
+multiplica al otro; ambos topeados:**
 
 ```
-α  = map(remediationIntensity)  → OFF:0 · LOW:0.33 · MEDIUM:0.66 · HIGH:1.0
-D  = NUDGE_MAX_DAYS             // tope del adelanto por debilidad para temas CON examen (p.ej. 7 días)
-Wd = NUDGE_DIFFICULTY_WEIGHT   // cuánto puede mover la debilidad dentro del grupo SIN examen (p.ej. 1.5)
+α  = map(remediationIntensity)  → OFF:0 · LOW:0.33 · MEDIUM:0.66 · HIGH:1.0   (modula SOLO la debilidad)
+D  = NUDGE_MAX_DAYS             // tope del adelanto por DEBILIDAD para temas CON examen (p.ej. 7 días)
+Wd = NUDGE_DIFFICULTY_WEIGHT   // cuánto mueve la DEBILIDAD dentro del grupo SIN examen (p.ej. 1.5)
+P  = PRIORITY_NUDGE_DAYS       // adelanto FIJO por PRIORIDAD para temas CON examen (p.ej. 3 días, < D) — sin α
+Wp = PRIORITY_NOEXAM_WEIGHT    // cuánto mueve la PRIORIDAD dentro del grupo SIN examen (p.ej. 1.0) — sin α
 
 // `examDays(t)` = días hasta el examen de la materia del tema (igual que hoy; sin examen ⇒ +∞).
-// — Temas CON examen: nudge en días (menor effectiveDays ⇒ antes).
-effectiveDays(t) = examDays(t) - α · D · weakness(t)
-// — Temas SIN examen (examDays=+∞): el nudge en días no aplica; se ordenan dentro de su grupo por un
-//   score que mezcla la dificultad de HOY con la debilidad, modulada por la MISMA α (mayor ⇒ antes).
-noExamScore(t)   = difficultyRank(t) + α · Wd · weakness(t)
+// `prio(t)`     = 1 si la materia del tema ∈ prioritySubjectIds, si no 0  (factor SEPARADO de weakness).
+// — Temas CON examen: dos nudges en días ACUMULATIVOS y topeados (menor ⇒ antes). La debilidad se modula por α;
+//   la prioridad es un nudge FIJO (vale aunque α=0, p.ej. en OFF), porque es una elección explícita del usuario:
+effectiveDays(t) = examDays(t) - α · D · weakness(t) - P · prio(t)
+// — Temas SIN examen (examDays=+∞): el nudge en días no aplica; se ordenan dentro de su grupo por un score que
+//   mezcla la dificultad de HOY con la debilidad (modulada por α) y la prioridad (peso FIJO, sin α):
+noExamScore(t)   = difficultyRank(t) + α · Wd · weakness(t) + Wp · prio(t)
 
 // Orden del baseline (ai.service.buildBaselinePlan):
 //   1) effectiveDays ASC  → los temas CON examen van siempre antes que los SIN examen (+∞)
@@ -787,17 +796,33 @@ noExamScore(t)   = difficultyRank(t) + α · Wd · weakness(t)
 ```
 
 Invariantes del blend (los que vas a revisar con lupa):
-- **Sin datos** ⇒ `weakness(t)=0 ∀t` ⇒ `effectiveDays = examDays` ⇒ **orden idéntico a hoy, con cualquier α**.
-- **`OFF` (α=0)** ⇒ idéntico a hoy **aunque haya** datos de debilidad.
-- **Intensidad baja** ⇒ nudge chico ⇒ la debilidad solo reordena casi-empates (≈ desempate).
+- **Sin datos de debilidad Y sin materias prioritarias** ⇒ `weakness(t)=0` y `prio(t)=0 ∀t` ⇒
+  `effectiveDays = examDays` y `noExamScore = difficultyRank` ⇒ **orden idéntico a hoy, con cualquier α**
+  (este es el caso del golden test: weaknessMap vacío + `prioritySubjectIds=[]`).
+- **`OFF` (α=0)** ⇒ **se anula SOLO el nudge de debilidad**; la **prioridad explícita SIGUE aplicando** (nudge
+  FIJO `P`/`Wp`, independiente de α). α (`remediationIntensity`) controla **solo** la debilidad — la prioridad es
+  una elección explícita del usuario y vale aunque esté en `OFF`. (DECISIÓN — ver nota debajo.)
+- **Sin materias prioritarias** (`prioritySubjectIds=[]`) ⇒ `prio(t)=0 ∀t` ⇒ el término de prioridad no aporta
+  (solo puede mover el de debilidad, si hay datos y α>0).
+- **Debilidad y prioridad son SEPARADAS y ADITIVAS:** un tema flojo NO prioritario y un tema prioritario NO flojo
+  reciben cada uno su propio nudge; nunca se multiplican. El `weakness` que muestra el dashboard jamás se infla.
+- **El examen nunca se ignora del todo:** el adelanto total está topado en `α·D + P ≤ D + P` días → un examen
+  mucho más cercano siempre gana, incluso en `HIGH`. La prioridad SOLA adelanta a lo sumo `P` (p.ej. 3) días.
+- **Intensidad baja** ⇒ nudge de debilidad chico ⇒ la debilidad solo reordena casi-empates (≈ desempate).
 - **Intensidad alta** ⇒ blend ponderado: un tema flojo con examen algo más lejano puede adelantarse.
-- **El examen nunca se ignora del todo:** el adelanto está topado en `α·D ≤ D` días → un examen mucho más
-  cercano siempre gana, incluso en `HIGH`.
-- **Temas SIN examen (`examDays=+∞`):** el nudge en días no los mueve, así que un tema débil sin fecha NO
-  debe quedar al fondo solo por dificultad. Dentro de ese grupo se ordena por `noExamScore DESC`
-  (debilidad como criterio secundario sobre la dificultad de hoy, modulado por α): en `OFF` o sin datos
-  `noExamScore = difficultyRank` ⇒ **idéntico a hoy**; con α alto un tema suficientemente flojo puede
-  superar un escalón de dificultad. Igual van siempre **después** de los temas con examen (paso 1).
+- **Temas SIN examen (`examDays=+∞`):** el nudge en días no los mueve. Dentro de ese grupo se ordena por
+  `noExamScore DESC` (debilidad modulada por α + prioridad con peso fijo, como criterios secundarios sobre la
+  dificultad de hoy): sin datos de debilidad **y** sin prioridad `noExamScore = difficultyRank` ⇒ **idéntico a
+  hoy**; una materia prioritaria sube por `Wp` aunque α=0. Igual van siempre **después** de los temas con
+  examen (paso 1).
+
+> **DECISIÓN (prioridad INDEPENDIENTE de α):** el término de prioridad NO se multiplica por α — una materia
+> elegida recibe un nudge fijo y acotado (`P` con examen, `Wp` sin examen) **siempre**, también en `OFF`. Motivo:
+> `remediationIntensity` controla SOLO el nudge de debilidad; la prioridad es una elección explícita del usuario
+> y debe valer aunque la remediación esté apagada. Por eso el invariante "idéntico a hoy" requiere **dos**
+> condiciones (sin datos de debilidad **y** sin materias prioritarias), no solo `OFF`. Alternativa descartada:
+> gatear la prioridad con α (entonces `OFF` apagaría también la prioridad) — se prefirió respetar la elección
+> explícita del usuario por sobre un único interruptor maestro.
 
 > El mismo `weakness` se inyecta como **hint** al prompt de la IA del plan (`buildPlanUserPrompt`), aditivo:
 > mapa vacío ⇒ prompt sin cambios. La IA sigue validándose/clampeándose con Zod + `validateAndClampPlan`.
@@ -821,10 +846,14 @@ Invariantes del blend (los que vas a revisar con lupa):
 - **`UserStudyPreferences` es 1:1 con `User`** (`@@unique(userId)`), upsert con defaults; ownership por `userId`.
 - **El motor de progreso es read-only y reusable:** un único service expone `getOverview`, `getWeakTopics`
   y `getWeaknessMap(userId)`; planner y chat consumen `getWeaknessMap` (no reimplementan la fórmula).
+- **La prioridad (`prioritySubjectIds`) es un factor del PLANNER, no del motor de debilidad:** el planner la
+  lee de las preferencias y la aplica como término aparte, con **nudge fijo independiente de α** (vale en `OFF`);
+  `getWeaknessMap`/`getWeakTopics`/el dashboard devuelven `weakness` OBJETIVO (solo quiz + SRS, sin prioridad).
 - **Sin N+1:** el repo agrega con `groupBy` (quiz por `topicId`/`isCorrect`; flashcards por `topicId` con
   `_avg.ease` + counts) — nunca itera trayendo todo a memoria.
-- **La fórmula es un objeto de config** (pesos, `α`, `D`, `MIN_ANSWERS`, `PRIORITY_BOOST`) → sumar más
-  ajustes de personalización no cambia las firmas.
+- **La fórmula de debilidad es un objeto de config OBJETIVO** (`wQuiz`, `wSrs`, `MIN_ANSWERS`) — NO incluye
+  prioridad. Los parámetros del blend del planner (`α`, `D`, `Wd`, `P`, `Wp`) viven en `ai.service` → sumar
+  más ajustes de personalización no cambia las firmas.
 
 ---
 
