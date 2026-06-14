@@ -14,6 +14,7 @@ export * from './schemas/flashcard.schema';
 export * from './schemas/chat.schema';
 export * from './schemas/import.schema';
 export * from './schemas/quiz.schema';
+export * from './schemas/progress.schema';
 
 // Types
 export * from './types/auth.types';
@@ -30,3 +31,4 @@ export * from './types/flashcard.types';
 export * from './types/chat.types';
 export * from './types/import.types';
 export * from './types/quiz.types';
+export * from './types/progress.types';
