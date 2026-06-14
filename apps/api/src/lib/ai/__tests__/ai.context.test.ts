@@ -101,4 +101,22 @@ describe('renderContextForPrompt', () => {
     const ctx = assembleStudentContext([], new Date('2026-06-09T00:00:00.000Z'));
     expect(renderContextForPrompt(ctx)).toContain('Todavía no cargó materias');
   });
+
+  it('GOLDEN: sin weakTopics ⇒ el system prompt es idéntico a hoy', () => {
+    const now = new Date('2026-06-09T00:00:00.000Z');
+    const subjects = [subject({ name: 'Mate' })];
+    const withoutArg = renderContextForPrompt(assembleStudentContext(subjects, now));
+    const withEmpty = renderContextForPrompt(assembleStudentContext(subjects, now, []));
+    expect(withEmpty).toBe(withoutArg); // pasar [] no agrega bloque
+    expect(withoutArg).not.toContain('flojos');
+  });
+
+  it('con weakTopics ⇒ agrega el bloque de puntos débiles', () => {
+    const now = new Date('2026-06-09T00:00:00.000Z');
+    const rendered = renderContextForPrompt(
+      assembleStudentContext([subject({ name: 'Mate' })], now, [{ name: 'Álgebra', weakness: 0.8 }]),
+    );
+    expect(rendered).toContain('Álgebra');
+    expect(rendered).toContain('flojos');
+  });
 });

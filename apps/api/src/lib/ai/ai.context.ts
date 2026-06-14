@@ -28,6 +28,7 @@ export interface StudentContext {
   pendingTopicCount: number;
   completedTopicCount: number;
   nextExam: { subjectName: string; examDate: string; daysUntilExam: number } | null;
+  weakTopics?: { name: string; weakness: number }[]; // I-2 (capa 3). Ausente ⇒ prompt idéntico a hoy.
 }
 
 function dayDiff(now: Date, target: Date): number {
@@ -40,6 +41,7 @@ function dayDiff(now: Date, target: Date): number {
 export function assembleStudentContext(
   subjects: SubjectWithTopics[],
   now: Date = new Date(),
+  weakTopics?: { name: string; weakness: number }[], // I-2 (capa 3), aditivo. Sin dato ⇒ contexto de hoy.
 ): StudentContext {
   let pendingTopicCount = 0;
   let completedTopicCount = 0;
@@ -66,7 +68,12 @@ export function assembleStudentContext(
     return { id: s.id, name: s.name, examDate: s.examDate, daysUntilExam, topics };
   });
 
-  return { subjects: ctxSubjects, pendingTopicCount, completedTopicCount, nextExam };
+  const ctx: StudentContext = { subjects: ctxSubjects, pendingTopicCount, completedTopicCount, nextExam };
+  // Solo se incorpora si vino con datos (exactOptionalPropertyTypes: no asignar undefined).
+  if (weakTopics && weakTopics.length > 0) {
+    ctx.weakTopics = weakTopics;
+  }
+  return ctx;
 }
 
 /** Renderiza el contexto como texto ACOTADO para inyectar en el system prompt del chat. */
@@ -100,6 +107,12 @@ export function renderContextForPrompt(ctx: StudentContext): string {
     lines.push(`Próximo examen: ${ctx.nextExam.subjectName} en ${ctx.nextExam.daysUntilExam} día(s).`);
   }
   lines.push(`Totales: ${ctx.pendingTopicCount} pendientes, ${ctx.completedTopicCount} completados.`);
+
+  // I-2 (capa 3): bloque ADITIVO de puntos débiles. Solo si hay datos ⇒ sin weakTopics, el prompt queda igual.
+  if (ctx.weakTopics && ctx.weakTopics.length > 0) {
+    const names = ctx.weakTopics.map((w) => `${w.name} (${Math.round(w.weakness * 100)}%)`);
+    lines.push(`Temas más flojos (priorizá reforzarlos): ${names.join(', ')}.`);
+  }
 
   return lines.join('\n');
 }

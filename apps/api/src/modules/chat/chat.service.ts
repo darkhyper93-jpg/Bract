@@ -14,6 +14,7 @@ import { assembleStudentContext, isAIConfigured, streamChatReply } from '../../l
 import { AppError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { plannerService } from '../planner/planner.service.js';
+import { progressService } from '../progress/progress.service.js';
 import { chatRepository } from './chat.repository.js';
 import type { ChatSessionWithMessagesRow } from './chat.repository.js';
 
@@ -163,7 +164,17 @@ export const chatService = {
     yield { type: 'meta', data: { sessionId, userMessageId: userMessage.id, title } };
 
     const subjects = await plannerService.listSubjects(userId);
-    const context = assembleStudentContext(subjects);
+    // I-2 (capa 3): top puntos débiles para ajustar las explicaciones del tutor. Si falla, contexto = hoy.
+    let weakTopics: { name: string; weakness: number }[] | undefined;
+    try {
+      const weak = await progressService.getWeakTopics(userId, 5);
+      if (weak.length > 0) weakTopics = weak.map((w) => ({ name: w.name, weakness: w.weakness }));
+    } catch (err) {
+      logger.error('chat: weak-topics enrichment failed; contexto sin debilidad', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    const context = assembleStudentContext(subjects, new Date(), weakTopics);
     const recent = await chatRepository.findRecentMessages(sessionId, MAX_HISTORY_MESSAGES + 1);
     const history = buildHistory(recent, userMessage.id);
 
