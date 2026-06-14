@@ -616,6 +616,7 @@ const resources = {
           quit: 'Quit',
           error: 'Could not submit your answer. Try again.',
           errorConflict: 'This question was already answered.',
+          loadError: 'Could not resume your quiz',
         },
         results: {
           score: '{{correct}} of {{total}}',
@@ -1255,6 +1256,7 @@ const resources = {
           quit: 'Salir',
           error: 'No se pudo registrar la respuesta. Intentá de nuevo.',
           errorConflict: 'Esta pregunta ya fue respondida.',
+          loadError: 'No se pudo reanudar tu quiz',
         },
         results: {
           score: '{{correct}} de {{total}}',

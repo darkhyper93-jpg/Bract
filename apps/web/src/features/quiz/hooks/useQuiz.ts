@@ -34,12 +34,15 @@ export function useQuizHistory() {
 }
 
 // Detalle de un intento (deshabilitado hasta seleccionar uno).
-export function useQuizAttempt(id: string | null) {
+// `fresh`: el runner reanuda desde el server (fuente de verdad) → en cada (re)montaje refetchea, así
+// volver de Historial trae el estado real (preguntas ya contestadas saltadas) y no choca con el lock.
+export function useQuizAttempt(id: string | null, fresh = false) {
   const query = useQuery({
     queryKey: queryKeys.quiz.attempt(id ?? ''),
     queryFn: () => quizApi.getById(id as string),
     enabled: id !== null,
-    staleTime: 30_000,
+    staleTime: fresh ? 0 : 30_000,
+    ...(fresh ? { refetchOnMount: 'always' as const } : {}),
   });
   return {
     attempt: query.data ?? null,

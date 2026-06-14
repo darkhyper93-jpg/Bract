@@ -85,6 +85,12 @@
 8. **[2026-06-12] "UI bugs" are often front↔backend envelope-shape mismatches, not rendering bugs**
    Do instead: when a value renders as Invalid Date / blank / empty-list despite data existing, check the controller's EXACT response shape before debugging the component. Backend wraps under nested keys: `/auth/me` and `/profile` → `data.user` (not `data`); notifications list → `data.notifications` (not `data.items`). Fix the `*.api.ts` unwrap to match the controller, not the component.
 
+9. **[2026-06-14] Resumable wizards: SERVER is the source of truth on resume; never replay client state, hydrate from a detail endpoint**
+   Do instead: hold the in-progress id at the PAGE level (survives tab switch) + persist to localStorage (survives reload), clear it on completion. The runner takes only the `id`, fetches the detail (`useQuizAttempt(id, fresh=true)` → `staleTime:0` + `refetchOnMount:'always'`), and seeds local state ONCE via `useState(() => hydrate(detail))`, positioning at the first un-acted item. Wrap the session in `<Session key={id} … />` so a background refetch doesn't reset seeded state. This killed the quiz "ya fue respondida" bug (re-mounting replayed answers vs. the server lock). Pairs with the security rule below.
+
+10. **[2026-06-14] Reveal-on-action endpoints must gate the reveal by per-item acted-state, even on a shared detail endpoint**
+   Do instead: `GET /quiz/attempts/:id` returns each item BY STATE — answered → full (`options` w/ `explanation`, `correctIndex`, `selectedIndex`, `isCorrect`); un-answered → PUBLIC (`options` only `{text}`, `correctIndex:null`, `isCorrect:false`, no `explanation`). A single endpoint serving both review (COMPLETED) and resume (IN_PROGRESS) must not leak answers of un-acted items. Shared detail type then needs `correctIndex: number|null` + `option.explanation?`. Test: assert the IN_PROGRESS detail's pending item has no `explanation`/real `correctIndex` (also via `JSON.stringify`).
+
 ## Implementation Order
 1. **[2026-06-05] Always follow the 8-step implementation order**
    Do instead: types → Zod schemas → Repository → Service → Controller+Routes → frontend api/ → hooks/ → components/.

@@ -10,42 +10,71 @@ import { QuizRunner } from './QuizRunner';
 import { QuizResults } from './QuizResults';
 import { QuizHistory } from './QuizHistory';
 import { QuizAttemptDetail } from './QuizAttemptDetail';
-import type { AnsweredQuestion } from '../types';
+import type { QuizRunResult } from '../types';
 
 type Tab = 'new' | 'history';
 type Phase = 'setup' | 'running' | 'results';
 
+// Intento EN PROGRESO persistido: sobrevive al cambio de tab (estado en QuizPage) y a un reload
+// (localStorage). Se limpia al completar o abandonar. Es la app real → localStorage va bien acá.
+const ACTIVE_ATTEMPT_KEY = 'bract.quiz.activeAttemptId';
+
+function readActiveAttempt(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_ATTEMPT_KEY);
+  } catch {
+    return null; // localStorage no disponible (modo privado / SSR) → degradar sin romper
+  }
+}
+
+function writeActiveAttempt(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(ACTIVE_ATTEMPT_KEY, id);
+    else localStorage.removeItem(ACTIVE_ATTEMPT_KEY);
+  } catch {
+    // localStorage no disponible → el intento sigue vivo en memoria mientras no se recargue
+  }
+}
+
 // Evaluación / Quiz (Agente I). Orquesta el flujo "Nuevo quiz" (setup → runner → resultados) y el
-// "Historial" (lista → detalle). El runner corrige por pregunta en el server (anti-trampa); al completar
-// se invalida el historial para que el intento aparezca.
+// "Historial" (lista → detalle). El runner se hidrata desde el server por attemptId, así ir a Historial
+// y volver retoma donde estabas. El intento en progreso se persiste en localStorage para sobrevivir un
+// reload, y se limpia al completar.
 export default function QuizPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const [tab, setTab] = useState<Tab>('new');
 
-  // Flujo "Nuevo quiz".
-  const [phase, setPhase] = useState<Phase>('setup');
-  const [attempt, setAttempt] = useState<GeneratedAttempt | null>(null);
-  const [answers, setAnswers] = useState<AnsweredQuestion[]>([]);
+  // Flujo "Nuevo quiz". El attemptId hidrata el runner desde el server (fuente de verdad).
+  const [attemptId, setAttemptId] = useState<string | null>(() => readActiveAttempt());
+  const [phase, setPhase] = useState<Phase>(() => (readActiveAttempt() ? 'running' : 'setup'));
+  const [result, setResult] = useState<QuizRunResult | null>(null);
 
   // Flujo "Historial".
   const [detailId, setDetailId] = useState<string | null>(null);
 
+  // Setea (o limpia) el intento en progreso manteniendo memoria y localStorage en sincronía.
+  const setActiveAttempt = (id: string | null) => {
+    setAttemptId(id);
+    writeActiveAttempt(id);
+  };
+
   const startOver = () => {
-    setAttempt(null);
-    setAnswers([]);
+    setActiveAttempt(null);
+    setResult(null);
     setPhase('setup');
   };
 
   const onGenerated = (a: GeneratedAttempt) => {
-    setAttempt(a);
-    setAnswers([]);
+    setActiveAttempt(a.attemptId);
+    setResult(null);
     setPhase('running');
   };
 
-  const onFinished = (ans: AnsweredQuestion[]) => {
-    setAnswers(ans);
+  const onFinished = (r: QuizRunResult) => {
+    setResult(r);
+    setActiveAttempt(null); // intento COMPLETED → ya no es "en progreso"
     setPhase('results');
     // El intento quedó COMPLETED en el server → refrescar el historial.
     void queryClient.invalidateQueries({ queryKey: queryKeys.quiz.attempts() });
@@ -77,13 +106,13 @@ export default function QuizPage() {
         </div>
 
         {tab === 'new' ? (
-          phase === 'setup' ? (
+          phase === 'running' && attemptId ? (
+            <QuizRunner attemptId={attemptId} onFinished={onFinished} onQuit={startOver} />
+          ) : phase === 'results' && result ? (
+            <QuizResults {...result} onRestart={startOver} />
+          ) : (
             <QuizSetup onGenerated={onGenerated} />
-          ) : phase === 'running' && attempt ? (
-            <QuizRunner attempt={attempt} onFinished={onFinished} onQuit={startOver} />
-          ) : phase === 'results' && attempt ? (
-            <QuizResults attempt={attempt} answers={answers} onRestart={startOver} />
-          ) : null
+          )
         ) : detailId ? (
           <QuizAttemptDetail id={detailId} onBack={() => setDetailId(null)} />
         ) : (

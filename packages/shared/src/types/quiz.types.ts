@@ -70,6 +70,13 @@ export interface QuizAttempt {
   createdAt: string;
 }
 
+// Opción en el DETALLE de un intento: la explicación SOLO viaja si la pregunta ya fue contestada
+// (anti-trampa: para los items sin responder de un intento IN_PROGRESS, `explanation` viene undefined).
+export interface QuizAttemptItemOption {
+  text: string;
+  explanation?: string;
+}
+
 export interface QuizAttemptItem {
   id: string;
   attemptId: string;
@@ -77,8 +84,10 @@ export interface QuizAttemptItem {
   topicId: string | null;
   order: number;
   question: string;
-  options: QuizOption[]; // snapshot (persistido como Json)
-  correctIndex: number;
+  // Snapshot persistido. Para un item SIN responder, las opciones llegan SOLO con `text`.
+  options: QuizAttemptItemOption[];
+  // null = pregunta SIN responder (no se revela la correcta hasta contestar — anti-trampa).
+  correctIndex: number | null;
   selectedIndex: number | null; // null = sin responder
   isCorrect: boolean; // lo decide el server al comparar contra correctIndex
   createdAt: string;

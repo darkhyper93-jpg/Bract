@@ -62,19 +62,41 @@ function toQuizAttempt(a: PrismaQuizAttempt): QuizAttempt {
   };
 }
 
-function toQuizAttemptItem(it: PrismaQuizAttemptItem): QuizAttemptItem {
-  return {
+// Item del DETALLE (GET /quiz/attempts/:id), con anti-trampa al reanudar: el server es la fuente de
+// verdad. Si la pregunta YA fue contestada (selectedIndex !== null) se devuelve completa (opciones con
+// explicación, correctIndex, selectedIndex, isCorrect). Si NO fue contestada, se devuelve PÚBLICA
+// (opciones solo con text, correctIndex=null, isCorrect=false) — no se puede espiar la respuesta de las
+// preguntas pendientes de un intento IN_PROGRESS. En un intento COMPLETED todos están contestados → todos
+// completos (sin cambio visible).
+function toDetailItem(it: PrismaQuizAttemptItem): QuizAttemptItem {
+  const base = {
     id: it.id,
     attemptId: it.attemptId,
     userId: it.userId,
     topicId: it.topicId,
     order: it.order,
     question: it.question,
-    options: optionsOf(it),
-    correctIndex: it.correctIndex,
-    selectedIndex: it.selectedIndex,
-    isCorrect: it.isCorrect,
     createdAt: it.createdAt.toISOString(),
+  };
+
+  if (it.selectedIndex !== null) {
+    // Contestada: detalle completo (recién acá viajan correctIndex + explicaciones).
+    return {
+      ...base,
+      options: optionsOf(it),
+      correctIndex: it.correctIndex,
+      selectedIndex: it.selectedIndex,
+      isCorrect: it.isCorrect,
+    };
+  }
+
+  // Sin contestar: vista PÚBLICA (sin correctIndex ni explicación).
+  return {
+    ...base,
+    options: optionsOf(it).map((o) => ({ text: o.text })),
+    correctIndex: null,
+    selectedIndex: null,
+    isCorrect: false,
   };
 }
 
@@ -219,6 +241,6 @@ export const quizService = {
   async getAttempt(id: string, userId: string): Promise<QuizAttemptWithItems> {
     const attempt = await quizRepository.findByIdAndUserWithItems(id, userId);
     if (!attempt) throw new AppError('NOT_FOUND', ATTEMPT_NOT_FOUND);
-    return { ...toQuizAttempt(attempt), items: attempt.items.map(toQuizAttemptItem) };
+    return { ...toQuizAttempt(attempt), items: attempt.items.map(toDetailItem) };
   },
 };

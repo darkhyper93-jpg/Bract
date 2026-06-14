@@ -266,4 +266,47 @@ describe('getAttempt', () => {
 
     await expect(quizService.getAttempt('a1', 'u1')).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
+
+  it('detalle de un intento IN_PROGRESS: las preguntas SIN responder NO incluyen correctIndex/explicación; las contestadas sí', async () => {
+    // Item 0 CONTESTADO (selectedIndex 2) y item 1 SIN responder (selectedIndex null).
+    vi.mocked(quizRepository.findByIdAndUserWithItems).mockResolvedValue({
+      id: 'att1',
+      userId: 'u1',
+      scope: 'TOPIC',
+      status: 'IN_PROGRESS',
+      subjectId: 's1',
+      topicId: 't1',
+      scopeName: 'Integrales',
+      totalCount: 2,
+      correctCount: 1,
+      completedAt: null,
+      createdAt: now,
+      items: [
+        makeItem({ id: 'i0', order: 0, correctIndex: 2, selectedIndex: 2, isCorrect: true }),
+        makeItem({ id: 'i1', order: 1, correctIndex: 3, selectedIndex: null, isCorrect: false }),
+      ],
+    });
+
+    const detail = await quizService.getAttempt('att1', 'u1');
+
+    // Contestada → completa (reveal disponible al revisar).
+    const answered = detail.items[0]!;
+    expect(answered.selectedIndex).toBe(2);
+    expect(answered.correctIndex).toBe(2);
+    expect(answered.isCorrect).toBe(true);
+    expect(answered.options[2]).toEqual({ text: 'o2', explanation: 'e2' });
+
+    // SIN responder → PÚBLICA: sin correctIndex ni explicación (no se puede espiar la respuesta).
+    const pending = detail.items[1]!;
+    expect(pending.selectedIndex).toBeNull();
+    expect(pending.correctIndex).toBeNull();
+    expect(pending.isCorrect).toBe(false);
+    expect(pending.options).toEqual([{ text: 'o0' }, { text: 'o1' }, { text: 'o2' }, { text: 'o3' }]);
+    expect(pending.options.some((o) => o.explanation !== undefined)).toBe(false);
+
+    // Defensa extra: el correctIndex real (3) del item pendiente NO viaja en el payload serializado.
+    const pendingSerialized = JSON.stringify(pending);
+    expect(pendingSerialized).not.toContain('explanation');
+    expect(pendingSerialized).not.toContain('"correctIndex":3');
+  });
 });

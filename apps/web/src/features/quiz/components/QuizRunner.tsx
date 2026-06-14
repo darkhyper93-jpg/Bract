@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AxiosError } from 'axios';
-import type { AnswerReveal, GeneratedAttempt } from '@bract/shared';
+import type { AnswerReveal, PublicQuizQuestion, QuizAttemptWithItems } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
+import { Skeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/ui/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
 import { cn } from '../../../utils/cn';
-import { useAnswerQuestion } from '../hooks/useQuiz';
+import { useAnswerQuestion, useQuizAttempt } from '../hooks/useQuiz';
 import { QuestionReview } from './QuestionReview';
-import type { AnsweredQuestion } from '../types';
+import type { AnsweredQuestion, QuizRunResult } from '../types';
 
 function apiErrorCode(err: unknown): string | undefined {
   if (err instanceof AxiosError) {
@@ -17,25 +20,138 @@ function apiErrorCode(err: unknown): string | undefined {
 }
 
 interface QuizRunnerProps {
-  attempt: GeneratedAttempt;
-  onFinished: (answers: AnsweredQuestion[]) => void;
+  attemptId: string;
+  onFinished: (result: QuizRunResult) => void;
+  onQuit: () => void;
+}
+
+// El runner se HIDRATA desde el server (fuente de verdad): dado un attemptId, carga el detalle del
+// intento y reanuda donde estaba. Así, ir a Historial y volver (remontaje) retoma la posición real sin
+// chocar con el lock anti-trampa. 4 estados (loading · empty · error · success) en el loader.
+export function QuizRunner({ attemptId, onFinished, onQuit }: QuizRunnerProps) {
+  const { t } = useTranslation();
+  const { attempt, isLoading, isError, refetch } = useQuizAttempt(attemptId, true);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-2 w-full" />
+        <Skeleton className="h-40 w-full" />
+        <div className="flex justify-end">
+          <Skeleton className="h-9 w-28" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || attempt === null) {
+    return (
+      <ErrorState
+        title={t('quiz.runner.loadError')}
+        message={t('common.error')}
+        onRetry={() => refetch()}
+      />
+    );
+  }
+
+  if (attempt.items.length === 0) {
+    return (
+      <EmptyState
+        title={t('quiz.runner.loadError')}
+        description={t('quiz.history.emptyDescription')}
+        action={
+          <Button type="button" variant="secondary" onClick={onQuit}>
+            {t('quiz.runner.quit')}
+          </Button>
+        }
+      />
+    );
+  }
+
+  // key={attempt.id}: una sesión por intento; sembramos el estado UNA vez (un refetch no lo reinicia).
+  return (
+    <RunnerSession key={attempt.id} detail={attempt} onFinished={onFinished} onQuit={onQuit} />
+  );
+}
+
+// Construye el estado inicial del runner a partir del detalle del server: las preguntas (públicas), las
+// ya contestadas (con su reveal) y el índice de la primera sin responder.
+function hydrate(detail: QuizAttemptWithItems): {
+  questions: PublicQuizQuestion[];
+  answers: AnsweredQuestion[];
+  startIndex: number;
+} {
+  const questions: PublicQuizQuestion[] = detail.items.map((it) => ({
+    order: it.order,
+    topicId: it.topicId,
+    question: it.question,
+    options: it.options.map((o) => ({ text: o.text })),
+  }));
+
+  const answers: AnsweredQuestion[] = detail.items
+    .filter((it) => it.selectedIndex !== null)
+    .map((it) => ({
+      question: {
+        order: it.order,
+        topicId: it.topicId,
+        question: it.question,
+        options: it.options.map((o) => ({ text: o.text })),
+      },
+      selectedIndex: it.selectedIndex as number, // filtrado: no es null
+      reveal: {
+        order: it.order,
+        isCorrect: it.isCorrect,
+        // Item contestado ⇒ correctIndex y explicaciones presentes (el backend los devuelve solo
+        // para los contestados). Los ?? satisfacen el tipo (correctIndex number|null / explanation?)
+        // y no se ejecutan en la práctica.
+        correctIndex: it.correctIndex ?? 0,
+        options: it.options.map((o) => ({ text: o.text, explanation: o.explanation ?? '' })),
+      },
+    }));
+
+  const startIndex = detail.items.findIndex((it) => it.selectedIndex === null);
+  return { questions, answers, startIndex };
+}
+
+interface RunnerSessionProps {
+  detail: QuizAttemptWithItems;
+  onFinished: (result: QuizRunResult) => void;
   onQuit: () => void;
 }
 
 // Paso 2 — una pregunta a la vez. Elegís una opción → "Responder" (el server corrige) → reveal
 // (correcta/incorrecta + explicación por opción) → "Siguiente". La respuesta correcta y la explicación
-// NO están en el cliente hasta responder (anti-trampa).
-export function QuizRunner({ attempt, onFinished, onQuit }: QuizRunnerProps) {
+// NO están en el cliente hasta responder (anti-trampa). Estado sembrado desde el detalle al montar.
+function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
   const { t } = useTranslation();
-  const answerMutation = useAnswerQuestion(attempt.attemptId);
+  const answerMutation = useAnswerQuestion(detail.id);
 
-  const [index, setIndex] = useState(0);
+  // Semilla calculada UNA sola vez (los inicializadores de useState ignoran cambios posteriores).
+  const [seed] = useState(() => hydrate(detail));
+  const { questions, startIndex } = seed;
+
+  const [index, setIndex] = useState(startIndex < 0 ? questions.length - 1 : startIndex);
+  const [answers, setAnswers] = useState<AnsweredQuestion[]>(seed.answers);
   const [selected, setSelected] = useState<number | null>(null);
   const [reveal, setReveal] = useState<AnswerReveal | null>(null);
-  const [answers, setAnswers] = useState<AnsweredQuestion[]>([]);
 
-  const question = attempt.questions[index];
-  const total = attempt.questions.length;
+  const finish = (final: AnsweredQuestion[]) =>
+    onFinished({ scopeName: detail.scopeName, totalCount: detail.totalCount, answers: final });
+
+  // Si al hidratar ya estaban todas contestadas (p. ej. intento completado guardado en localStorage),
+  // cerramos directo a resultados. Guard con ref para no dispararlo dos veces.
+  const finishedRef = useRef(false);
+  useEffect(() => {
+    if (startIndex < 0 && !finishedRef.current) {
+      finishedRef.current = true;
+      finish(seed.answers);
+    }
+    // finish/seed estables durante la sesión; el guard evita el doble disparo en StrictMode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startIndex]);
+
+  const question = questions[index];
+  const total = questions.length;
   const isLast = index >= total - 1;
 
   if (!question) return null;
@@ -55,7 +171,7 @@ export function QuizRunner({ attempt, onFinished, onQuit }: QuizRunnerProps) {
 
   const next = () => {
     if (isLast) {
-      onFinished(answers);
+      finish(answers);
       return;
     }
     setIndex((i) => i + 1);

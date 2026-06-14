@@ -1,5 +1,23 @@
 # FID — Snapshot de handoff (Bract)
-> Generado durante el Agente I (Evaluación), pausado antes de F3 · Retomar en: repo Bract (darkhyper93-jpg/Bract)
+> Agente I (Evaluación) COMPLETO y deployado + fix de reanudación/seguridad mergeado · Próximo: I-2 (progreso/puntos débiles) · Retomar en: repo Bract (darkhyper93-jpg/Bract)
+
+## ESTADO REAL (jun 2026) — leer esto primero, lo de abajo quedó viejo
+
+Bract está deployado y funcional: MVP completo (A–H) + post-MVP K (importación texto/archivos) + Temario + **Agente I (Evaluación/quiz) COMPLETO**. Todo en main, en producción (Render + Supabase + Upstash + Gemini free tier).
+
+**Agente I — diseño que shippeó (NO el "efímero" original; se revirtió por anti-trampa real):** corrección POR PREGUNTA server-side. Modelo `QuizAttempt` (status IN_PROGRESS/COMPLETED, completedAt, scope, subjectId?, topicId?, scopeName, totalCount, correctCount) + `QuizAttemptItem` (question, options Json [{text,explanation}] autoritativo, correctIndex, selectedIndex Int? nullable, isCorrect, topicId?, userId, order; índices [userId,topicId] y [userId,topicId,isCorrect] para I-2). Endpoints /api/v1 [self]: POST /quiz/attempts (genera: ownership → IA primero, 503 sin persistir si falla → crea intento IN_PROGRESS con respuestas server-side → devuelve preguntas PÚBLICAS sin correctIndex), POST /quiz/attempts/:id/answers (responde 1: lock si ya respondida → grading vs lo guardado → reveal de esa pregunta), GET /quiz/attempts (historial COMPLETED), GET /quiz/attempts/:id (detalle con gating: items contestados completos, no contestados públicos — anti-espiar al reanudar). Frontend features/quiz/: Setup (RHF+Zod) → Runner pregunta-por-pregunta con reveal del server, hidrata desde el detalle al remontarse (attemptId en QuizPage + localStorage) → Resultados → Historial.
+
+**Fix de reanudación + seguridad (branch agente-i-quiz-fix):** cerró el hueco (el detalle filtraba correctIndex de preguntas no contestadas en intentos IN_PROGRESS → se podían espiar) y el bug UX (ir a Historial y volver perdía el progreso → "ya fue respondida"). Solución: server = fuente de verdad al reanudar (`toDetailItem` gatea el reveal por estado) + Runner attemptId-driven que hidrata del detalle. 72/72 tests. db push NO requerido (no cambió el modelo).
+
+**Próximo en el roadmap (en orden):** I-2 (dashboard progreso + puntos débiles; datos ya listos) → L Voz (Web Speech API gratis: dictado en chat + lectura; degradar elegante; NO Whisper/ElevenLabs) → J Gamificación (misiones adaptadas a metas/horarios; refs codex.io [principal, diseño], Arise [fitness], coddy.tech) → Pase estético premium (último, transversal; ref codex.io). Detalle en IDEAS_POST_MVP.md.
+
+**Workflow orquestador:** Claude en chat decide todo; usuario = ojos y manos (relaya output del agente, pega mis respuestas). Plan-first por fase, agente NO mergea, diff por fase, commit antes de merge, ff-only a main (dispara deploy). Claude lee él mismo los archivos críticos y verifica la DB vía MCP de Supabase. db push lo corre el usuario (Session pooler 5432) cuando hay modelos nuevos: en CMD `set DATABASE_URL=...` sin comillas + `npx prisma db push`; en PowerShell `$env:DATABASE_URL="..."` + `npx.cmd prisma db push`.
+
+**Pendiente seguridad (no urgente):** resetear password de Supabase (pasó por el chat) + actualizar DATABASE_URL en Render.
+
+---
+## (Histórico — quedó desactualizado, ignorar el bloque de abajo)
+
 
 ## Mapa del proyecto
 

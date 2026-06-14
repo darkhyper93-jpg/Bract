@@ -676,6 +676,13 @@ enum QuizAttemptStatus {
   y, al responder la última, marca `status=COMPLETED` + `completedAt`. La reveal (correcta + explicaciones)
   se devuelve **solo de esa pregunta**. Un `selectedIndex` tramposo no infla el puntaje (se compara contra
   el valor guardado, no contra lo que diga el cliente).
+- **Anti-trampa al REANUDAR (`GET /quiz/attempts/:id`):** el detalle es la fuente de verdad para retomar
+  un intento, así que devuelve cada item **según esté contestado**: contestado (`selectedIndex !== null`)
+  → completo (`options` con `explanation`, `correctIndex`, `selectedIndex`, `isCorrect`); SIN contestar
+  → **público** (`options` solo `{ text }`, `correctIndex=null`, `isCorrect=false`, sin `explanation`).
+  Un intento `COMPLETED` tiene todos los items contestados → todos completos (sin cambio visible). El tipo
+  compartido del item de detalle refleja esto: `correctIndex: number | null` y `option.explanation`
+  opcional. El runner del front se hidrata desde este detalle (reanuda en la primera sin responder).
 - **Contrato de IA** (salida JSON del quiz con explicación por opción): lo define y valida con Zod la capa
   `lib/ai` (Agente B/Gemini), igual que plan/flashcards/extracción de temas.
 
@@ -924,7 +931,7 @@ EVALUACIÓN — Quiz (Agente I)
 POST   /api/v1/quiz/attempts                          [self]   // GENERAR: { scope, topicId | subjectId, count? } → llama a la IA, crea el intento IN_PROGRESS + items autoritativos, y devuelve preguntas PÚBLICAS (sin correctIndex/explicación). 503 si falla la IA (no persiste).
 POST   /api/v1/quiz/attempts/:id/answers              [self]   // RESPONDER 1 pregunta: { order, selectedIndex } → corrige en el server contra el correctIndex guardado, bloquea re-responder (CONFLICT), recalcula score; devuelve la reveal (correctIndex + explicaciones) SOLO de esa pregunta.
 GET    /api/v1/quiz/attempts                          [self]   // historial paginado (COMPLETED) del usuario (sin items)
-GET    /api/v1/quiz/attempts/:id                      [self]   // intento + items completos (revisar con explicaciones)
+GET    /api/v1/quiz/attempts/:id                      [self]   // intento + items POR ESTADO (anti-trampa al reanudar): contestado → completo (options con explicación, correctIndex, selectedIndex, isCorrect); SIN contestar → público (options solo {text}, correctIndex=null, isCorrect=false, sin explicación). COMPLETED → todos contestados → todos completos.
 ```
 
 > **Evaluación / Quiz (Agente I) — IDEAS_POST_MVP §"Agente I".** Quiz de opción múltiple por tema o materia,

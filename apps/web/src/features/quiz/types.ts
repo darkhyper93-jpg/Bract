@@ -7,3 +7,10 @@ export interface AnsweredQuestion {
   selectedIndex: number;
   reveal: AnswerReveal;
 }
+
+// Resumen con el que el runner cierra un intento → alimenta la pantalla de resultados (sin refetch).
+export interface QuizRunResult {
+  scopeName: string;
+  totalCount: number;
+  answers: AnsweredQuestion[];
+}
