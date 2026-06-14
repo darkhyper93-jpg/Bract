@@ -4,6 +4,7 @@ import { Skeleton } from '../../../components/ui/Skeleton';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { SubjectProgressCard } from './SubjectProgressCard';
 import { WeakTopicsList } from './WeakTopicsList';
+import { PreferencesPanel } from './PreferencesPanel';
 
 // Vista de primera clase /progress. 4 estados: loading · error · empty · success.
 export default function ProgressPage() {
@@ -64,7 +65,10 @@ export default function ProgressPage() {
             <SubjectProgressCard key={subject.subjectId} subject={subject} />
           ))}
         </div>
-        <div>{weak.isSuccess && weak.data.length > 0 && <WeakTopicsList topics={weak.data} />}</div>
+        <div className="space-y-4">
+          <PreferencesPanel />
+          {weak.isSuccess && weak.data.length > 0 && <WeakTopicsList topics={weak.data} />}
+        </div>
       </div>
     </div>
   );

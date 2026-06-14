@@ -1,5 +1,10 @@
 import apiClient from '../../../lib/axios';
-import type { ProgressOverview, WeakTopic } from '@bract/shared';
+import type {
+  ProgressOverview,
+  WeakTopic,
+  UserStudyPreferences,
+  UpdatePreferencesInput,
+} from '@bract/shared';
 
 // Capa api/ de Progreso (I-2). Funciones tipadas que consumen /progress/*. Devuelven el data del envelope.
 
@@ -19,5 +24,15 @@ export const progressApi = {
       params: { limit },
     });
     return res.data.data.weakTopics;
+  },
+
+  async getPreferences(): Promise<UserStudyPreferences> {
+    const res = await apiClient.get<Envelope<{ preferences: UserStudyPreferences }>>('/preferences');
+    return res.data.data.preferences;
+  },
+
+  async updatePreferences(input: UpdatePreferencesInput): Promise<UserStudyPreferences> {
+    const res = await apiClient.put<Envelope<{ preferences: UserStudyPreferences }>>('/preferences', input);
+    return res.data.data.preferences;
   },
 };
