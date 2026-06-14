@@ -109,6 +109,9 @@
    Do instead: don't assume a green checkmark on a `main` commit means lint/build/tests passed. `ci.yml` triggers on `pull_request` only; direct-to-main pushes (the project's actual flow) run `deploy.yml`'s pre-deploy job = **typecheck only** (no lint, no build, no vitest). NO workflow runs vitest. Before trusting "CI green" on main, reproduce locally: `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`. Query live status via public API (no gh): `curl -s "https://api.github.com/repos/darkhyper93-jpg/Bract/actions/runs?per_page=6"`.
 
 ## TypeScript Config Gotchas
+0. **[2026-06-14] `@bract/shared` resuelve DISTINTO en typecheck vs vitest (split de `exports` conditions)**
+   Do instead: tras AGREGAR exports nuevos a `@bract/shared` que los TESTS de backend (vitest) vayan a importar, **rebuildeá su dist** (`pnpm --filter ./packages/shared build`) ANTES de correr los tests. `package.json` de shared tiene `exports: { types: ./src, node: ./dist, default: ./src }`: `tsc` (typecheck) resuelve por `types`→**src** (ve lo nuevo sin rebuild), pero vitest/runtime resuelve por `node`→**dist** (ve dist STALE → "X is not exported"). El typecheck verde NO garantiza que los tests vean los exports nuevos.
+
 1. **[2026-06-07] `exactOptionalPropertyTypes: true` + `noImplicitOverride: true` + `noPropertyAccessFromIndexSignature: true` are ALL active**
    Do instead: use `override` on class method overrides; spread optional props conditionally `{...(val != null ? { prop: val } : {})}`; access Vite env vars with bracket notation `import.meta.env['VITE_X']`.
 
