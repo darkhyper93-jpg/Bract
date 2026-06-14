@@ -39,6 +39,7 @@ model User {
   chatSessions      ChatSession[]
   quizAttempts      QuizAttempt[]
   quizAttemptItems  QuizAttemptItem[]
+  studyPreferences  UserStudyPreferences?
 
   @@index([email])
   @@map("users")
@@ -431,4 +432,31 @@ enum QuizScope {
 enum QuizAttemptStatus {
   IN_PROGRESS
   COMPLETED
+}
+
+// ==========================================
+// PROGRESO & PERSONALIZACIÓN (I-2) — §3.6
+// Único modelo nuevo: preferencias. El progreso/debilidad es DERIVADO (on-the-fly), no se persiste.
+// ==========================================
+
+model UserStudyPreferences {
+  id                   String               @id @default(cuid())
+  userId               String               @unique
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remediationIntensity RemediationIntensity @default(LOW)
+  prioritySubjectIds   String[]             @default([])
+  weightQuiz           Float?
+  weightSrs            Float?
+  dailyGoalMinutes     Int?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@map("user_study_preferences")
+}
+
+enum RemediationIntensity {
+  OFF
+  LOW
+  MEDIUM
+  HIGH
 }
