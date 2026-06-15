@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChatRole } from '@bract/shared';
 import type { ChatMessage } from '@bract/shared';
@@ -16,11 +16,14 @@ import { MessageComposer } from './MessageComposer';
 const SPEECH_LANG: Record<string, string> = { es: 'es-ES', en: 'en-US' };
 
 // Control de lectura por voz que recibe cada bubble del tutor (texto→voz, §8.9).
+// `status` es el de ESTE bubble: 'idle' (no es el activo) | 'speaking' | 'paused'.
 interface ListenControl {
-  isSpeaking: boolean;
-  onToggle: () => void;
-  speakLabel: string;
-  stopLabel: string;
+  status: 'idle' | 'speaking' | 'paused';
+  onSpeak: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+  labels: { speak: string; pause: string; resume: string; stop: string };
 }
 
 function SpeakerIcon() {
@@ -39,6 +42,61 @@ function SpeakerIcon() {
       <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
       <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
     </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
+    </svg>
+  );
+}
+
+// Botón chico de control de lectura (escuchar/pausar/reanudar/detener). aria-label obligatorio (icon-only-ish).
+function ListenButton({
+  onClick,
+  label,
+  active,
+  icon,
+}: {
+  onClick: () => void;
+  label: string;
+  active: boolean;
+  icon: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        'flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors duration-[150ms]',
+        'hover:bg-bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50',
+        active ? 'text-brand-primary' : 'text-text-tertiary hover:text-text-secondary',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -77,22 +135,40 @@ function Bubble({
         {content}
       </div>
       {listen && (
-        <button
-          type="button"
-          onClick={listen.onToggle}
-          aria-label={listen.isSpeaking ? listen.stopLabel : listen.speakLabel}
-          aria-pressed={listen.isSpeaking}
-          className={cn(
-            'flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors duration-[150ms]',
-            'hover:bg-bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50',
-            listen.isSpeaking
-              ? 'text-brand-primary'
-              : 'text-text-tertiary hover:text-text-secondary',
+        <div className="flex items-center gap-1">
+          {listen.status === 'idle' ? (
+            <ListenButton
+              onClick={listen.onSpeak}
+              label={listen.labels.speak}
+              active={false}
+              icon={<SpeakerIcon />}
+            />
+          ) : (
+            <>
+              {listen.status === 'speaking' ? (
+                <ListenButton
+                  onClick={listen.onPause}
+                  label={listen.labels.pause}
+                  active
+                  icon={<PauseIcon />}
+                />
+              ) : (
+                <ListenButton
+                  onClick={listen.onResume}
+                  label={listen.labels.resume}
+                  active
+                  icon={<PlayIcon />}
+                />
+              )}
+              <ListenButton
+                onClick={listen.onStop}
+                label={listen.labels.stop}
+                active={false}
+                icon={<StopIcon />}
+              />
+            </>
           )}
-        >
-          <SpeakerIcon />
-          {listen.isSpeaking ? listen.stopLabel : listen.speakLabel}
-        </button>
+        </div>
       )}
     </div>
   );
@@ -122,8 +198,11 @@ export function ChatThread({ sessionId, onBack, initialMessage, onInitialConsume
   const speechLang = SPEECH_LANG[i18n.language.split('-')[0] ?? 'en'] ?? 'en-US';
   const {
     isSupported: ttsSupported,
+    status: ttsStatus,
     speakingId,
     speak,
+    pause: pauseSpeech,
+    resume: resumeSpeech,
     cancel: cancelSpeech,
   } = useSpeechSynthesis({ lang: speechLang });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -197,11 +276,18 @@ export function ChatThread({ sessionId, onBack, initialMessage, onInitialConsume
                   listen={
                     isAssistant && ttsSupported
                       ? {
-                          isSpeaking: speakingId === m.id,
-                          onToggle: () =>
-                            speakingId === m.id ? cancelSpeech() : speak(m.id, m.content),
-                          speakLabel: t('chat.thread.listen.speak'),
-                          stopLabel: t('chat.thread.listen.stop'),
+                          // Solo el mensaje activo refleja speaking/paused; el resto queda en idle.
+                          status: speakingId === m.id ? ttsStatus : 'idle',
+                          onSpeak: () => speak(m.id, m.content),
+                          onPause: pauseSpeech,
+                          onResume: resumeSpeech,
+                          onStop: cancelSpeech,
+                          labels: {
+                            speak: t('chat.thread.listen.speak'),
+                            pause: t('chat.thread.listen.pause'),
+                            resume: t('chat.thread.listen.resume'),
+                            stop: t('chat.thread.listen.stop'),
+                          },
                         }
                       : undefined
                   }

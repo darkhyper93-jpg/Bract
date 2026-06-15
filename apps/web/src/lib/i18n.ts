@@ -513,6 +513,8 @@ const resources = {
           },
           listen: {
             speak: 'Listen',
+            pause: 'Pause',
+            resume: 'Resume',
             stop: 'Stop',
           },
         },
@@ -1188,6 +1190,8 @@ const resources = {
           },
           listen: {
             speak: 'Escuchar',
+            pause: 'Pausar',
+            resume: 'Reanudar',
             stop: 'Detener',
           },
         },
