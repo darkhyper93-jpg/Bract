@@ -45,9 +45,6 @@ export function UserDetailCard({ user }: UserDetailCardProps) {
             <Badge variant={statusVariant[user.status]} dot>
               {t(`users.statuses.${user.status}`)}
             </Badge>
-            {user.emailVerified && (
-              <Badge variant="success">{t('users.detail.emailVerified')}</Badge>
-            )}
           </div>
         </div>
       </div>
@@ -63,16 +60,6 @@ export function UserDetailCard({ user }: UserDetailCardProps) {
           })}
         />
         <Field label={t('users.detail.email')} value={user.email} />
-        <Field
-          label={t('users.detail.emailVerified')}
-          value={
-            user.emailVerified ? (
-              <span className="text-success">{t('common.yes')}</span>
-            ) : (
-              <span className="text-warning">{t('common.no')}</span>
-            )
-          }
-        />
       </div>
     </div>
   );

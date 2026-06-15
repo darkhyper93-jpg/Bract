@@ -11,7 +11,6 @@ const USER_SELECT = {
   avatarUrl: true,
   role: true,
   status: true,
-  emailVerified: true,
   createdAt: true,
   updatedAt: true,
 } as const;

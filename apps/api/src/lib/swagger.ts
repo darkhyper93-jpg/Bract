@@ -65,7 +65,6 @@ const options: swaggerJsdoc.Options = {
             avatarUrl:     { type: 'string', nullable: true },
             role:          { type: 'string', enum: ['USER', 'ADMIN', 'SUPER_ADMIN'] },
             status:        { type: 'string', enum: ['ACTIVE', 'SUSPENDED', 'DELETED'] },
-            emailVerified: { type: 'boolean' },
             createdAt:     { type: 'string', format: 'date-time' },
             updatedAt:     { type: 'string', format: 'date-time' },
           },

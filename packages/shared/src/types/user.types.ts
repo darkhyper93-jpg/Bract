@@ -17,7 +17,6 @@ export interface User {
   avatarUrl: string | null;
   role: Role;
   status: UserStatus;
-  emailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,7 +28,6 @@ export interface UserPublic {
   avatarUrl: string | null;
   role: Role;
   status: UserStatus;
-  emailVerified: boolean;
   createdAt: Date;
 }
 

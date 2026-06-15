@@ -93,41 +93,6 @@ export const authRepository = {
     });
   },
 
-  async createVerificationToken(userId: string, rawToken: string, expiresAt: Date): Promise<void> {
-    // Remove any existing verification tokens before creating a new one
-    await prisma.session.deleteMany({
-      where: { userId, type: SessionType.EMAIL_VERIFICATION },
-    });
-    await prisma.session.create({
-      data: {
-        userId,
-        token: hashToken(rawToken),
-        type: SessionType.EMAIL_VERIFICATION,
-        expiresAt,
-      },
-    });
-  },
-
-  async findVerificationToken(rawToken: string): Promise<Session | null> {
-    return prisma.session.findFirst({
-      where: {
-        token: hashToken(rawToken),
-        type: SessionType.EMAIL_VERIFICATION,
-        expiresAt: { gt: new Date() },
-      },
-    });
-  },
-
-  async markEmailVerified(userId: string): Promise<void> {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { emailVerified: true },
-    });
-    await prisma.session.deleteMany({
-      where: { userId, type: SessionType.EMAIL_VERIFICATION },
-    });
-  },
-
   async createPasswordResetToken(userId: string, rawToken: string, expiresAt: Date): Promise<void> {
     // Invalidate existing reset tokens for this user
     await prisma.session.deleteMany({

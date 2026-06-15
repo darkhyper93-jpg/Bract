@@ -17,7 +17,6 @@ const USER_DETAIL_SELECT = {
   avatarUrl: true,
   role: true,
   status: true,
-  emailVerified: true,
   createdAt: true,
 } as const;
 

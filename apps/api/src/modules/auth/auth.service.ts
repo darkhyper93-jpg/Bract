@@ -57,10 +57,6 @@ export interface ResetPasswordDto {
   password: string;
 }
 
-export interface VerifyEmailDto {
-  token: string;
-}
-
 function toPublicUser(user: PrismaUser): User {
   return {
     id: user.id,
@@ -69,7 +65,6 @@ function toPublicUser(user: PrismaUser): User {
     avatarUrl: user.avatarUrl,
     role: user.role as Role,
     status: user.status as UserStatus,
-    emailVerified: user.emailVerified,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -135,13 +130,6 @@ export const authService = {
       passwordHash,
       name: dto.name,
     });
-
-    const rawVerificationToken = generateRawToken(32);
-    const verificationExpiry = new Date(Date.now() + TOKEN_TTL.RESET_PASSWORD_SECONDS * 1000);
-    await authRepository.createVerificationToken(user.id, rawVerificationToken, verificationExpiry);
-
-    // Fire-and-forget — email queued via BullMQ inside emailService
-    void emailService.sendVerification(user.email, rawVerificationToken);
 
     try {
       await enqueueCreateNotification({
@@ -277,13 +265,5 @@ export const authService = {
     await authRepository.updatePassword(record.userId, passwordHash);
     await authRepository.markPasswordResetUsed(record.id);
     await authRepository.revokeAllUserRefreshTokens(record.userId);
-  },
-
-  async verifyEmail(dto: VerifyEmailDto): Promise<void> {
-    const record = await authRepository.findVerificationToken(dto.token);
-    if (!record) {
-      throw new AppError('UNAUTHORIZED', 'Invalid or expired verification token');
-    }
-    await authRepository.markEmailVerified(record.userId);
   },
 };

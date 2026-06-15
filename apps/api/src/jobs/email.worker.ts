@@ -6,7 +6,6 @@ import { JOB } from '../config/constants.js';
 
 type EmailJobData =
   | { type: 'welcome'; to: string; name: string }
-  | { type: 'verification'; to: string; token: string }
   | { type: 'passwordReset'; to: string; token: string };
 
 async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
@@ -14,9 +13,6 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
   switch (data.type) {
     case 'welcome':
       await emailService.sendWelcome(data.to, data.name);
-      break;
-    case 'verification':
-      await emailService.sendVerification(data.to, data.token);
       break;
     case 'passwordReset':
       await emailService.sendPasswordReset(data.to, data.token);

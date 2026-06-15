@@ -227,26 +227,5 @@ router.post('/reset-password', authController.resetPassword);
  *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/me', authenticate, authController.me);
-/**
- * @openapi
- * /auth/verify-email:
- *   get:
- *     tags: [Auth]
- *     summary: Verificar email con token del link
- *     security: []
- *     parameters:
- *       - in: query
- *         name: token
- *         required: true
- *         schema:
- *           type: string
- *         description: Token de verificación enviado por email
- *     responses:
- *       200:
- *         description: Email verificado correctamente
- *       400:
- *         description: Token inválido o expirado
- */
-router.get('/verify-email', authController.verifyEmail);
 
 export { router as authRouter };

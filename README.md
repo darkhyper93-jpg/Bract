@@ -198,7 +198,6 @@ model User {
   avatarUrl     String?
   role          Role      @default(USER)
   status        UserStatus @default(ACTIVE)
-  emailVerified Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

@@ -21,7 +21,6 @@ function toPublicUser(user: UserWithoutPassword): User {
     avatarUrl: user.avatarUrl,
     role: user.role as Role,
     status: user.status as UserStatus,
-    emailVerified: user.emailVerified,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

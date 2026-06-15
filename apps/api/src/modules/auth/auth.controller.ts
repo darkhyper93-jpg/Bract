@@ -5,7 +5,6 @@ import {
   LoginSchema,
   ForgotPasswordSchema,
   ResetPasswordSchema,
-  VerifyEmailSchema,
 } from '@bract/shared';
 import { AppError } from '../../lib/errors.js';
 
@@ -134,16 +133,6 @@ export const authController = {
     try {
       const dto = ResetPasswordSchema.parse(req.body);
       await authService.resetPassword(dto);
-      res.json({ success: true, data: null });
-    } catch (err) {
-      next(err);
-    }
-  },
-
-  async verifyEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const dto = VerifyEmailSchema.parse(req.query);
-      await authService.verifyEmail(dto);
       res.json({ success: true, data: null });
     } catch (err) {
       next(err);

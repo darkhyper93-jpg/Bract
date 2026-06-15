@@ -31,7 +31,6 @@ function toUserPublic(row: UserDetailRow): UserPublic {
     avatarUrl: row.avatarUrl,
     role: row.role as Role,
     status: row.status as UserStatus,
-    emailVerified: row.emailVerified,
     createdAt: row.createdAt,
   };
 }
