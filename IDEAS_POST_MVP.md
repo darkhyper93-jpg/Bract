@@ -117,3 +117,56 @@ El usuario quiere que la web se vea **premium**, no solo que funcione. El "G Pol
 veces. Reusa los tokens CSS ya definidos en el README; no hardcodear colores fuera de tokens.
 
 **Estado:** PENDIENTE — idealmente el último gran pase, una vez completas las features.
+
+## Backlog estratégico → ver VISION_FUTURO.md
+
+Análisis crítico de hacia dónde llevar Bract (post todo lo planeado), priorizado por impacto-sobre-
+esfuerzo. Vive en `VISION_FUTURO.md`. Resumen de lo que entra al flujo desde ahí:
+- **Correctitud del contenido IA (riesgo #1):** grounding en el material importado + editar/marcar cartas
+  y preguntas. Lo primero a blindar.
+- **Móvil: responsive → PWA** (repaso offline + push de recordatorio).
+- **Pedagogía profunda:** preguntas abiertas corregidas por IA, modo "explicámelo" (Feynman),
+  calibración de confianza. **Interleaving: OPCIONAL** (toggle del usuario, off por defecto — anotado).
+- **Salud del producto:** cachear IA + techo del free tier; tests de frontend; arranques en frío de Render.
+- **Engagement:** gamificación atada a MAESTRÍA (no a vanidad); recordatorios SRS; onboarding anti
+  pantalla-en-blanco; plantillas/mazos compartidos.
+- **Distribución y monetización:** nichar + crecer dentro de la cohorte; freemium con Stripe; cobrar
+  DESPUÉS de tener estudiantes que la aman. Detalle en VISION_FUTURO.md §7.
+
+**Orden sugerido tras I-2:** L Voz → (de VISION_FUTURO, elegir) grounding IA + responsive/PWA → resto.
+
+**Estado:** backlog vivo — elegir de acá al cerrar cada feature.
+
+## Sección Presentaciones + Video-a-estudio (ideas nuevas — spec-first al planear)
+
+### Presentaciones desde materia/temas
+Crear una presentación de una materia completa o de temas seleccionados. Requisito: visualmente
+atractiva, LEGIBLE (letra de buen tamaño y consistente entre slides), organizada por tema, con notas,
+descargable y editable.
+- DECISIÓN DE DISEÑO CRÍTICA: la consistencia/legibilidad NO sale de IA generando slides libres (salen
+  inconsistentes, con texto que desborda). Sale de IA generando CONTENIDO ESTRUCTURADO y acotado
+  (título + ≤N bullets + notas por slide) que un TEMPLATE FIJO renderiza. El template garantiza el look.
+- v1 recomendado SIN Canva: Gemini estructura los temas → datos de slides → render con template propio
+  → visor in-app + export a .pptx / PDF + editar notas. Gratis, controlable, cumple el requisito visual
+  mejor que la IA libre.
+- Canva: el flujo imaginado (prompt → Canva AI arma el deck → vuelve a la app) NO está bien soportado
+  por la API de Canva (la Connect API es autofill de templates + export, no "IA arma deck por prompt").
+  Suma OAuth, app de developer, posible costo/aprobación. Dejar como integración OPCIONAL posterior
+  (autofill de template), no como base de v1.
+- Estratégico: las presentaciones son artefacto de SALIDA/utilidad, no motor de aprendizaje (a diferencia
+  de quiz/flashcards). Útil y bueno para engagement, pero prioridad por debajo de lo que profundiza el loop.
+
+### Video → estudio (temas o presentación)
+Analizar un video para volcarlo a temas de estudio o a una presentación.
+- Camino feasible v1: obtener la TRANSCRIPCIÓN/subtítulos → alimentar el pipeline de importación que YA
+  existe (texto → temas + dificultad). "video → temas" ≈ "transcript → import". "video → presentación" =
+  encadenar con la feature de arriba.
+- Límites: videos SIN subtítulos requieren speech-to-text (Whisper/Gemini audio = costo, ya descartado)
+  → v1 solo videos con transcripción disponible. Análisis VISUAL de frames = visión, caro → fuera de v1.
+  Atención a ToS/legalidad de transcripts de terceros (preferir videos del propio usuario o con transcript
+  provisto).
+- Alto valor: alimenta el loop con CONTENIDO (más que las presentaciones, que son salida). Sinergia con
+  import + temario.
+
+**Estado:** PENDIENTE. Secuencia sugerida: presentaciones (sin Canva) por ser autocontenida; video-a-temas
+después (reusa import). Canva y STT, opcionales.
