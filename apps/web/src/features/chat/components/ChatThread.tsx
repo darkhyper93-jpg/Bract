@@ -9,7 +9,38 @@ import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { useChatSession } from '../hooks/useChatSession';
 import { useChatStream } from '../hooks/useChatStream';
+import { useSpeechSynthesis } from '../../../hooks/useSpeechSynthesis';
 import { MessageComposer } from './MessageComposer';
+
+// Mapea el idioma del toggle i18n al locale BCP-47 que espera la Web Speech API (§8.9).
+const SPEECH_LANG: Record<string, string> = { es: 'es-ES', en: 'en-US' };
+
+// Control de lectura por voz que recibe cada bubble del tutor (texto→voz, §8.9).
+interface ListenControl {
+  isSpeaking: boolean;
+  onToggle: () => void;
+  speakLabel: string;
+  stopLabel: string;
+}
+
+function SpeakerIcon() {
+  return (
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+  );
+}
 
 interface ChatThreadProps {
   sessionId: string;
@@ -20,10 +51,19 @@ interface ChatThreadProps {
   onInitialConsumed?: (() => void) | undefined;
 }
 
-function Bubble({ role, content }: { role: 'user' | 'assistant'; content: string }) {
+function Bubble({
+  role,
+  content,
+  listen,
+}: {
+  role: 'user' | 'assistant';
+  content: string;
+  // Solo se pasa en bubbles del tutor PERSISTIDOS (no en el de streamingText) y si hay soporte de TTS.
+  listen?: ListenControl | undefined;
+}) {
   const isUser = role === 'user';
   return (
-    <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+    <div className={cn('flex flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
       <div
         className={cn(
           // pre-line (no pre-wrap): preserva los saltos de línea entre ítems/párrafos
@@ -36,6 +76,24 @@ function Bubble({ role, content }: { role: 'user' | 'assistant'; content: string
       >
         {content}
       </div>
+      {listen && (
+        <button
+          type="button"
+          onClick={listen.onToggle}
+          aria-label={listen.isSpeaking ? listen.stopLabel : listen.speakLabel}
+          aria-pressed={listen.isSpeaking}
+          className={cn(
+            'flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors duration-[150ms]',
+            'hover:bg-bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50',
+            listen.isSpeaking
+              ? 'text-brand-primary'
+              : 'text-text-tertiary hover:text-text-secondary',
+          )}
+        >
+          <SpeakerIcon />
+          {listen.isSpeaking ? listen.stopLabel : listen.speakLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -57,10 +115,17 @@ function TypingDots() {
 }
 
 export function ChatThread({ sessionId, onBack, initialMessage, onInitialConsumed }: ChatThreadProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { messages, isLoading, isError, refetch } = useChatSession(sessionId);
   const { send, retry, isStreaming, streamingText, pendingUserContent, error } =
     useChatStream(sessionId);
+  const speechLang = SPEECH_LANG[i18n.language.split('-')[0] ?? 'en'] ?? 'en-US';
+  const {
+    isSupported: ttsSupported,
+    speakingId,
+    speak,
+    cancel: cancelSpeech,
+  } = useSpeechSynthesis({ lang: speechLang });
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialSentRef = useRef(false);
 
@@ -121,13 +186,28 @@ export function ChatThread({ sessionId, onBack, initialMessage, onInitialConsume
           <EmptyState title={t('chat.thread.empty')} description={t('chat.thread.emptyDescription')} />
         ) : (
           <div className="flex flex-col gap-3">
-            {visible.map((m) => (
-              <Bubble
-                key={m.id}
-                role={m.role === ChatRole.USER ? 'user' : 'assistant'}
-                content={m.content}
-              />
-            ))}
+            {visible.map((m) => {
+              const isAssistant = m.role === ChatRole.ASSISTANT;
+              return (
+                <Bubble
+                  key={m.id}
+                  role={isAssistant ? 'assistant' : 'user'}
+                  content={m.content}
+                  // Botón "escuchar" solo en mensajes del tutor PERSISTIDOS y si el navegador soporta TTS.
+                  listen={
+                    isAssistant && ttsSupported
+                      ? {
+                          isSpeaking: speakingId === m.id,
+                          onToggle: () =>
+                            speakingId === m.id ? cancelSpeech() : speak(m.id, m.content),
+                          speakLabel: t('chat.thread.listen.speak'),
+                          stopLabel: t('chat.thread.listen.stop'),
+                        }
+                      : undefined
+                  }
+                />
+              );
+            })}
             {pendingUserContent !== null && <Bubble role="user" content={pendingUserContent} />}
             {isStreaming &&
               (streamingText.length > 0 ? (

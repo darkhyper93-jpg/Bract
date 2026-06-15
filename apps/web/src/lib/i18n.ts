@@ -511,6 +511,10 @@ const resources = {
             denied: 'Microphone access denied. Allow it in your browser to dictate.',
             error: 'Dictation failed. Try again.',
           },
+          listen: {
+            speak: 'Listen',
+            stop: 'Stop',
+          },
         },
         error: {
           aiUnavailable: 'AI is unavailable right now. Add AI_API_KEY or try again later.',
@@ -1181,6 +1185,10 @@ const resources = {
             listening: 'Escuchando…',
             denied: 'Permiso de micrófono denegado. Habilitalo en tu navegador para dictar.',
             error: 'Falló el dictado. Probá de nuevo.',
+          },
+          listen: {
+            speak: 'Escuchar',
+            stop: 'Detener',
           },
         },
         error: {
