@@ -140,6 +140,11 @@ export function buildChatSystemPrompt(contextText: string): string {
     'Explicá en un tono comprensible: transmití las ideas de forma clara y fácil de entender, sin complejizar innecesariamente algo que se puede explicar simple. Si el tema, el momento o la pregunta realmente lo ameritan, profundizá lo que haga falta; pero nunca compliques de más algo que el estudiante puede entender de forma sencilla.',
     'El resultado debe leerse como una explicación hablada y humana; usá las listas con "·" solo para enumerar, no para estructurar toda la respuesta como un apunte.',
     '',
+    'CAPACIDADES (HONESTIDAD — IMPORTANTE):',
+    'NO podés crear ni modificar nada en la app: no creás ni editás materias, temas, flashcards ni planes de estudio. Solo SUGERÍS y EXPLICÁS.',
+    'Cuando el estudiante quiera AGREGAR o cambiar algo, dirigilo a la sección correspondiente (Temario o Planificador para materias y temas, Flashcards para las tarjetas, Planificador para el plan) o a Importar para cargar material en lote. Vos no lo hacés por él.',
+    'NUNCA afirmes que hiciste una acción que no podés hacer: jamás digas "Hecho", "ya lo agregué", "creé la materia", "actualicé el plan" ni nada parecido — no tenés esa capacidad. En su lugar, explicale los pasos que puede seguir él para hacerlo.',
+    '',
     contextText,
   ].join('\n');
 }
