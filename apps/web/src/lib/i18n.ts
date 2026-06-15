@@ -504,6 +504,13 @@ const resources = {
           send: 'Send',
           thinking: 'Thinking…',
           back: 'Conversations',
+          voice: {
+            start: 'Dictate (voice to text)',
+            stop: 'Stop dictation',
+            listening: 'Listening…',
+            denied: 'Microphone access denied. Allow it in your browser to dictate.',
+            error: 'Dictation failed. Try again.',
+          },
         },
         error: {
           aiUnavailable: 'AI is unavailable right now. Add AI_API_KEY or try again later.',
@@ -1168,6 +1175,13 @@ const resources = {
           send: 'Enviar',
           thinking: 'Pensando…',
           back: 'Conversaciones',
+          voice: {
+            start: 'Dictar (voz a texto)',
+            stop: 'Detener dictado',
+            listening: 'Escuchando…',
+            denied: 'Permiso de micrófono denegado. Habilitalo en tu navegador para dictar.',
+            error: 'Falló el dictado. Probá de nuevo.',
+          },
         },
         error: {
           aiUnavailable: 'La IA no está disponible ahora. Configurá AI_API_KEY o intentá más tarde.',
