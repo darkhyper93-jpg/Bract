@@ -93,6 +93,8 @@ export function TopicFlashcards() {
     const subject = subjects.find((s) => s.id === subjectId);
     return (subject?.topics ?? []).map((tp) => ({ value: tp.id, label: tp.name }));
   }, [subjects, subjectId]);
+  // Materia elegida sin temas → no hay tema que elegir ni generar (contrato uniforme, README §5.6).
+  const subjectHasNoTopics = subjectId !== '' && topicOptions.length === 0;
 
   const openNew = () => {
     setEditing(undefined);
@@ -189,11 +191,24 @@ export function TopicFlashcards() {
       </div>
 
       {!selectedTopicId ? (
-        <EmptyState
-          icon={<IconLayers />}
-          title={t('flashcards.manage.pickTopic')}
-          description={t('flashcards.manage.pickTopicDescription')}
-        />
+        subjectHasNoTopics ? (
+          <EmptyState
+            icon={<IconLayers />}
+            title={t('flashcards.manage.subjectNoTopics')}
+            description={t('flashcards.manage.subjectNoTopicsDescription')}
+            action={
+              <Link to="/planner">
+                <Button>{t('flashcards.manage.goToPlanner')}</Button>
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<IconLayers />}
+            title={t('flashcards.manage.pickTopic')}
+            description={t('flashcards.manage.pickTopicDescription')}
+          />
+        )
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">

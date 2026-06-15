@@ -49,3 +49,9 @@ export const ERROR_CODES = {
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
+
+// Mensajes de generación con IA — contrato uniforme (README §5.6). Constante reusable para que
+// cualquier ruta que genere contenido a nivel materia devuelva el MISMO VALIDATION_ERROR.
+export const GENERATION_ERRORS = {
+  SUBJECT_NO_TOPICS: 'La materia no tiene temas para generar contenido',
+} as const;

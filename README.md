@@ -1130,6 +1130,20 @@ PUT    /api/v1/preferences                            [self]   // upsert de pref
 > Todas las rutas de producto son `[self]`: protegidas con `authenticate` y scopeadas a `req.user.id`.
 > El contrato (rutas + DTOs Zod) lo define el Agente A; la implementación por capas es de C/D/E.
 
+### 5.6 Errores de generación con IA — recurso sin contenido
+
+Las rutas que generan contenido con IA a **nivel materia** validan que haya temas ANTES de llamar al
+proveedor, con un contrato uniforme:
+
+| Endpoint | Condición | Código | Mensaje |
+|---|---|---|---|
+| `POST /api/v1/quiz/attempts` (scope `SUBJECT`) | la materia tiene 0 temas | `VALIDATION_ERROR` (400) | "La materia no tiene temas para generar contenido" |
+
+- **Mensaje canónico = constante compartida** (`apps/api/src/config/constants.ts` → `GENERATION_ERRORS.SUBJECT_NO_TOPICS`), reusable si aparece otra generación a nivel materia.
+- **Flashcards** (`POST /topics/:topicId/flashcards/generate`) es **por‑tema**: un tema es generable por su nombre, así que **no** valida "vacío" (sería inconsistente con el quiz scope `TOPIC`). El caso "materia con 0 temas" se previene en el **frontend** (no hay tema que elegir → hint "agregá temas primero").
+- **Planner** (`POST /study/plan/generate`, global) e **Import** (`POST /import`, ya valida texto/tipo) no entran en este contrato.
+- **Frontend:** los setups de quiz y flashcards **deshabilitan** la generación cuando la materia elegida tiene 0 temas y muestran un hint con link al Planificador; el caso "sin materias" muestra un `EmptyState`.
+
 ---
 
 ## 6. STORAGE — CLOUDFLARE R2

@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 import { AxiosError } from 'axios';
+import { Link } from 'react-router-dom';
 import {
   QuizScope,
   type GeneratedAttempt,
@@ -50,6 +51,8 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
   const hasSubjects = subjects.length > 0;
   const selectedSubject = subjects.find((s) => s.id === subjectId);
   const topics = selectedSubject?.topics ?? [];
+  // Materia elegida sin temas → no hay nada que generar (mismo contrato que el backend, README §5.6).
+  const subjectHasNoTopics = selectedSubject !== undefined && topics.length === 0;
 
   // Al cargar las materias, seleccionar la primera por defecto.
   useEffect(() => {
@@ -91,6 +94,7 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
   }
 
   const isAIUnavailable = apiErrorCode(generate.error) === 'AI_UNAVAILABLE';
+  const isNoTopics = apiErrorCode(generate.error) === 'VALIDATION_ERROR';
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
@@ -141,14 +145,27 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
         )}
       />
 
+      {subjectHasNoTopics && (
+        <p className="text-sm text-text-tertiary">
+          {t('quiz.setup.noTopics')}{' '}
+          <Link to="/planner" className="text-brand-primary hover:underline">
+            {t('quiz.setup.noTopicsCta')}
+          </Link>
+        </p>
+      )}
+
       {generate.isError && (
         <p className="text-sm text-error">
-          {isAIUnavailable ? t('quiz.setup.aiUnavailable') : t('quiz.setup.error')}
+          {isAIUnavailable
+            ? t('quiz.setup.aiUnavailable')
+            : isNoTopics
+              ? t('quiz.setup.noTopics')
+              : t('quiz.setup.error')}
         </p>
       )}
 
       <div className="flex justify-end">
-        <Button type="submit" loading={generate.isPending}>
+        <Button type="submit" loading={generate.isPending} disabled={subjectHasNoTopics}>
           {t('quiz.setup.generate')}
         </Button>
       </div>

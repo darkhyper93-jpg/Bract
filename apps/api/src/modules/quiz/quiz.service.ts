@@ -19,6 +19,7 @@ import type {
 import { generateQuiz } from '../../lib/ai/index.js';
 import type { GenerateQuizInput as AiGenerateQuizInput } from '../../lib/ai/index.js';
 import { AppError } from '../../lib/errors.js';
+import { GENERATION_ERRORS } from '../../config/constants.js';
 import { quizRepository } from './quiz.repository.js';
 import type { QuizAttemptWithItemsRow } from './quiz.repository.js';
 
@@ -31,7 +32,8 @@ import type { QuizAttemptWithItemsRow } from './quiz.repository.js';
 const TOPIC_NOT_FOUND = 'Tema no encontrado';
 const SUBJECT_NOT_FOUND = 'Materia no encontrada';
 const ATTEMPT_NOT_FOUND = 'Intento no encontrado';
-const SUBJECT_NO_TOPICS = 'La materia no tiene temas para generar el quiz';
+// Mensaje canónico compartido (contrato uniforme — README §5.6).
+const SUBJECT_NO_TOPICS = GENERATION_ERRORS.SUBJECT_NO_TOPICS;
 const QUESTION_NOT_FOUND = 'Pregunta inexistente';
 const QUESTION_ALREADY_ANSWERED = 'La pregunta ya fue respondida';
 const INVALID_OPTION = 'Opción inválida';
