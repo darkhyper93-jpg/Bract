@@ -1341,6 +1341,45 @@ solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (
 - 4 estados (`loading · empty · error · success`), i18n es/en sin hardcodear (`nav.quiz` + bloque `quiz.*`,
   plurales `_one/_other`). **Modelos nuevos (§3.5) → requiere `db push`.** Sin env vars ni deps nuevas.
 
+### 8.9 Voz — dictado y lectura (Agente L)
+
+> Feature **100% frontend** sobre la **Web Speech API nativa del navegador** (gratis, sin backend, sin
+> infra, sin tokens). Dos capacidades en el chat tutor: **dictado** (voz→texto en el input) y **lectura**
+> (texto→voz de las respuestas del tutor). Origen: `IDEAS_POST_MVP.md` §"Agente L". Decisión clave:
+> **NO** Whisper/Gemini-audio/ElevenLabs — cuestan plata/cómputo y romperían la restricción de free tier.
+> Trade-off asumido: soporte desigual entre navegadores (Chrome/Edge bien; Firefox/Safari parcial) y
+> requiere internet → **degradación elegante** (si no hay soporte, el botón se oculta y el chat sigue por texto).
+
+| Capacidad | API | Punto de integración |
+|-----------|-----|----------------------|
+| Dictado (voz→texto) | `SpeechRecognition` / `webkitSpeechRecognition` | `MessageComposer` (botón micrófono junto al Send) |
+| Lectura (texto→voz) | `speechSynthesis` + `SpeechSynthesisUtterance` | `ChatThread` (botón "escuchar" en cada bubble del tutor) |
+
+- **Hooks reusables, fuera de `features/chat/`** (`src/hooks/useSpeechRecognition.ts` y
+  `src/hooks/useSpeechSynthesis.ts`): son wrappers genéricos de browser-API cross-feature (chat ahora,
+  quiz a futuro), **no** lógica de chat. La UI de los botones sí vive en `features/chat/`.
+- **Tipos:** `lib.dom` NO tipa `SpeechRecognition`/`webkitSpeechRecognition` → se declara una interfaz
+  ambient mínima en `src/types/speech.d.ts` (evita `any` injustificado; DECISIÓN documentada inline).
+  `speechSynthesis` sí está tipado en `lib.dom` → la lectura no necesita declaración extra.
+- **Idioma de voz atado al toggle i18n** (`i18n.language`): `es`→`es-ES`, `en`→`en-US`, en dictado y lectura.
+- **Dictado (capa 1 — el dolor directo):** `continuous=true` con interim results (no corta en las pausas al
+  pensar la pregunta) + botón **stop** + **auto-stop** en unmount y cuando el composer está `disabled`
+  (stream activo) + **timeout de silencio (~3–4s sin voz → para)** para evitar el "micrófono fantasma".
+  La transcripción final **se anexa** al texto ya tipeado (no reemplaza); el usuario edita antes de enviar.
+  Solo muta el `value` local del composer → **no toca `useChatStream`, el SSE ni el envelope**. (Si en la
+  práctica `continuous` se porta mal cross-browser, se cae a `false` — llamada técnica del implementador;
+  la UX objetivo es "no cortar en la pausa".)
+- **Lectura (capa 2):** botón "escuchar" on-demand **solo en mensajes del tutor (assistant) y solo los
+  persistidos** — nunca sobre el bubble de `streamingText` (no leer frases a medias). Sin autoplay.
+- **Estados del dictado (los 4 + permisos):** `idle` (icono mic) · `escuchando` (pulso activo + acción stop) ·
+  `transcribiendo` (interim tenue en el textarea) · **`error`** — y dentro de error se distingue
+  **permiso de micrófono denegado** (mensaje claro y accionable) de **`no-soportado`** (navegador sin API →
+  el botón **se oculta**, no es un error). Lectura: `idle` (altavoz) · `hablando` (stop) · `no-soportado` (oculto).
+- **Accesibilidad:** botones icon-only con **`aria-label` descriptivo en es/en**; la animación de pulso de
+  "escuchando" respeta **`prefers-reduced-motion`**; colores solo de tokens (§9).
+- i18n es/en sin hardcodear (`chat.thread.voice.*` para dictado, `chat.thread.listen.*` para lectura).
+  **Sin backend, sin env vars, sin `db push`, sin cambios en `@bract/shared`, sin deps nuevas.**
+
 ---
 
 ## 9. UI DESIGN SYSTEM
@@ -1775,6 +1814,13 @@ Este archivo en la raíz del repo es el log manual de decisiones y errores de ar
 - [ ] **F5 — Integración Planner (capa 2, aditivo):** `buildPlanInput` enriquece topics con `weakness`; blend "nudge en días" en `buildBaselinePlan` + hint al prompt; test golden sin-datos = hoy
 - [ ] **F6 — Integración Chat (capa 3, aditivo):** `StudentContext.weakTopics?` + render condicional en `renderContextForPrompt`; sin tocar streaming/contrato; test golden sin-datos = prompt idéntico
 - [ ] **F7 — Verificación:** tests de degradación (try/catch ⇒ comportamiento de hoy), no-N+1 (revisar SQL emitido), typecheck/lint, checklist CLAUDE.md
+
+### Fase 16 — Voz / dictado y lectura (Agente L, §8.9) — 100% frontend, degrada elegante
+> Web Speech API nativa (gratis). Hooks genéricos reusables fuera de `features/chat/`. Sin backend, sin env vars, sin `db push`, sin deps. Empezar por el dictado (dolor directo), después la lectura.
+- [ ] **F0 — Spec:** §8.9 + esta fase en el README (sin código de app)
+- [ ] **F1 — Dictado:** `src/hooks/useSpeechRecognition.ts` (`continuous=true` + stop + auto-stop unmount/disabled + timeout de silencio; estados idle/escuchando/transcribiendo/error con permiso-denegado ≠ no-soportado) + `src/types/speech.d.ts` (ambient mínimo) + botón mic en `MessageComposer` (anexa al input; oculto si no-soportado; aria-label es/en; pulso respeta `prefers-reduced-motion`) + i18n `chat.thread.voice.*`. No toca el stream
+- [ ] **F2 — Lectura:** `src/hooks/useSpeechSynthesis.ts` + botón "escuchar" en bubbles del tutor **persistidos** (no en `streamingText`), on-demand sin autoplay, aria-label es/en, oculto si no-soportado + i18n `chat.thread.listen.*`
+- [ ] **F3 — Verificación:** `typecheck`/`lint`/`test` verdes, `git diff --stat`, actualizar `fid.md`. No mergear
 
 ---
 
