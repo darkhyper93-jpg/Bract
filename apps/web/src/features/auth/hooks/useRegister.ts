@@ -1,12 +1,20 @@
 import { useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../../stores/authStore';
 import { authApi } from '../api/auth.api';
 import { RegisterInput } from '@bract/shared';
 
+// El registro loguea DIRECTO a la app: el backend ya devuelve el par de tokens, así que seteamos
+// la sesión y navegamos al dashboard (espejo de useLogin). Sin pantalla de "verificá tu correo".
 export function useRegister() {
+  const navigate = useNavigate();
+  const { setAuthData } = useAuthStore();
+
   return useMutation({
     mutationFn: (body: RegisterInput) => authApi.register(body),
-    // DECISIÓN: no llamamos setAuthData aquí — el usuario debe verificar su email
-    // antes de autenticarse; si lo hiciéramos, PublicRoute redirige a /dashboard
-    // inmediatamente y no puede ver VerifyEmailNotice.
+    onSuccess: ({ user, accessToken }) => {
+      setAuthData(user, accessToken);
+      navigate('/dashboard');
+    },
   });
 }

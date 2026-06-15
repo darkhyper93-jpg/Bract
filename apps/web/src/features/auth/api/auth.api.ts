@@ -40,8 +40,4 @@ export const authApi = {
   async resetPassword(body: ResetPasswordInput): Promise<void> {
     await apiClient.post('/auth/reset-password', body);
   },
-
-  async verifyEmail(token: string): Promise<void> {
-    await apiClient.get(`/auth/verify-email`, { params: { token } });
-  },
 };

@@ -10,7 +10,6 @@ import {
   registerFormSchema,
   RegisterFormValues,
 } from '../schemas/auth.form.schema';
-import { VerifyEmailNotice } from './VerifyEmailNotice';
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (
@@ -32,9 +31,8 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
 export function RegisterForm() {
   const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
-  const { mutate, isPending, error, isSuccess } = useRegister();
+  const { mutate, isPending, error } = useRegister();
 
   const {
     register,
@@ -45,17 +43,12 @@ export function RegisterForm() {
   });
 
   const onSubmit = (values: RegisterFormValues) => {
-    setRegisteredEmail(values.email);
     mutate({
       name: values.name,
       email: values.email,
       password: values.password,
     });
   };
-
-  if (isSuccess) {
-    return <VerifyEmailNotice email={registeredEmail ?? undefined} />;
-  }
 
   return (
     <div className="flex flex-col gap-6">

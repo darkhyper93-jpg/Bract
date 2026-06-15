@@ -11,7 +11,6 @@ const LoginPage = React.lazy(() => import('../features/auth/components/LoginPage
 const RegisterPage = React.lazy(() => import('../features/auth/components/RegisterPage'));
 const ForgotPasswordPage = React.lazy(() => import('../features/auth/components/ForgotPasswordPage'));
 const ResetPasswordPage = React.lazy(() => import('../features/auth/components/ResetPasswordPage'));
-const VerifyEmailPage = React.lazy(() => import('../features/auth/components/VerifyEmailPage'));
 const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
 const PlannerPage = React.lazy(() => import('../features/planner/components/PlannerPage'));
 const SyllabusPage = React.lazy(() => import('../features/syllabus/components/SyllabusPage'));
@@ -76,14 +75,6 @@ const router = createBrowserRouter([
         ),
       },
     ],
-  },
-  {
-    path: '/verify-email',
-    element: (
-      <Suspense fallback={<PageFallback />}>
-        <VerifyEmailPage />
-      </Suspense>
-    ),
   },
   {
     element: <DashboardShell />,
