@@ -513,7 +513,7 @@ const resources = {
           },
         },
         error: {
-          aiUnavailable: 'AI is unavailable right now. Add AI_API_KEY or try again later.',
+          aiUnavailable: 'The AI is busy right now, try again in a few seconds.',
           stream: 'The response was interrupted. Try again.',
           retry: 'Retry',
         },
@@ -588,7 +588,7 @@ const resources = {
           confirm_other: 'Import {{count}} topics',
         },
         toast: {
-          aiUnavailable: 'AI is unavailable right now. Add AI_API_KEY or try again later.',
+          aiUnavailable: 'The AI is busy right now, try again in a few seconds.',
           extractError: 'Could not extract topics. Try again.',
           commitError: 'Could not import the topics. Try again.',
           committed_one: '{{count}} topic imported',
@@ -613,7 +613,7 @@ const resources = {
           emptyTitle: 'No subjects yet',
           emptyDescription: 'Create subjects and topics in the planner to generate a quiz.',
           loadError: 'Failed to load your subjects',
-          aiUnavailable: 'AI is unavailable right now. Add AI_API_KEY or try again later.',
+          aiUnavailable: 'The AI is busy right now, try again in a few seconds.',
           error: 'Could not generate the quiz. Try again.',
           noTopics: 'This subject has no topics yet — add some first.',
           noTopicsCta: 'Go to planner',
@@ -1186,7 +1186,7 @@ const resources = {
           },
         },
         error: {
-          aiUnavailable: 'La IA no está disponible ahora. Configurá AI_API_KEY o intentá más tarde.',
+          aiUnavailable: 'La IA está ocupada en este momento, probá de nuevo en unos segundos.',
           stream: 'La respuesta se interrumpió. Intentá de nuevo.',
           retry: 'Reintentar',
         },
@@ -1261,7 +1261,7 @@ const resources = {
           confirm_other: 'Importar {{count}} temas',
         },
         toast: {
-          aiUnavailable: 'La IA no está disponible ahora. Configurá AI_API_KEY o intentá más tarde.',
+          aiUnavailable: 'La IA está ocupada en este momento, probá de nuevo en unos segundos.',
           extractError: 'No se pudieron extraer los temas. Intentá de nuevo.',
           commitError: 'No se pudieron importar los temas. Intentá de nuevo.',
           committed_one: '{{count}} tema importado',
@@ -1286,7 +1286,7 @@ const resources = {
           emptyTitle: 'Todavía no hay materias',
           emptyDescription: 'Creá materias y temas en el planificador para generar un quiz.',
           loadError: 'No se pudieron cargar tus materias',
-          aiUnavailable: 'La IA no está disponible ahora. Configurá AI_API_KEY o intentá más tarde.',
+          aiUnavailable: 'La IA está ocupada en este momento, probá de nuevo en unos segundos.',
           error: 'No se pudo generar el quiz. Intentá de nuevo.',
           noTopics: 'Esta materia todavía no tiene temas — agregá algunos primero.',
           noTopicsCta: 'Ir al planificador',

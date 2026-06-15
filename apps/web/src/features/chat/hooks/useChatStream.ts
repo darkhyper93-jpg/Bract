@@ -3,6 +3,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../lib/queryKeys';
 import { chatApi, ChatStreamError } from '../api/chat.api';
 
+// Un reintento automático ante AI_UNAVAILABLE (transitorios del free tier): cold-start de Render
+// y blips de Gemini suelen resolverse en el 2do intento. Esperamos un poco antes de reintentar.
+const AI_RETRY_DELAY_MS = 1200;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Hook del streaming del chat. Maneja el envío de un mensaje y el render token a token:
 // - `pendingUserContent`: el mensaje del usuario se muestra al instante (el hilo persistido se
 //   refetchea al terminar).
@@ -48,13 +56,36 @@ export function useChatStream(sessionId: string | null) {
       setStreamingText('');
       setIsStreaming(true);
 
-      try {
-        await chatApi.streamMessage(
+      // Reintento único ante AI_UNAVAILABLE PRE-stream (nada streameado aún): cubre cold-start de
+      // Render y blips de Gemini. Si ya llegaron tokens, no reintentamos (no duplicar respuesta).
+      // `tokensReceived` es local (no el state `streamingText`, que en este closure async es stale).
+      let tokensReceived = false;
+      const runStream = (): Promise<void> =>
+        chatApi.streamMessage(
           sessionId,
           content,
-          { onToken: (tk) => setStreamingText((prev) => prev + tk) },
+          {
+            onToken: (tk) => {
+              tokensReceived = true;
+              setStreamingText((prev) => prev + tk);
+            },
+          },
           ac.signal,
         );
+
+      try {
+        try {
+          await runStream();
+        } catch (err) {
+          if (ac.signal.aborted) return; // switch/unmount → el effect de reset maneja el estado
+          const code = err instanceof ChatStreamError ? err.code : 'INTERNAL_ERROR';
+          // Solo reintentamos si fue AI_UNAVAILABLE y no se streameó nada todavía.
+          if (code !== 'AI_UNAVAILABLE' || tokensReceived) throw err;
+          await sleep(AI_RETRY_DELAY_MS);
+          if (ac.signal.aborted) return;
+          setStreamingText('');
+          await runStream();
+        }
         // Éxito: refetch del hilo (incluye el assistant persistido) + lista (title/updatedAt cambian).
         await queryClient.invalidateQueries({ queryKey: queryKeys.chat.session(sessionId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.chat.sessions() });
