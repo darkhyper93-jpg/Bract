@@ -1379,6 +1379,10 @@ solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (
   "escuchando" respeta **`prefers-reduced-motion`**; colores solo de tokens (§9).
 - i18n es/en sin hardcodear (`chat.thread.voice.*` para dictado, `chat.thread.listen.*` para lectura).
   **Sin backend, sin env vars, sin `db push`, sin cambios en `@bract/shared`, sin deps nuevas.**
+- **Limitación conocida (lectura, Chrome):** `speechSynthesis` corta las lecturas largas (~15s) salvo que
+  se llame `resume()` periódicamente mientras habla (keepalive, cancelado en `onend`/`cancel`). **No
+  implementado en v1** — el workaround es frágil y browser-específico. Deuda opcional (ver VISION_FUTURO,
+  salud del producto): si pesa, agregar un interval keepalive al `useSpeechSynthesis`.
 
 ---
 
