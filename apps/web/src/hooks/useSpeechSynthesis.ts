@@ -12,16 +12,17 @@ const PREFERRED_VOICE = /google|natural|neural/i;
 
 // Elige la mejor voz disponible para el idioma objetivo (BCP-47). DEPENDE DEL NAVEGADOR/SO: el set de
 // voces lo provee el sistema y varía (Chrome trae voces "Google" online; Safari/Edge traen las del SO).
-// Orden: 1) voz del idioma con nombre premium (Google/Natural/Neural); 2) voz del idioma no-default
-// (suele ser mejor que la básica); 3) primera voz del idioma. Si no hay ninguna del idioma → undefined
-// (dejamos que el navegador use su voz default). Ver README §8.9.
+// Orden: 1) voz del idioma con nombre premium (Google/Natural/Neural); 2) voz DEFAULT del idioma
+// (la default del idioma suele ser la mejor — antes la evitábamos y sonaba robótica); 3) primera voz
+// del idioma. Si no hay ninguna del idioma → undefined (dejamos que el navegador use su voz default).
+// Ver README §8.9.
 function pickVoice(voices: SpeechSynthesisVoice[], lang: string): SpeechSynthesisVoice | undefined {
   const base = (lang.split('-')[0] ?? lang).toLowerCase();
   const matches = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
   if (matches.length === 0) return undefined;
   return (
     matches.find((v) => PREFERRED_VOICE.test(v.name)) ??
-    matches.find((v) => !v.default) ??
+    matches.find((v) => v.default) ??
     matches[0]
   );
 }
@@ -110,7 +111,10 @@ export function useSpeechSynthesis({ lang }: UseSpeechSynthesisOptions): UseSpee
       utterance.lang = langRef.current;
       // Mejor voz disponible para el idioma (depende del navegador/SO). Si no hay ninguna del idioma,
       // dejamos `utterance.voice` sin setear → el navegador usa su voz default.
-      const voice = pickVoice(voicesRef.current, langRef.current);
+      // FIX cruce de idiomas: si el ref llegó vacío (voces aún no cargadas), leémoslas FRESCAS acá; así
+      // elegimos una del idioma correcto en vez de caer en la default del navegador (que lee en otro idioma).
+      const voices = voicesRef.current.length ? voicesRef.current : (synth.getVoices() ?? []);
+      const voice = pickVoice(voices, langRef.current);
       if (voice) utterance.voice = voice;
       const handleEnd = () => {
         // Solo reacciona si sigue siendo la lectura activa (no una previa que terminó tarde).
