@@ -37,7 +37,7 @@ const PageFallback = () => (
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/dashboard" replace />,
+    element: <Navigate to="/home" replace />,
   },
   {
     element: <PublicRoute />,
