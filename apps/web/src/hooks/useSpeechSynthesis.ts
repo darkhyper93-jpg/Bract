@@ -27,6 +27,32 @@ function pickVoice(voices: SpeechSynthesisVoice[], lang: string): SpeechSynthesi
   );
 }
 
+// La app solo maneja es/en, así que un heurístico simple y confiable alcanza para decidir en qué idioma
+// PRONUNCIAR un texto (independiente del toggle de la UI). Contamos marcadores de cada idioma y devolvemos
+// el predominante; si no hay señal o empata, devolvemos null para que el consumidor caiga al idioma de la UI.
+const ES_STOPWORDS = new Set([
+  'que', 'de', 'la', 'el', 'los', 'las', 'para', 'con', 'como', 'cómo', 'qué', 'una', 'por', 'en', 'es',
+]);
+const EN_STOPWORDS = new Set([
+  'the', 'and', 'is', 'to', 'of', 'you', 'that', 'for', 'with', 'are', 'this', 'it',
+]);
+// Caracteres exclusivos del español: ñ, vocales acentuadas/diéresis y signos de apertura invertidos.
+const ES_CHARS = /[ñáéíóúü¿¡]/i;
+
+export function detectLang(text: string): 'es' | 'en' | null {
+  let es = 0;
+  let en = 0;
+  // Cualquier carácter típico del español es una señal fuerte → cuenta de una.
+  if (ES_CHARS.test(text)) es += 1;
+  const words = text.toLowerCase().match(/[a-záéíóúüñ]+/gi) ?? [];
+  for (const word of words) {
+    if (ES_STOPWORDS.has(word)) es += 1;
+    if (EN_STOPWORDS.has(word)) en += 1;
+  }
+  if (es === en) return null; // ambiguo o sin señal → fallback al idioma de la UI
+  return es > en ? 'es' : 'en';
+}
+
 interface UseSpeechSynthesisOptions {
   // Idioma BCP-47 (p.ej. 'es-ES' / 'en-US'); lo provee el consumidor desde el toggle i18n.
   lang: string;
@@ -108,13 +134,18 @@ export function useSpeechSynthesis({ lang }: UseSpeechSynthesisOptions): UseSpee
       // Limpia un keepalive previo ANTES de armar el nuevo → nunca quedan intervalos colgados.
       clearKeepAlive();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = langRef.current;
+      // FIX idioma del TEXTO: pronunciamos en el idioma DETECTADO del mensaje, no en el del toggle de la UI.
+      // Así un mensaje en español se lee con voz española aunque la UI esté en inglés (y viceversa). Si la
+      // detección queda ambigua/sin señal (null), caemos al idioma de la UI (langRef) como fallback.
+      const detected = detectLang(text);
+      const lang = detected === 'es' ? 'es-ES' : detected === 'en' ? 'en-US' : langRef.current;
+      utterance.lang = lang;
       // Mejor voz disponible para el idioma (depende del navegador/SO). Si no hay ninguna del idioma,
       // dejamos `utterance.voice` sin setear → el navegador usa su voz default.
       // FIX cruce de idiomas: si el ref llegó vacío (voces aún no cargadas), leémoslas FRESCAS acá; así
       // elegimos una del idioma correcto en vez de caer en la default del navegador (que lee en otro idioma).
       const voices = voicesRef.current.length ? voicesRef.current : (synth.getVoices() ?? []);
-      const voice = pickVoice(voices, langRef.current);
+      const voice = pickVoice(voices, lang);
       if (voice) utterance.voice = voice;
       const handleEnd = () => {
         // Solo reacciona si sigue siendo la lectura activa (no una previa que terminó tarde).
