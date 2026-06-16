@@ -1,6 +1,7 @@
 import apiClient from '../../../lib/axios';
 import { useAuthStore } from '../../../stores/authStore';
 import type {
+  ChatLanguage,
   ChatSession,
   ChatSessionWithMessages,
   CreateSessionInput,
@@ -62,7 +63,12 @@ async function dispatchFrame(frame: string, cb: ChatStreamCallbacks): Promise<vo
   }
 }
 
-async function doFetch(sessionId: string, content: string, signal: AbortSignal): Promise<Response> {
+async function doFetch(
+  sessionId: string,
+  content: string,
+  language: ChatLanguage,
+  signal: AbortSignal,
+): Promise<Response> {
   const token = useAuthStore.getState().accessToken;
   return fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
@@ -71,7 +77,7 @@ async function doFetch(sessionId: string, content: string, signal: AbortSignal):
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, language }),
     signal,
   });
 }
@@ -109,8 +115,9 @@ export const chatApi = {
     content: string,
     callbacks: ChatStreamCallbacks,
     signal: AbortSignal,
+    language: ChatLanguage,
   ): Promise<void> {
-    let res = await doFetch(sessionId, content, signal);
+    let res = await doFetch(sessionId, content, language, signal);
 
     if (res.status === 401) {
       // Un refresh y reintento (mismo flujo que el interceptor de axios, pero para fetch).
@@ -121,7 +128,7 @@ export const chatApi = {
         useAuthStore.getState().logout();
         throw new ChatStreamError('UNAUTHORIZED', 'Sesión expirada');
       }
-      res = await doFetch(sessionId, content, signal);
+      res = await doFetch(sessionId, content, language, signal);
     }
 
     // Error ANTES del stream: el backend respondió JSON (envelope de error), no SSE.

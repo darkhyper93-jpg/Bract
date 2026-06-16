@@ -1,3 +1,4 @@
+import type { ChatLanguage } from '@bract/shared';
 import type {
   ExtractTopicsInput,
   GenerateFlashcardsInput,
@@ -5,6 +6,12 @@ import type {
   GenerateQuizInput,
   PlanDay,
 } from './ai.service.js';
+
+// Nombre del idioma para instruir al modelo de forma explícita (FIX idioma del chat).
+const CHAT_LANGUAGE_NAME: Record<ChatLanguage, string> = {
+  es: 'español',
+  en: 'inglés',
+};
 
 // Prompts por feature. La IA AFINA una distribución base calculada en código (Apéndice C):
 // "la distribución base puede calcularse en código y usar la IA para afinar/ordenar".
@@ -123,12 +130,13 @@ export function buildQuizUserPrompt(input: GenerateQuizInput, cap: number): stri
   ].join('\n');
 }
 
-export function buildChatSystemPrompt(contextText: string): string {
+export function buildChatSystemPrompt(contextText: string, language: ChatLanguage): string {
+  const languageName = CHAT_LANGUAGE_NAME[language];
   return [
     'Sos el tutor personal del estudiante en Bract.',
     'Conocés su contexto (materias, temas pendientes/completados, próximo examen) y lo usás para responder de forma útil y concreta.',
     'Explicás simple cuando lo piden, resumís unidades, generás preguntas de práctica y referenciás su progreso real.',
-    'Respondé en el idioma del estudiante.',
+    `Respondé SIEMPRE en ${languageName}, sin importar el idioma del contexto o del material.`,
     '',
     'TONO Y FORMATO:',
     'Hablás como un profe cálido, cercano y conversacional, como si estuvieras explicándole en persona, sentado al lado.',

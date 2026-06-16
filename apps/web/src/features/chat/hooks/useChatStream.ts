@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import type { ChatLanguage } from '@bract/shared';
 import { queryKeys } from '../../../lib/queryKeys';
 import { chatApi, ChatStreamError } from '../api/chat.api';
 
@@ -18,7 +19,7 @@ function sleep(ms: number): Promise<void> {
 // - En éxito: invalida el hilo (trae el mensaje del assistant ya persistido) y la lista de sesiones.
 // - En disconnect/cambio de sesión: aborta el `fetch` (el backend aborta al proveedor y persiste el
 //   parcial). En error: mantiene visible el mensaje del usuario + el parcial, con opción de reintentar.
-export function useChatStream(sessionId: string | null) {
+export function useChatStream(sessionId: string | null, language: ChatLanguage) {
   const queryClient = useQueryClient();
   const [streamingText, setStreamingText] = useState('');
   const [pendingUserContent, setPendingUserContent] = useState<string | null>(null);
@@ -71,6 +72,7 @@ export function useChatStream(sessionId: string | null) {
             },
           },
           ac.signal,
+          language,
         );
 
       try {
@@ -100,7 +102,7 @@ export function useChatStream(sessionId: string | null) {
         // pendingUserContent + streamingText se mantienen visibles junto al error + retry.
       }
     },
-    [sessionId, isStreaming, queryClient],
+    [sessionId, isStreaming, queryClient, language],
   );
 
   const retry = useCallback((): void => {

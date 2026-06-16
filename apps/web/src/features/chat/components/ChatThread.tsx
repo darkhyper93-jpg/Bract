@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChatRole } from '@bract/shared';
-import type { ChatMessage } from '@bract/shared';
+import type { ChatLanguage, ChatMessage } from '@bract/shared';
 import { cn } from '../../../utils/cn';
 import { Button } from '../../../components/ui/Button';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -14,6 +14,12 @@ import { MessageComposer } from './MessageComposer';
 
 // Mapea el idioma del toggle i18n al locale BCP-47 que espera la Web Speech API (§8.9).
 const SPEECH_LANG: Record<string, string> = { es: 'es-ES', en: 'en-US' };
+
+// Idioma de la UI normalizado a los soportados por el chat ('es'/'en'); default 'es'. El tutor
+// responde SIEMPRE en este idioma (FIX idioma del chat).
+function toChatLanguage(lang: string): ChatLanguage {
+  return lang.split('-')[0] === 'en' ? 'en' : 'es';
+}
 
 // Control de lectura por voz que recibe cada bubble del tutor (texto→voz, §8.9).
 // `status` es el de ESTE bubble: 'idle' (no es el activo) | 'speaking' | 'paused'.
@@ -194,7 +200,7 @@ export function ChatThread({ sessionId, onBack, initialMessage, onInitialConsume
   const { t, i18n } = useTranslation();
   const { messages, isLoading, isError, refetch } = useChatSession(sessionId);
   const { send, retry, isStreaming, streamingText, pendingUserContent, error } =
-    useChatStream(sessionId);
+    useChatStream(sessionId, toChatLanguage(i18n.language));
   const speechLang = SPEECH_LANG[i18n.language.split('-')[0] ?? 'en'] ?? 'en-US';
   const {
     isSupported: ttsSupported,

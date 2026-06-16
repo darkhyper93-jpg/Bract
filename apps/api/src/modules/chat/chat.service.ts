@@ -4,6 +4,7 @@ import type {
 } from '@prisma/client';
 import { ChatRole } from '@bract/shared';
 import type {
+  ChatLanguage,
   ChatSession,
   ChatMessage,
   ChatSessionWithMessages,
@@ -136,6 +137,7 @@ export const chatService = {
     sessionId: string,
     userId: string,
     content: string,
+    language: ChatLanguage,
     signal?: AbortSignal,
   ): AsyncGenerator<ChatStreamEvent, void, unknown> {
     const owner = await chatRepository.findOwner(sessionId);
@@ -183,7 +185,7 @@ export const chatService = {
     let assistant: PrismaChatMessage | null = null;
     try {
       // `signal` atado al disconnect del cliente (E↔B): aborta el request al proveedor de inmediato.
-      for await (const delta of streamChatReply({ context, history, message: content }, signal)) {
+      for await (const delta of streamChatReply({ context, history, message: content, language }, signal)) {
         acc += delta;
         yield { type: 'token', data: { text: delta } };
       }

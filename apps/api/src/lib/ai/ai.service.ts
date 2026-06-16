@@ -1,6 +1,6 @@
 import type { Content, GenerateContentParameters } from '@google/genai';
 import { TopicDifficulty } from '@bract/shared';
-import type { TopicStatus } from '@bract/shared';
+import type { ChatLanguage, TopicStatus } from '@bract/shared';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
 import { logger } from '../logger.js';
@@ -80,6 +80,8 @@ export interface ChatTurnInput {
   context: StudentContext;
   history: { role: 'user' | 'assistant'; content: string }[];
   message: string;
+  // Idioma de la UI: el tutor responde SIEMPRE en este idioma (FIX idioma del chat).
+  language: ChatLanguage;
 }
 
 export interface ExtractTopicsInput {
@@ -597,7 +599,7 @@ function buildChatRequest(input: ChatTurnInput): GenerateContentParameters {
     model: AI_MODELS.chat,
     contents,
     config: {
-      systemInstruction: buildChatSystemPrompt(renderContextForPrompt(input.context)),
+      systemInstruction: buildChatSystemPrompt(renderContextForPrompt(input.context), input.language),
       maxOutputTokens: CHAT_MAX_TOKENS,
     },
   };

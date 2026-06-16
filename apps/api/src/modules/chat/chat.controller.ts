@@ -5,6 +5,7 @@ import {
   sendMessageSchema,
   sessionIdParamSchema,
 } from '@bract/shared';
+import type { SendMessageInput } from '@bract/shared';
 import { AppError } from '../../lib/errors.js';
 import { ERROR_CODES } from '../../config/constants.js';
 import type { ChatStreamEvent } from './chat.service.js';
@@ -83,9 +84,10 @@ export const chatController = {
   async sendMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
     let id: string;
     let content: string;
+    let language: SendMessageInput['language'];
     try {
       ({ id } = sessionIdParamSchema.parse(req.params));
-      ({ content } = sendMessageSchema.parse(req.body));
+      ({ content, language } = sendMessageSchema.parse(req.body));
     } catch (err) {
       next(err); // validación → JSON 400
       return;
@@ -94,7 +96,7 @@ export const chatController = {
     // AbortController atado al cierre de la conexión: aborta el request al proveedor de IA de
     // INMEDIATO (no espera al próximo token). El service persiste el parcial en su `finally`.
     const aiAbort = new AbortController();
-    const gen = chatService.streamMessage(id, req.user!.id, content, aiAbort.signal);
+    const gen = chatService.streamMessage(id, req.user!.id, content, language, aiAbort.signal);
     let started = false;
     let clientGone = false;
 

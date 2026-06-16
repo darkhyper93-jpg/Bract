@@ -55,6 +55,7 @@ const chatInput = {
   context: assembleStudentContext([], new Date('2026-06-09T00:00:00.000Z')),
   history: [] as { role: 'user' | 'assistant'; content: string }[],
   message: 'Explicame integrales',
+  language: 'es' as const,
 };
 
 beforeEach(() => {
