@@ -80,15 +80,22 @@ const router = createBrowserRouter([
     element: <DashboardShell />,
     children: [
       {
-        path: '/dashboard',
-        element: (
-          <ErrorBoundary>
-            <Suspense fallback={<PageFallback />}>
-              <DashboardPage />
-            </Suspense>
-          </ErrorBoundary>
-        ),
-        handle: { titleKey: 'nav.dashboard' },
+        // Dashboard de métricas: solo ADMIN. No-admin → /home (redirect suave, era el
+        // landing de todos hasta §8.10), no /403.
+        element: <RoleRoute role={Role.ADMIN} redirectTo="/home" />,
+        children: [
+          {
+            path: '/dashboard',
+            element: (
+              <ErrorBoundary>
+                <Suspense fallback={<PageFallback />}>
+                  <DashboardPage />
+                </Suspense>
+              </ErrorBoundary>
+            ),
+            handle: { titleKey: 'nav.dashboard' },
+          },
+        ],
       },
       {
         path: '/planner',

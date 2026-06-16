@@ -4,9 +4,12 @@ import { Role } from '@bract/shared';
 
 interface RoleRouteProps {
   role: Role;
+  // Destino cuando falta permiso. Default /403; /dashboard lo pasa como /home para un
+  // redirect suave (era el landing de todos hasta §8.10), no una pantalla de error.
+  redirectTo?: string;
 }
 
-export function RoleRoute({ role }: RoleRouteProps) {
+export function RoleRoute({ role, redirectTo = '/403' }: RoleRouteProps) {
   const { user, isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) {
@@ -26,7 +29,7 @@ export function RoleRoute({ role }: RoleRouteProps) {
   };
 
   if (!hasPermission()) {
-    return <Navigate to="/403" replace />;
+    return <Navigate to={redirectTo} replace />;
   }
 
   return <Outlet />;

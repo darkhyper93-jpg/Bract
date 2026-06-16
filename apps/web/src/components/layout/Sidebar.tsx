@@ -118,7 +118,7 @@ interface NavItemDef {
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-  { to: '/dashboard', labelKey: 'dashboard', icon: <IconLayoutDashboard /> },
+  { to: '/dashboard', labelKey: 'dashboard', icon: <IconLayoutDashboard />, adminOnly: true },
   { to: '/planner', labelKey: 'planner', icon: <IconCalendar /> },
   { to: '/syllabus', labelKey: 'syllabus', icon: <IconBook /> },
   { to: '/flashcards', labelKey: 'flashcards', icon: <IconLayers /> },
