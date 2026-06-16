@@ -617,6 +617,7 @@ const resources = {
           error: 'Could not generate the quiz. Try again.',
           noTopics: 'This subject has no topics yet — add some first.',
           noTopicsCta: 'Go to planner',
+          resumeFailed: 'We couldn’t resume your previous quiz.',
         },
         runner: {
           progress: 'Question {{current}} of {{total}}',
@@ -1290,6 +1291,7 @@ const resources = {
           error: 'No se pudo generar el quiz. Intentá de nuevo.',
           noTopics: 'Esta materia todavía no tiene temas — agregá algunos primero.',
           noTopicsCta: 'Ir al planificador',
+          resumeFailed: 'No pudimos reanudar tu quiz anterior.',
         },
         runner: {
           progress: 'Pregunta {{current}} de {{total}}',

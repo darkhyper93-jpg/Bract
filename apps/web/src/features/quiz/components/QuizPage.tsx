@@ -50,6 +50,11 @@ export default function QuizPage() {
   const [attemptId, setAttemptId] = useState<string | null>(() => readActiveAttempt());
   const [phase, setPhase] = useState<Phase>(() => (readActiveAttempt() ? 'running' : 'setup'));
   const [result, setResult] = useState<QuizRunResult | null>(null);
+  // ¿el intento actual viene de localStorage (reanudación) y no de una generación recién hecha? El
+  // runner usa esto para decidir si una carga fallida debe volver al setup (resume) o mostrar retry.
+  const [resumedFromStorage, setResumedFromStorage] = useState<boolean>(() => readActiveAttempt() !== null);
+  // Aviso chico al volver al setup porque no se pudo reanudar el intento guardado (404 / COMPLETED).
+  const [resumeFailed, setResumeFailed] = useState(false);
 
   // Flujo "Historial".
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -69,7 +74,19 @@ export default function QuizPage() {
   const onGenerated = (a: GeneratedAttempt) => {
     setActiveAttempt(a.attemptId);
     setResult(null);
+    setResumedFromStorage(false); // generación fresca → no es una reanudación
+    setResumeFailed(false);
     setPhase('running');
+  };
+
+  // El intento guardado no se pudo reanudar (carga 404/error o ya COMPLETED): limpiamos el localStorage
+  // (vía setActiveAttempt(null)) y volvemos al setup con un aviso chico, en vez de atrapar al usuario.
+  const onResumeFailed = () => {
+    setActiveAttempt(null);
+    setResult(null);
+    setResumedFromStorage(false);
+    setPhase('setup');
+    setResumeFailed(true);
   };
 
   const onFinished = (r: QuizRunResult) => {
@@ -107,11 +124,27 @@ export default function QuizPage() {
 
         {tab === 'new' ? (
           phase === 'running' && attemptId ? (
-            <QuizRunner attemptId={attemptId} onFinished={onFinished} onQuit={startOver} />
+            <QuizRunner
+              attemptId={attemptId}
+              isResume={resumedFromStorage}
+              onFinished={onFinished}
+              onQuit={startOver}
+              onResumeFailed={onResumeFailed}
+            />
           ) : phase === 'results' && result ? (
             <QuizResults {...result} onRestart={startOver} />
           ) : (
-            <QuizSetup onGenerated={onGenerated} />
+            <div className="flex flex-col gap-3">
+              {resumeFailed && (
+                <div
+                  role="status"
+                  className="rounded-lg border border-border-subtle bg-bg-elevated px-3.5 py-2.5 text-sm text-text-secondary"
+                >
+                  {t('quiz.setup.resumeFailed')}
+                </div>
+              )}
+              <QuizSetup onGenerated={onGenerated} />
+            </div>
           )
         ) : detailId ? (
           <QuizAttemptDetail id={detailId} onBack={() => setDetailId(null)} />

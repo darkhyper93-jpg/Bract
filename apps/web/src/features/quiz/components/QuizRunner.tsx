@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AxiosError } from 'axios';
+import { QuizAttemptStatus } from '@bract/shared';
 import type { AnswerReveal, PublicQuizQuestion, QuizAttemptWithItems } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -21,16 +22,37 @@ function apiErrorCode(err: unknown): string | undefined {
 
 interface QuizRunnerProps {
   attemptId: string;
+  // `true` cuando el attemptId viene de localStorage (reanudación), no de una generación fresca. En
+  // ese caso, si la carga falla (404/error) o el intento ya está COMPLETED, no atrapamos al usuario en
+  // el ErrorState: avisamos al padre para que limpie el localStorage y vuelva al setup.
+  isResume: boolean;
   onFinished: (result: QuizRunResult) => void;
   onQuit: () => void;
+  onResumeFailed: () => void;
 }
 
 // El runner se HIDRATA desde el server (fuente de verdad): dado un attemptId, carga el detalle del
 // intento y reanuda donde estaba. Así, ir a Historial y volver (remontaje) retoma la posición real sin
 // chocar con el lock anti-trampa. 4 estados (loading · empty · error · success) en el loader.
-export function QuizRunner({ attemptId, onFinished, onQuit }: QuizRunnerProps) {
+export function QuizRunner({ attemptId, isResume, onFinished, onQuit, onResumeFailed }: QuizRunnerProps) {
   const { t } = useTranslation();
   const { attempt, isLoading, isError, refetch } = useQuizAttempt(attemptId, true);
+
+  // Reanudación inválida: el intento guardado ya no se puede correr. COMPLETED siempre (correrlo en el
+  // runner no tiene sentido); carga fallida (404/error) solo si veníamos de localStorage. Una generación
+  // fresca con error transitorio conserva su ErrorState + retry (abajo).
+  const completed = !isLoading && attempt?.status === QuizAttemptStatus.COMPLETED;
+  const loadFailed = !isLoading && (isError || attempt === null);
+  const resumeInvalid = completed || (loadFailed && isResume);
+
+  // Bounce al setup una sola vez (guard anti doble-disparo en StrictMode / re-render).
+  const bailedRef = useRef(false);
+  useEffect(() => {
+    if (resumeInvalid && !bailedRef.current) {
+      bailedRef.current = true;
+      onResumeFailed();
+    }
+  }, [resumeInvalid, onResumeFailed]);
 
   if (isLoading) {
     return (
@@ -43,6 +65,9 @@ export function QuizRunner({ attemptId, onFinished, onQuit }: QuizRunnerProps) {
       </div>
     );
   }
+
+  // Mientras el padre transiciona al setup, no flasheamos el ErrorState.
+  if (resumeInvalid) return null;
 
   if (isError || attempt === null) {
     return (
