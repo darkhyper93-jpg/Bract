@@ -1269,9 +1269,9 @@ queryKeys.users.list(filters)  // ['users', 'list', filters]
 
 ```typescript
 // Tipos de rutas:
-// <PublicRoute />  → redirige a /dashboard si ya autenticado
+// <PublicRoute />  → redirige a /home si ya autenticado (default landing — §8.10)
 // <AuthRoute />    → redirige a /login si no autenticado
-// <RoleRoute role="ADMIN" /> → redirige a /403 si sin permiso
+// <RoleRoute role="ADMIN" /> → redirige a /403 si sin permiso (envuelve /dashboard, /analytics, /users, /admin)
 ```
 
 ### 8.6 Features de producto — Estudio con IA
@@ -1397,6 +1397,60 @@ solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (
   del corte) que llama `resume()` mientras habla; se limpia SIEMPRE en `onend`/`onerror`/`cancel()`/unmount
   (sin intervalos colgados). Si en algún navegador `resume()` solo no alcanzara, el fallback es alternar
   `pause()+resume()` (anotado inline en el hook).
+
+### 8.10 Home del estudiante + gating del dashboard admin (100% frontend, reusa I-2/C)
+
+> Hoy el landing de **todos** (`/`, post-login, post-register) es `/dashboard`: un panel de **métricas de
+> sistema** que consume `/analytics/*`. Un estudiante normal cae ahí y ve **error / cards vacías** porque
+> esos endpoints están gateados a ADMIN en el backend (`authorize(ADMIN, SUPER_ADMIN)` → **403**). **No es
+> fuga de datos** (el backend ya está bien gateado); es (a) una pantalla de bienvenida rota para el
+> estudiante y (b) el panel de métricas admin queda accesible **en frontend** a cualquier autenticado
+> (`/dashboard` no está envuelto en `RoleRoute`). Esta feature: **(1)** gatea el dashboard de métricas a
+> ADMIN y **(2)** crea un **Home** del estudiante útil reusando endpoints existentes. Origen: pedido del
+> usuario. **Sin backend, sin endpoints nuevos, sin `db push`, sin deps.**
+
+| Feature | Carpeta | Contenido |
+|---------|---------|-----------|
+| Home | `features/home/` | bienvenida ("hola de nuevo") + su progreso (I-2) + overview de materias + resumen del plan del día / próximo examen |
+
+- **Gating del dashboard de métricas (parte 1 — la corrección):** la ruta `/dashboard` pasa a estar
+  envuelta en `<RoleRoute role={ADMIN}>`. El item `dashboard` del sidebar pasa a `adminOnly: true` (hoy es
+  visible para todos en `Sidebar.tsx`). **Decisión de path:** se **mantiene en `/dashboard`** (no se mueve a
+  `/admin/dashboard`) — el componente, las claves i18n (`nav.dashboard`, bloque `dashboard.*`), los
+  `handle.titleKey`/breadcrumbs y los hooks ya cuelgan de ahí; moverlo no aporta nada funcional y multiplica
+  el churn. Solo cambia su **protección**, no su URL.
+- **Redirect suave para `/dashboard` (no 403):** como `/dashboard` fue el landing de **todos** hasta ahora,
+  un no-admin que caiga ahí (link viejo, bookmark) debe redirigir a **`/home`**, no a `/403` — que se sienta
+  suave, no un error. Para esto `RoleRoute` recibe una prop **opcional `redirectTo` (default `/403`)**: el
+  `/dashboard` la pasa como `/home`; **`/analytics`, `/users`, `/admin` conservan el `/403`** (default, son
+  rutas que nunca fueron del estudiante).
+- **Home del estudiante (parte 2):** nueva feature `features/home/` con la estructura del §8.1, ruta
+  **`/home`** (lazy + `ErrorBoundary`, patrón de las demás features de producto) y **entrada en el sidebar
+  para todos** (no `adminOnly`). Label i18n es **Inicio** / en **Home**. Secciones:
+  - **Bienvenida:** saludo "hola de nuevo, {nombre}" (reusa el patrón `greetingKey()` por hora del día que
+    ya existe en el `DashboardPage` admin — se extrae a un helper compartido o se replica, sin colores
+    hardcodeados).
+  - **Tu progreso (reusa I-2):** resumen de `useProgressOverview()` (`/progress/overview`) — barras/medias
+    por materia + total `avgAccuracy`. Read-only; el detalle completo sigue viviendo en `/progress`.
+  - **En qué enfocarte (reusa I-2):** sección compacta con el **top 3** de `useWeakTopics()` (lo más
+    accionable del Home: qué estudiar hoy) + link **"ver más" → `/progress`**. Compacto, sin duplicar el
+    dashboard de progreso completo. Sin datos → `EmptyState` ("estudiá un poco y acá verás dónde reforzar").
+  - **Tus materias:** overview compacto desde `useSubjects()` (`SubjectWithTopics[]`, fuente única ya usada
+    por planner/temario) — conteo de temas por estado. Link a `/syllabus`.
+  - **Plan de hoy / próximo examen:** desde `usePlan()` (`/study/plan`) los bloques del día (items con
+    `date` == hoy + su `topic`); el **próximo examen** se deriva **en cliente** del menor `Subject.examDate`
+    futuro (de `useSubjects()`) — **sin endpoint nuevo**. Link a `/planner`.
+- **Routing por rol (parte 3 — un solo landing):** `/`, `PublicRoute` (redirect de autenticado), y los
+  `navigate` post-login (`useLogin`) y post-register (`useRegister`) pasan de `/dashboard` a **`/home`**
+  para **todos los roles, admin incluido** (el Home también le sirve al admin como estudiante; el admin
+  llega a sus métricas por el item de sidebar admin-only). Routing simple, una sola rama. Se actualiza el
+  comentario de `§8.5` (default landing = `/home`, no `/dashboard`).
+- 4 estados por sección (`loading` con skeleton · `empty` con `EmptyState` p.ej. "todavía no cargaste
+  materias" → CTA a planner/temario · `error` con `ErrorState` + retry · `success`), i18n es/en sin
+  hardcodear (`nav.home` + bloque `home.*`), **solo color tokens del §9.2**. Cada sección degrada
+  independiente (que falle el progreso no rompe el plan del día).
+- **Decisión documentada (`error.md` si aplica):** el `DashboardPage` admin conserva su propio saludo; si
+  el `greetingKey()` se extrae a helper compartido, es refactor mínimo sin cambio de comportamiento.
 
 ---
 
@@ -1839,6 +1893,14 @@ Este archivo en la raíz del repo es el log manual de decisiones y errores de ar
 - [ ] **F1 — Dictado:** `src/hooks/useSpeechRecognition.ts` (`continuous=true` + stop + auto-stop unmount/disabled + timeout de silencio; estados idle/escuchando/transcribiendo/error con permiso-denegado ≠ no-soportado) + `src/types/speech.d.ts` (ambient mínimo) + botón mic en `MessageComposer` (anexa al input; oculto si no-soportado; aria-label es/en; pulso respeta `prefers-reduced-motion`) + i18n `chat.thread.voice.*`. No toca el stream
 - [ ] **F2 — Lectura:** `src/hooks/useSpeechSynthesis.ts` + botón "escuchar" en bubbles del tutor **persistidos** (no en `streamingText`), on-demand sin autoplay, aria-label es/en, oculto si no-soportado + i18n `chat.thread.listen.*`
 - [ ] **F3 — Verificación:** `typecheck`/`lint`/`test` verdes, `git diff --stat`, actualizar `fid.md`. No mergear
+
+### Fase 17 — Home del estudiante + gating del dashboard admin (§8.10) — 100% frontend, reusa I-2/C
+> Corrige el landing: hoy todos caen en el dashboard de métricas admin (403 → cards vacías para el estudiante; panel admin accesible en frontend a cualquier autenticado). Gatea las métricas a ADMIN y crea un Home útil. Sin backend, sin `db push`, sin deps. Branch `agente-home`, no mergear.
+- [ ] **F0 — Spec:** §8.10 + nota §8.5 + esta fase en el README (sin código de app)
+- [ ] **F1 — Gating métricas:** `RoleRoute` gana prop opcional `redirectTo` (default `/403`); `/dashboard` envuelto en `<RoleRoute role={ADMIN} redirectTo="/home">` (no-admin → `/home` suave, no 403) + item `dashboard` del sidebar a `adminOnly: true`. URL sin cambios (decisión §8.10)
+- [ ] **F2 — Routing por rol → `/home`:** `/` (Navigate), `PublicRoute`, `useLogin` y `useRegister` pasan de `/dashboard` a `/home` para todos los roles
+- [ ] **F3 — Feature `features/home/`:** ruta `/home` lazy + `ErrorBoundary` + item de sidebar para todos (i18n `nav.home`); secciones bienvenida + progreso (`useProgressOverview`) + "en qué enfocarte" (top 3 `useWeakTopics` + ver más → `/progress`) + materias (`useSubjects`) + plan de hoy/próximo examen (`usePlan` + `Subject.examDate` derivado); helper `greetingKey` compartido (DRY con `DashboardPage`); 4 estados por sección, i18n `home.*` es/en, solo color tokens
+- [ ] **F4 — Verificación:** `typecheck`/`lint`/`test` verdes, `git diff --stat`, checklist CLAUDE.md. No mergear
 
 ---
 
