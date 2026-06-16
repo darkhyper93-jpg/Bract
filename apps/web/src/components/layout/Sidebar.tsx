@@ -10,6 +10,14 @@ import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
 import { Role } from '@bract/shared';
 
+function IconHome() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 9.5L12 3l9 6.5" /><path d="M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10" />
+    </svg>
+  );
+}
+
 function IconLayoutDashboard() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -118,6 +126,7 @@ interface NavItemDef {
 }
 
 const NAV_ITEMS: NavItemDef[] = [
+  { to: '/home', labelKey: 'home', icon: <IconHome /> },
   { to: '/dashboard', labelKey: 'dashboard', icon: <IconLayoutDashboard />, adminOnly: true },
   { to: '/planner', labelKey: 'planner', icon: <IconCalendar /> },
   { to: '/syllabus', labelKey: 'syllabus', icon: <IconBook /> },

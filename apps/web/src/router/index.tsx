@@ -11,6 +11,7 @@ const LoginPage = React.lazy(() => import('../features/auth/components/LoginPage
 const RegisterPage = React.lazy(() => import('../features/auth/components/RegisterPage'));
 const ForgotPasswordPage = React.lazy(() => import('../features/auth/components/ForgotPasswordPage'));
 const ResetPasswordPage = React.lazy(() => import('../features/auth/components/ResetPasswordPage'));
+const HomePage = React.lazy(() => import('../features/home').then((m) => ({ default: m.HomePage })));
 const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
 const PlannerPage = React.lazy(() => import('../features/planner/components/PlannerPage'));
 const SyllabusPage = React.lazy(() => import('../features/syllabus/components/SyllabusPage'));
@@ -79,6 +80,18 @@ const router = createBrowserRouter([
   {
     element: <DashboardShell />,
     children: [
+      {
+        // Home del estudiante: landing único para todos los roles autenticados (§8.10).
+        path: '/home',
+        element: (
+          <ErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <HomePage />
+            </Suspense>
+          </ErrorBoundary>
+        ),
+        handle: { titleKey: 'nav.home' },
+      },
       {
         // Dashboard de métricas: solo ADMIN. No-admin → /home (redirect suave, era el
         // landing de todos hasta §8.10), no /403.

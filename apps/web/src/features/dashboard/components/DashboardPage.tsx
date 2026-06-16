@@ -8,13 +8,7 @@ import { UserGrowthChart } from './UserGrowthChart';
 import { ActivityChart } from './ActivityChart';
 import { useAnalyticsOverview, useUserGrowth, useActivity } from '../hooks/useAnalytics';
 import { useAuthStore } from '../../../stores/authStore';
-
-function greetingKey(): 'greetingMorning' | 'greetingAfternoon' | 'greetingEvening' {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'greetingMorning';
-  if (hour < 18) return 'greetingAfternoon';
-  return 'greetingEvening';
-}
+import { greetingKey } from '../../../utils/greeting';
 
 export function DashboardPage() {
   const { t } = useTranslation();
