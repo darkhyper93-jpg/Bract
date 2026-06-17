@@ -10,6 +10,8 @@ const router: Router = Router();
 router.get('/flashcards/due', authenticate, flashcardController.listDue);
 router.get('/flashcards', authenticate, flashcardController.listByTopic);
 router.post('/flashcards', authenticate, flashcardController.create);
+// Multi-tema (body { topicIds[], count? }). Ruta literal → sin colisión con /flashcards/:id (no hay POST /:id).
+router.post('/flashcards/generate', authenticate, flashcardController.generateMulti);
 router.post('/topics/:topicId/flashcards/generate', authenticate, flashcardController.generate);
 router.post('/flashcards/:id/review', authenticate, flashcardController.review);
 router.patch('/flashcards/:id', authenticate, flashcardController.update);

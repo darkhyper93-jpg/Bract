@@ -6,6 +6,7 @@ import {
   flashcardDueQuerySchema,
   generateFlashcardsParamSchema,
   generateFlashcardsBodySchema,
+  generateFlashcardsMultiSchema,
   reviewFlashcardSchema,
   flashcardIdParamSchema,
 } from '@bract/shared';
@@ -56,13 +57,25 @@ export const flashcardController = {
     }
   },
 
-  // POST /topics/:topicId/flashcards/generate — generar con IA (vía Agente B).
+  // POST /topics/:topicId/flashcards/generate — generar con IA per-tema (vía Agente B).
   async generate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { topicId } = generateFlashcardsParamSchema.parse(req.params);
       const { count } = generateFlashcardsBodySchema.parse(req.body ?? {});
       const flashcards = await flashcardService.generate(topicId, req.user!.id, count);
       res.status(201).json({ success: true, data: { flashcards } });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // POST /flashcards/generate — generar con IA sobre un set de temas (multi). Éxito parcial: el `meta`
+  // reporta cuántas cartas generó cada tema y cuáles fallaron (el front avisa los no generados).
+  async generateMulti(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { topicIds, count } = generateFlashcardsMultiSchema.parse(req.body);
+      const { flashcards, meta } = await flashcardService.generateMulti(topicIds, req.user!.id, count);
+      res.status(201).json({ success: true, data: { flashcards }, meta });
     } catch (err) {
       next(err);
     }
