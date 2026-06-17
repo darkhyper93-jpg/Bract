@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { MAX_QUIZ_QUESTIONS, MIN_QUIZ_QUESTIONS } from '@bract/shared';
 
-// Schema del formulario de setup (RHF + zodResolver). `topicId` vacío = "toda la materia" (scope
-// SUBJECT); con valor = un tema (scope TOPIC). La conversión al DTO de la API vive en el componente.
+// Schema del formulario de setup (RHF + zodResolver). El alcance es un SET de temas dentro de la materia:
+// 1 tema = individual, todos = toda la materia, subconjunto = multi. El server deriva el scope persistido.
 export const quizSetupSchema = z.object({
   subjectId: z.string().min(1, 'subjectRequired'),
-  topicId: z.string(), // '' = toda la materia
+  topicIds: z.array(z.string()).min(1, 'topicsRequired'),
   count: z.coerce.number().int().min(MIN_QUIZ_QUESTIONS).max(MAX_QUIZ_QUESTIONS),
 });
 

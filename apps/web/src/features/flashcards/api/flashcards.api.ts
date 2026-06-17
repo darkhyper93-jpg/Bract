@@ -2,6 +2,7 @@ import apiClient from '../../../lib/axios';
 import type {
   Flashcard,
   FlashcardWithTopic,
+  FlashcardGenerateMultiMeta,
   CreateFlashcardInput,
   UpdateFlashcardInput,
   ReviewQuality,
@@ -13,6 +14,12 @@ import type {
 interface Envelope<T> {
   success: true;
   data: T;
+}
+
+interface MetaEnvelope<T, M> {
+  success: true;
+  data: T;
+  meta: M;
 }
 
 export const flashcardsApi = {
@@ -57,6 +64,20 @@ export const flashcardsApi = {
       count !== undefined ? { count } : {},
     );
     return res.data.data.flashcards;
+  },
+
+  // Generar con IA sobre un set de temas (multi). Devuelve las cartas creadas + meta con el desglose
+  // por tema (cuáles generaron y cuáles fallaron) → el front avisa el éxito parcial. AI_UNAVAILABLE
+  // solo si TODOS los temas fallan.
+  async generateMulti(
+    topicIds: string[],
+    count?: number,
+  ): Promise<{ flashcards: Flashcard[]; meta: FlashcardGenerateMultiMeta }> {
+    const res = await apiClient.post<MetaEnvelope<{ flashcards: Flashcard[] }, FlashcardGenerateMultiMeta>>(
+      '/flashcards/generate',
+      { topicIds, ...(count !== undefined ? { count } : {}) },
+    );
+    return { flashcards: res.data.data.flashcards, meta: res.data.meta };
   },
 
   // Calificar (SM-2): quality 0|3|4|5 → el backend actualiza ease/intervalDays/dueDate.

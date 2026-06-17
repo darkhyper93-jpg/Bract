@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import type { QuizAttempt } from '@bract/shared';
-import { QuizScope } from '@bract/shared';
 import { Badge } from '../../../components/ui/Badge';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useQuizHistory } from '../hooks/useQuiz';
+import { scopeLabel, scopeBadgeLabel } from '../lib/scopeLabel';
 
 interface QuizHistoryProps {
   onOpen: (id: string) => void;
@@ -52,11 +52,9 @@ export function QuizHistory({ onOpen }: QuizHistoryProps) {
             className="flex w-full items-center justify-between gap-3 rounded-lg border border-border-subtle bg-bg-surface px-4 py-3 text-left transition-colors duration-[150ms] hover:border-brand-primary/50 hover:bg-bg-elevated"
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="truncate text-sm font-medium text-text-primary">{a.scopeName}</span>
+              <span className="truncate text-sm font-medium text-text-primary">{scopeLabel(t, a)}</span>
               <div className="flex items-center gap-2">
-                <Badge variant="neutral">
-                  {a.scope === QuizScope.TOPIC ? t('quiz.history.scopeTopic') : t('quiz.history.scopeSubject')}
-                </Badge>
+                <Badge variant="neutral">{scopeBadgeLabel(t, a.scope)}</Badge>
                 <span className="text-xs text-text-tertiary">
                   {new Date(a.createdAt).toLocaleDateString(i18n.language)}
                 </span>

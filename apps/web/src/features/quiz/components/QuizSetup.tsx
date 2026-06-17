@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { AxiosError } from 'axios';
 import { Link } from 'react-router-dom';
 import {
-  QuizScope,
   type GeneratedAttempt,
   type GenerateQuizInput,
   MIN_QUIZ_QUESTIONS,
@@ -14,6 +13,7 @@ import {
 } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
 import { Select } from '../../../components/ui/Select';
+import { MultiSelect } from '../../../components/ui/MultiSelect';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { EmptyState } from '../../../components/ui/EmptyState';
@@ -44,10 +44,11 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
 
   const { control, handleSubmit, watch, setValue } = useForm<QuizSetupValues>({
     resolver: zodResolver(quizSetupSchema),
-    defaultValues: { subjectId: '', topicId: '', count: DEFAULT_QUIZ_QUESTIONS },
+    defaultValues: { subjectId: '', topicIds: [], count: DEFAULT_QUIZ_QUESTIONS },
   });
 
   const subjectId = watch('subjectId');
+  const topicIds = watch('topicIds');
   const hasSubjects = subjects.length > 0;
   const selectedSubject = subjects.find((s) => s.id === subjectId);
   const topics = selectedSubject?.topics ?? [];
@@ -60,11 +61,13 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSubjects]);
 
+  // El cliente manda el SET de temas; el server deriva el scope (1=individual, todos=materia, N=multi).
   const onSubmit = (values: QuizSetupValues) => {
-    const input: GenerateQuizInput =
-      values.topicId !== ''
-        ? { scope: QuizScope.TOPIC, topicId: values.topicId, count: values.count }
-        : { scope: QuizScope.SUBJECT, subjectId: values.subjectId, count: values.count };
+    const input: GenerateQuizInput = {
+      subjectId: values.subjectId,
+      topicIds: values.topicIds,
+      count: values.count,
+    };
     generate.mutate(input, { onSuccess: onGenerated });
   };
 
@@ -108,7 +111,7 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
             value={field.value}
             onChange={(v) => {
               field.onChange(v);
-              setValue('topicId', ''); // cambiar de materia resetea el tema
+              setValue('topicIds', []); // cambiar de materia resetea los temas elegidos
             }}
             placeholder={t('quiz.setup.subjectPlaceholder')}
           />
@@ -117,17 +120,16 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
 
       <Controller
         control={control}
-        name="topicId"
+        name="topicIds"
         render={({ field }) => (
-          <Select
-            label={t('quiz.setup.topic')}
-            options={[
-              { value: '', label: t('quiz.setup.wholeSubject') },
-              ...topics.map((tp) => ({ value: tp.id, label: tp.name })),
-            ]}
+          <MultiSelect
+            label={t('quiz.setup.topics')}
+            options={topics.map((tp) => ({ value: tp.id, label: tp.name }))}
             value={field.value}
             onChange={field.onChange}
-            placeholder={t('quiz.setup.wholeSubject')}
+            placeholder={t('quiz.setup.topicsPlaceholder')}
+            selectAllLabel={t('quiz.setup.selectAllTopics')}
+            disabled={topics.length === 0}
           />
         )}
       />
@@ -165,7 +167,11 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
       )}
 
       <div className="flex justify-end">
-        <Button type="submit" loading={generate.isPending} disabled={subjectHasNoTopics}>
+        <Button
+          type="submit"
+          loading={generate.isPending}
+          disabled={subjectHasNoTopics || topicIds.length === 0}
+        >
           {t('quiz.setup.generate')}
         </Button>
       </div>

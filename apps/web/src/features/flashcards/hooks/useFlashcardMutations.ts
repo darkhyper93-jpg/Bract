@@ -36,6 +36,15 @@ export function useFlashcardMutations() {
     onSuccess: (_cards, { topicId }) => invalidateTopic(topicId),
   });
 
+  // Generación multi-tema (éxito parcial). Invalida cada tema que efectivamente generó cartas + la cola due.
+  const generateMulti = useMutation({
+    mutationFn: ({ topicIds, count }: { topicIds: string[]; count?: number }) =>
+      flashcardsApi.generateMulti(topicIds, count),
+    onSuccess: ({ meta }) => {
+      meta.topics.filter((tp) => tp.generated > 0).forEach((tp) => invalidateTopic(tp.topicId));
+    },
+  });
+
   // Calificar (SM-2). Invalida la cola due y las cartas del tema de la carta calificada.
   const review = useMutation({
     mutationFn: ({ id, quality }: { id: string; quality: ReviewQuality }) =>
@@ -43,5 +52,5 @@ export function useFlashcardMutations() {
     onSuccess: (card) => invalidateTopic(card.topicId),
   });
 
-  return { create, update, remove, generate, review };
+  return { create, update, remove, generate, generateMulti, review };
 }

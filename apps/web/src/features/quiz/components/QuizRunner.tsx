@@ -161,7 +161,13 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
   const [reveal, setReveal] = useState<AnswerReveal | null>(null);
 
   const finish = (final: AnsweredQuestion[]) =>
-    onFinished({ scopeName: detail.scopeName, totalCount: detail.totalCount, answers: final });
+    onFinished({
+      scope: detail.scope,
+      scopeName: detail.scopeName,
+      topicCount: detail.topicCount,
+      totalCount: detail.totalCount,
+      answers: final,
+    });
 
   // Si al hidratar ya estaban todas contestadas (p. ej. intento completado guardado en localStorage),
   // cerramos directo a resultados. Guard con ref para no dispararlo dos veces.

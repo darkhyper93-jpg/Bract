@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/ui/Button';
 import { QuestionReview } from './QuestionReview';
+import { scopeLabel } from '../lib/scopeLabel';
 import type { QuizRunResult } from '../types';
 
 type QuizResultsProps = QuizRunResult & {
@@ -9,7 +10,7 @@ type QuizResultsProps = QuizRunResult & {
 
 // Paso 3 — resultados: puntaje X/N + repaso de cada pregunta (correcta/incorrecta + explicaciones).
 // El intento ya quedó COMPLETED en el server al responder la última pregunta.
-export function QuizResults({ scopeName, totalCount, answers, onRestart }: QuizResultsProps) {
+export function QuizResults({ scope, scopeName, topicCount, totalCount, answers, onRestart }: QuizResultsProps) {
   const { t } = useTranslation();
   const correct = answers.filter((a) => a.reveal.isCorrect).length;
   const total = totalCount;
@@ -19,7 +20,7 @@ export function QuizResults({ scopeName, totalCount, answers, onRestart }: QuizR
     <div className="flex flex-col gap-5">
       <div className="flex flex-col items-center gap-1 rounded-lg border border-border-subtle bg-bg-surface py-8 text-center">
         <span className="text-xs uppercase tracking-wide text-text-tertiary">
-          {scopeName}
+          {scopeLabel(t, { scope, scopeName, topicCount })}
         </span>
         <p className="text-3xl font-semibold text-text-primary">
           {t('quiz.results.score', { correct, total })}

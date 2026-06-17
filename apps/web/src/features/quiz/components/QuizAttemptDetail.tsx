@@ -3,6 +3,7 @@ import { Skeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { useQuizAttempt } from '../hooks/useQuiz';
 import { QuestionReview } from './QuestionReview';
+import { scopeLabel } from '../lib/scopeLabel';
 
 interface QuizAttemptDetailProps {
   id: string;
@@ -51,7 +52,7 @@ export function QuizAttemptDetail({ id, onBack }: QuizAttemptDetailProps) {
       {back}
 
       <div className="flex flex-col items-center gap-1 rounded-lg border border-border-subtle bg-bg-surface py-6 text-center">
-        <span className="text-xs uppercase tracking-wide text-text-tertiary">{attempt.scopeName}</span>
+        <span className="text-xs uppercase tracking-wide text-text-tertiary">{scopeLabel(t, attempt)}</span>
         <p className="text-2xl font-semibold text-text-primary">
           {t('quiz.results.score', { correct: attempt.correctCount, total: attempt.totalCount })}
         </p>

@@ -6,6 +6,7 @@ import { FlashcardSource, type Flashcard } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Select } from '../../../components/ui/Select';
+import { MultiSelect } from '../../../components/ui/MultiSelect';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -74,27 +75,38 @@ export function TopicFlashcards() {
   const { t } = useTranslation();
   const toast = useToast();
   const { subjects, isLoading: subjectsLoading, isError: subjectsError, refetch: refetchSubjects } = useSubjects();
-  const { generate, remove } = useFlashcardMutations();
+  const { generate, generateMulti, remove } = useFlashcardMutations();
 
   const [subjectId, setSubjectId] = useState<string>('');
-  const [topicId, setTopicId] = useState<string>('');
+  const [topicIds, setTopicIds] = useState<string[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Flashcard | undefined>(undefined);
   const [deleting, setDeleting] = useState<Flashcard | undefined>(undefined);
+  // Resultado de una generación multi-tema (éxito parcial): cuántas cartas, en cuántos temas, y cuáles fallaron.
+  const [genResult, setGenResult] = useState<
+    { generated: number; okCount: number; failedNames: string[] } | null
+  >(null);
 
-  const selectedTopicId = topicId === '' ? null : topicId;
+  // La gestión per-tema (listar/crear/editar) requiere un único tema → solo activa con exactamente 1.
+  const selectedTopicId = topicIds.length === 1 ? topicIds[0]! : null;
   const { flashcards, isLoading, isError, refetch } = useFlashcards(selectedTopicId);
 
   const subjectOptions = useMemo(
     () => subjects.map((s) => ({ value: s.id, label: s.name })),
     [subjects],
   );
-  const topicOptions = useMemo(() => {
-    const subject = subjects.find((s) => s.id === subjectId);
-    return (subject?.topics ?? []).map((tp) => ({ value: tp.id, label: tp.name }));
-  }, [subjects, subjectId]);
+  const subjectTopics = useMemo(
+    () => subjects.find((s) => s.id === subjectId)?.topics ?? [],
+    [subjects, subjectId],
+  );
+  const topicOptions = useMemo(
+    () => subjectTopics.map((tp) => ({ value: tp.id, label: tp.name })),
+    [subjectTopics],
+  );
+  const topicName = (id: string) => subjectTopics.find((tp) => tp.id === id)?.name ?? id;
   // Materia elegida sin temas → no hay tema que elegir ni generar (contrato uniforme, README §5.6).
   const subjectHasNoTopics = subjectId !== '' && topicOptions.length === 0;
+  const generating = generate.isPending || generateMulti.isPending;
 
   const openNew = () => {
     setEditing(undefined);
@@ -105,19 +117,46 @@ export function TopicFlashcards() {
     setFormOpen(true);
   };
 
+  const onGenerateError = (err: unknown) =>
+    toast.error(
+      apiErrorCode(err) === 'AI_UNAVAILABLE'
+        ? t('flashcards.toast.aiUnavailable')
+        : t('flashcards.toast.error'),
+    );
+
   const handleGenerate = () => {
-    if (!selectedTopicId) return;
-    generate.mutate(
-      { topicId: selectedTopicId },
-      {
-        onSuccess: (cards) => toast.success(t('flashcards.toast.generated', { count: cards.length })),
-        onError: (err) => {
-          toast.error(
-            apiErrorCode(err) === 'AI_UNAVAILABLE'
-              ? t('flashcards.toast.aiUnavailable')
-              : t('flashcards.toast.error'),
-          );
+    if (topicIds.length === 0) return;
+    setGenResult(null);
+    // 1 tema → flujo per-tema actual (1 llamada). ≥2 → multi (secuencial, éxito parcial).
+    if (topicIds.length === 1) {
+      generate.mutate(
+        { topicId: topicIds[0]! },
+        {
+          onSuccess: (cards) => toast.success(t('flashcards.toast.generated', { count: cards.length })),
+          onError: onGenerateError,
         },
+      );
+      return;
+    }
+    generateMulti.mutate(
+      { topicIds },
+      {
+        onSuccess: ({ meta }) => {
+          const ok = meta.topics.filter((tp) => !tp.failed);
+          const failed = meta.topics.filter((tp) => tp.failed);
+          const generated = ok.reduce((sum, tp) => sum + tp.generated, 0);
+          const failedNames = failed.map((tp) => topicName(tp.topicId));
+          setGenResult({ generated, okCount: ok.length, failedNames });
+          if (failed.length === 0) {
+            toast.success(t('flashcards.toast.generatedMulti', { count: generated, topics: ok.length }));
+          } else {
+            toast.warning(
+              t('flashcards.toast.generatedPartialTitle'),
+              t('flashcards.toast.generatedPartialMsg', { names: failedNames.join(', ') }),
+            );
+          }
+        },
+        onError: onGenerateError,
       },
     );
   };
@@ -177,39 +216,43 @@ export function TopicFlashcards() {
           value={subjectId}
           onChange={(v) => {
             setSubjectId(v);
-            setTopicId('');
+            setTopicIds([]);
+            setGenResult(null);
           }}
         />
-        <Select
-          label={t('flashcards.manage.topic')}
-          placeholder={t('flashcards.manage.selectTopic')}
+        <MultiSelect
+          label={t('flashcards.manage.topics')}
+          placeholder={t('flashcards.manage.selectTopics')}
           options={topicOptions}
-          value={topicId}
-          onChange={setTopicId}
-          disabled={subjectId === ''}
+          value={topicIds}
+          onChange={(v) => {
+            setTopicIds(v);
+            setGenResult(null);
+          }}
+          selectAllLabel={t('flashcards.manage.selectAllTopics')}
+          disabled={subjectId === '' || subjectHasNoTopics}
         />
       </div>
 
-      {!selectedTopicId ? (
-        subjectHasNoTopics ? (
-          <EmptyState
-            icon={<IconLayers />}
-            title={t('flashcards.manage.subjectNoTopics')}
-            description={t('flashcards.manage.subjectNoTopicsDescription')}
-            action={
-              <Link to="/planner">
-                <Button>{t('flashcards.manage.goToPlanner')}</Button>
-              </Link>
-            }
-          />
-        ) : (
-          <EmptyState
-            icon={<IconLayers />}
-            title={t('flashcards.manage.pickTopic')}
-            description={t('flashcards.manage.pickTopicDescription')}
-          />
-        )
-      ) : (
+      {subjectHasNoTopics ? (
+        <EmptyState
+          icon={<IconLayers />}
+          title={t('flashcards.manage.subjectNoTopics')}
+          description={t('flashcards.manage.subjectNoTopicsDescription')}
+          action={
+            <Link to="/planner">
+              <Button>{t('flashcards.manage.goToPlanner')}</Button>
+            </Link>
+          }
+        />
+      ) : topicIds.length === 0 ? (
+        <EmptyState
+          icon={<IconLayers />}
+          title={t('flashcards.manage.pickTopics')}
+          description={t('flashcards.manage.pickTopicsDescription')}
+        />
+      ) : selectedTopicId ? (
+        // Exactamente 1 tema → gestión per-tema (listar/crear/editar) + generar.
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-text-primary">{t('flashcards.manage.cards')}</h3>
@@ -218,7 +261,7 @@ export function TopicFlashcards() {
                 variant="secondary"
                 size="sm"
                 leftIcon={<IconSparkles />}
-                loading={generate.isPending}
+                loading={generating}
                 onClick={handleGenerate}
               >
                 {t('flashcards.manage.generate')}
@@ -242,7 +285,7 @@ export function TopicFlashcards() {
               title={t('flashcards.manage.emptyTopic')}
               description={t('flashcards.manage.emptyTopicDescription')}
               action={
-                <Button leftIcon={<IconSparkles />} loading={generate.isPending} onClick={handleGenerate}>
+                <Button leftIcon={<IconSparkles />} loading={generating} onClick={handleGenerate}>
                   {t('flashcards.manage.generate')}
                 </Button>
               }
@@ -255,6 +298,36 @@ export function TopicFlashcards() {
             </div>
           )}
         </>
+      ) : (
+        // ≥2 temas → generación multi (la gestión per-tema queda para cuando se elige 1 solo).
+        <div className="flex flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface p-4">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-semibold text-text-primary">
+              {t('flashcards.manage.multiTitle', { count: topicIds.length })}
+            </h3>
+            <p className="text-sm text-text-tertiary">{t('flashcards.manage.multiDescription')}</p>
+          </div>
+          {genResult && (
+            <div className="rounded-lg border border-border-subtle bg-bg-elevated px-3 py-2 text-sm">
+              <p className="text-text-secondary">
+                {t('flashcards.toast.generatedMulti', {
+                  count: genResult.generated,
+                  topics: genResult.okCount,
+                })}
+              </p>
+              {genResult.failedNames.length > 0 && (
+                <p className="mt-1 text-error">
+                  {t('flashcards.toast.generatedPartialMsg', { names: genResult.failedNames.join(', ') })}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button leftIcon={<IconSparkles />} loading={generating} onClick={handleGenerate}>
+              {t('flashcards.manage.generate')}
+            </Button>
+          </div>
+        </div>
       )}
 
       {selectedTopicId && (

@@ -1,4 +1,4 @@
-import type { AnswerReveal, PublicQuizQuestion } from '@bract/shared';
+import type { AnswerReveal, PublicQuizQuestion, QuizScope } from '@bract/shared';
 
 // Una pregunta ya respondida en el runner: la pregunta pública + lo que elegiste + la reveal del server.
 // Se acumula en el runner y alimenta la pantalla de resultados (repaso local, sin refetch).
@@ -9,8 +9,11 @@ export interface AnsweredQuestion {
 }
 
 // Resumen con el que el runner cierra un intento → alimenta la pantalla de resultados (sin refetch).
+// Lleva scope + topicCount + scopeName (nombre propio) para componer la etiqueta bilingüe en resultados.
 export interface QuizRunResult {
+  scope: QuizScope;
   scopeName: string;
+  topicCount: number;
   totalCount: number;
   answers: AnsweredQuestion[];
 }
