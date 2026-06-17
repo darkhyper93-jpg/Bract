@@ -597,16 +597,17 @@ model QuizAttempt {
   id           String            @id @default(cuid())
   userId       String
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scope        QuizScope // TOPIC | SUBJECT
+  scope        QuizScope // TOPIC | SUBJECT | MULTI_TOPIC — DERIVADO por el server desde el set de topicIds
   status       QuizAttemptStatus @default(IN_PROGRESS) // se completa al responder la última pregunta
   // DECISIÓN: FK a Subject/Topic con onDelete: SetNull (refs de agrupación viva, NO ownership —
   // eso es userId). Borrar un tema/materia NO borra tu historial de evaluación; scopeName lo
   // mantiene legible y el puntaje es un hecho histórico inmutable. Ver error.md.
-  subjectId    String?
+  subjectId    String? // la materia contenedora (siempre presente: multi-tema es dentro de una materia)
   subject      Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  topicId      String? // solo en scope TOPIC
+  topicId      String? // SOLO en scope TOPIC; null en SUBJECT y MULTI_TOPIC (la granularidad fina vive en el item)
   topic        Topic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  scopeName    String // snapshot del nombre tema/materia
+  scopeName    String // snapshot del NOMBRE PROPIO (topic.name en TOPIC; subject.name en SUBJECT/MULTI_TOPIC). El front compone "N temas de X" bilingüe con scope+topicCount
+  topicCount   Int               @default(1) // nº de temas elegidos (1=TOPIC, N=MULTI_TOPIC, todos=SUBJECT). Permite renderizar el historial sin traer items
   totalCount   Int // nº de preguntas
   correctCount Int // puntaje (se recalcula en el server con cada respuesta)
   completedAt  DateTime?
@@ -645,8 +646,9 @@ model QuizAttemptItem {
 }
 
 enum QuizScope {
-  TOPIC
-  SUBJECT
+  TOPIC // un solo tema
+  SUBJECT // todos los temas de la materia
+  MULTI_TOPIC // un subconjunto (>1, <todos)
 }
 
 enum QuizAttemptStatus {
@@ -664,7 +666,15 @@ enum QuizAttemptStatus {
 - **Ownership por `userId`** en `QuizAttempt` y `QuizAttemptItem` (denormalizado en el item). Las FK a
   `Subject`/`Topic` son de agrupación/labels, no de ownership → `onDelete: SetNull` preserva el historial.
 - **Cada item lleva `topicId`** aunque el quiz sea por materia (cada pregunta cae en un subconcepto/tema)
-  → granularidad correcta para I-2 en ambos scopes.
+  → granularidad correcta para I-2 en los tres scopes.
+- **Contrato unificado + scope DERIVADO por el server** (`POST /quiz/attempts`): el cliente manda un
+  **set de temas** `{ subjectId, topicIds[], count? }` (`topicIds` 1..20) dentro de **una sola materia**;
+  el server valida ownership/pertenencia de cada tema y **deriva** el `scope`: `topicIds.length === 1`
+  → `TOPIC` (`topicId`=ese tema, `scopeName`=topic.name); `topicIds` cubre **todos** los temas de la
+  materia → `SUBJECT` (`topicId=null`, `scopeName`=subject.name); subconjunto → `MULTI_TOPIC`
+  (`topicId=null`, `scopeName`=subject.name). Borde: materia de 1 tema → `TOPIC`. Persiste `topicCount`.
+  La IA recibe el subset en **una sola llamada**. El **front compone** la etiqueta bilingüe
+  (`"N temas de X"` / `"N topics from X"`) con `scope`+`topicCount`+`scopeName` (i18n, plurales).
 - **Generar crea el intento IN_PROGRESS** (`POST /quiz/attempts`): se llama a la IA primero; si falla,
   `AI_UNAVAILABLE` 503 y **no se persiste nada**. Si ok, se crean el `QuizAttempt` + sus `QuizAttemptItem`
   con `correctIndex`/`options` (explicaciones) **autoritativos** en el server, `selectedIndex=null`,
@@ -1080,7 +1090,8 @@ FLASHCARDS + SRS (Agente D)
 GET    /api/v1/flashcards?topicId=...             [self]   // cartas de un tema
 GET    /api/v1/flashcards/due                      [self]   // cartas due del usuario (SRS)
 POST   /api/v1/flashcards                           [self]   // crear manual
-POST   /api/v1/topics/:topicId/flashcards/generate  [self]   // generar con IA (vía Agente B)
+POST   /api/v1/topics/:topicId/flashcards/generate  [self]   // generar con IA por tema (vía Agente B)
+POST   /api/v1/flashcards/generate                  [self]   // generar MULTI-tema: { topicIds[] (1..5), count? } → N llamadas SECUENCIALES (cap bajo). Éxito parcial: conserva lo generado de los temas OK y reporta los fallidos en meta.topics; 503 solo si TODOS fallan. Cada carta queda con su topicId
 PATCH  /api/v1/flashcards/:id                       [self]
 DELETE /api/v1/flashcards/:id                       [self]
 POST   /api/v1/flashcards/:id/review                [self]   // calificar SM-2: { quality: 0|3|4|5 }
@@ -1097,7 +1108,7 @@ POST   /api/v1/import/topics/extract                 [self]   // { text, subject
 POST   /api/v1/import/topics/commit                  [self]   // { topics[], mode: 'ADD'|'REPLACE', subjectId | subjectName } → persiste (add deduplica; replace borra y reemplaza)
 
 EVALUACIÓN — Quiz (Agente I)
-POST   /api/v1/quiz/attempts                          [self]   // GENERAR: { scope, topicId | subjectId, count? } → llama a la IA, crea el intento IN_PROGRESS + items autoritativos, y devuelve preguntas PÚBLICAS (sin correctIndex/explicación). 503 si falla la IA (no persiste).
+POST   /api/v1/quiz/attempts                          [self]   // GENERAR: { subjectId, topicIds[] (1..20), count? } → el server DERIVA el scope (1=TOPIC, todos=SUBJECT, subset=MULTI_TOPIC), llama a la IA (1 llamada), crea el intento IN_PROGRESS + items autoritativos, y devuelve preguntas PÚBLICAS (sin correctIndex/explicación). 503 si falla la IA (no persiste).
 POST   /api/v1/quiz/attempts/:id/answers              [self]   // RESPONDER 1 pregunta: { order, selectedIndex } → corrige en el server contra el correctIndex guardado, bloquea re-responder (CONFLICT), recalcula score; devuelve la reveal (correctIndex + explicaciones) SOLO de esa pregunta.
 GET    /api/v1/quiz/attempts                          [self]   // historial paginado (COMPLETED) del usuario (sin items)
 GET    /api/v1/quiz/attempts/:id                      [self]   // intento + items POR ESTADO (anti-trampa al reanudar): contestado → completo (options con explicación, correctIndex, selectedIndex, isCorrect); SIN contestar → público (options solo {text}, correctIndex=null, isCorrect=false, sin explicación). COMPLETED → todos contestados → todos completos.
@@ -1136,10 +1147,13 @@ proveedor, con un contrato uniforme:
 
 | Endpoint | Condición | Código | Mensaje |
 |---|---|---|---|
-| `POST /api/v1/quiz/attempts` (scope `SUBJECT`) | la materia tiene 0 temas | `VALIDATION_ERROR` (400) | "La materia no tiene temas para generar contenido" |
+| `POST /api/v1/quiz/attempts` | la materia tiene 0 temas | `VALIDATION_ERROR` (400) | "La materia no tiene temas para generar contenido" |
+| `POST /api/v1/quiz/attempts` | un `topicId` no es del usuario o no pertenece a la materia | `NOT_FOUND` (404) | tema no encontrado |
+| `POST /api/v1/flashcards/generate` | un `topicId` ajeno | `NOT_FOUND` (404) | tema no encontrado (validación de ownership ANTES de generar) |
+| `POST /api/v1/flashcards/generate` | **todos** los temas fallan en la IA | `AI_UNAVAILABLE` (503) | sin cartas generadas (con éxito parcial NO falla: ver meta) |
 
 - **Mensaje canónico = constante compartida** (`apps/api/src/config/constants.ts` → `GENERATION_ERRORS.SUBJECT_NO_TOPICS`), reusable si aparece otra generación a nivel materia.
-- **Flashcards** (`POST /topics/:topicId/flashcards/generate`) es **por‑tema**: un tema es generable por su nombre, así que **no** valida "vacío" (sería inconsistente con el quiz scope `TOPIC`). El caso "materia con 0 temas" se previene en el **frontend** (no hay tema que elegir → hint "agregá temas primero").
+- **Flashcards multi** (`POST /flashcards/generate`) valida el **ownership de todos los temas primero**; recién después genera **secuencial** con **éxito parcial** (solo `AI_UNAVAILABLE` si fallan todos). El per-tema (`POST /topics/:topicId/flashcards/generate`) sigue sin validar "vacío" (un tema es generable por su nombre). El caso "materia con 0 temas" se previene en el **frontend** (no hay tema que elegir → hint "agregá temas primero").
 - **Planner** (`POST /study/plan/generate`, global) e **Import** (`POST /import`, ya valida texto/tipo) no entran en este contrato.
 - **Frontend:** los setups de quiz y flashcards **deshabilitan** la generación cuando la materia elegida tiene 0 temas y muestran un hint con link al Planificador; el caso "sin materias" muestra un `EmptyState`.
 
@@ -1283,7 +1297,7 @@ consumo de contratos desde `@bract/shared`:
 | Feature | Carpeta | Agente | Contenido |
 |---------|---------|--------|-----------|
 | Planificador | `features/planner/` | C | materias/temas/disponibilidad, vista día por día, marcar tema completado → recálculo reactivo |
-| Flashcards | `features/flashcards/` | D | estudio SRS (mostrar → revelar → calificar), CRUD manual, generación con IA |
+| Flashcards | `features/flashcards/` | D | estudio SRS (mostrar → revelar → calificar), CRUD manual, generación con IA (1 tema = panel de gestión per-tema; ≥2 temas vía `MultiSelect` = generación multi con éxito parcial, muestra el `meta` de temas OK/fallidos) |
 | Chat de estudio | `features/chat/` | E | hilo por sesión, streaming, contexto del estudiante |
 
 **Contexto compartido (Agente F):** invalidaciones/refetch cruzados de React Query — completar un tema en
@@ -1336,13 +1350,15 @@ solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (
 
 | Feature | Carpeta | Contenido |
 |---------|---------|-----------|
-| Evaluación | `features/quiz/` | setup (elegir materia/tema + cantidad) → runner pregunta-por-pregunta con reveal local → resultados con puntaje; historial de intentos |
+| Evaluación | `features/quiz/` | setup (elegir materia + **set de temas** vía `MultiSelect` + cantidad) → runner pregunta-por-pregunta con reveal local → resultados con puntaje; historial de intentos |
 
 - **Ruta `/quiz`**, label i18n es **Evaluación** / en **Quiz**, entrada en el sidebar. Ruta lazy con
   `ErrorBoundary` (patrón de las demás features de producto).
-- **Flujo (3 pasos + historial):** (1) **Setup** — elegir materia, opcional un tema o "toda la materia",
-  y cantidad (5–10) → "Generar quiz" (`useSubjects`, fuente única) → crea el intento (`POST /quiz/attempts`)
-  y recibe las preguntas **públicas**. (2) **Runner** — una pregunta a la vez; al elegir, `POST .../answers`
+- **Flujo (3 pasos + historial):** (1) **Setup** — elegir materia y un **set de temas** con el primitivo
+  `MultiSelect` (checkboxes + atajo "seleccionar toda la materia"; 1 tema = modo individual, sin perderse),
+  y cantidad (5–10) → "Generar quiz" (`useSubjects`, fuente única) → manda `{ subjectId, topicIds[], count }`
+  (el server deriva el scope), crea el intento (`POST /quiz/attempts`) y recibe las preguntas **públicas**.
+  El historial/detalle/resultados componen la etiqueta `"N temas de X"` con `scopeLabel` (i18n, plurales). (2) **Runner** — una pregunta a la vez; al elegir, `POST .../answers`
   → el server corrige y devuelve la **reveal** (correcto/incorrecto + explicación por opción: verde la
   correcta, rojo tu elección si fallaste); botón "Siguiente"; barra de progreso. La respuesta correcta y la
   explicación NO están en el cliente hasta contestar. (3) **Resultados** — puntaje X/N + repaso (el intento
@@ -1901,6 +1917,15 @@ Este archivo en la raíz del repo es el log manual de decisiones y errores de ar
 - [ ] **F2 — Routing por rol → `/home`:** `/` (Navigate), `PublicRoute`, `useLogin` y `useRegister` pasan de `/dashboard` a `/home` para todos los roles
 - [ ] **F3 — Feature `features/home/`:** ruta `/home` lazy + `ErrorBoundary` + item de sidebar para todos (i18n `nav.home`); secciones bienvenida + progreso (`useProgressOverview`) + "en qué enfocarte" (top 3 `useWeakTopics` + ver más → `/progress`) + materias (`useSubjects`) + plan de hoy/próximo examen (`usePlan` + `Subject.examDate` derivado); helper `greetingKey` compartido (DRY con `DashboardPage`); 4 estados por sección, i18n `home.*` es/en, solo color tokens
 - [ ] **F4 — Verificación:** `typecheck`/`lint`/`test` verdes, `git diff --stat`, checklist CLAUDE.md. No mergear
+
+### Fase 18 — Selección de múltiples temas para generar (Quiz + Flashcards, §3.5 · §5.5 · §8.8)
+> Unifica el alcance de generación como un **set de `topicIds`** dentro de una materia: 1=individual, todos=materia, subset=multi. El cliente manda el set; el **server deriva** el scope. Mantiene el historial e I-2 intactos (`QuizAttemptItem.topicId` por pregunta no cambia). Branch `feat/multi-topic-generation`, no mergear.
+- [x] **F1 — Shared/contrato:** `generateQuizSchema` → `{ subjectId, topicIds[] (1..20), count? }`; `QuizScope` + `MULTI_TOPIC`; `GeneratedAttempt`/`QuizAttempt` + `topicCount`; `generateFlashcardsMultiSchema` `{ topicIds[] (1..5), count? }` + tipos de meta de éxito parcial
+- [x] **F2 — Prisma:** `QuizScope.MULTI_TOPIC` + `QuizAttempt.topicCount Int @default(1)` → **`db push` aplicado** (Session pooler 5432). `QuizAttemptItem` sin cambios
+- [x] **F3 — Backend quiz:** `generate()` deriva scope/`scopeName`/`topicCount` desde el set (valida ownership + pertenencia a la materia, 1 sola llamada de IA). Repo: elimina `findTopicContext`
+- [x] **F4 — Backend flashcards:** nuevo `POST /flashcards/generate` (`generateMulti`): valida ownership de todos los temas, genera **secuencial con éxito parcial** (`meta.topics` con generated/failed; `AI_UNAVAILABLE` solo si todos fallan); per-tema intacto. Sin `db push`
+- [x] **F5 — Frontend:** primitivo `MultiSelect` (atajo "toda la materia" sin perder el individual) en `QuizSetup` y `TopicFlashcards`; `scopeLabel`/`scopeBadgeLabel` componen `"N temas de X"` bilingüe; muestra el `meta` de éxito parcial de flashcards; 4 estados, i18n es/en, tokens
+- [ ] **F6 — Verificación:** `pnpm -r typecheck`/`lint`/`test` verdes (99 tests), `git diff --stat`, README actualizado, checklist CLAUDE.md. No mergear
 
 ---
 
