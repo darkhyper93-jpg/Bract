@@ -376,16 +376,17 @@ model QuizAttempt {
   id           String            @id @default(cuid())
   userId       String
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scope        QuizScope // TOPIC | SUBJECT
+  scope        QuizScope // TOPIC | SUBJECT | MULTI_TOPIC (derivado en el server desde el set de temas)
   status       QuizAttemptStatus @default(IN_PROGRESS) // se completa al responder la última pregunta
   // DECISIÓN: FK a Subject/Topic con onDelete: SetNull (refs de agrupación viva, NO ownership —
   // eso es userId). Borrar un tema/materia NO borra el historial de evaluación; scopeName lo
   // mantiene legible y el puntaje es un hecho histórico inmutable. Ver error.md.
-  subjectId    String?
+  subjectId    String? // materia contenedora (multi-tema es dentro de UNA materia)
   subject      Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  topicId      String? // solo en scope TOPIC
+  topicId      String? // solo en scope TOPIC (null en SUBJECT y MULTI_TOPIC)
   topic        Topic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  scopeName    String // snapshot del nombre tema/materia
+  scopeName    String // snapshot del NOMBRE PROPIO (tema o materia); el front compone "N temas de X"
+  topicCount   Int               @default(1) // nº de temas elegidos (1=TOPIC, N=MULTI, todos=SUBJECT) → render bilingüe
   totalCount   Int // nº de preguntas
   correctCount Int // puntaje (se recalcula en el server con cada respuesta)
   completedAt  DateTime?
@@ -426,6 +427,7 @@ model QuizAttemptItem {
 enum QuizScope {
   TOPIC
   SUBJECT
+  MULTI_TOPIC // subconjunto de temas de una materia (derivado: 1<n<total)
 }
 
 enum QuizAttemptStatus {
