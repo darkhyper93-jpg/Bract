@@ -6,9 +6,12 @@
 // Datos persistidos (topicId + isCorrect + índices) habilitan después I-2 (puntos débiles).
 
 // Espejan los enums de Prisma. Zod los consume con z.nativeEnum → una sola lista de valores.
+// El cliente NO manda scope: envía { subjectId, topicIds[] } y el server lo DERIVA (1=TOPIC,
+// todos los temas de la materia=SUBJECT, subconjunto=MULTI_TOPIC). Ver README §3.5.
 export enum QuizScope {
   TOPIC = 'TOPIC',
   SUBJECT = 'SUBJECT',
+  MULTI_TOPIC = 'MULTI_TOPIC',
 }
 
 export enum QuizAttemptStatus {
@@ -41,7 +44,8 @@ export interface GeneratedAttempt {
   scope: QuizScope;
   subjectId: string | null;
   topicId: string | null;
-  scopeName: string;
+  scopeName: string; // nombre propio (tema o materia); la etiqueta "N temas de X" la compone el front
+  topicCount: number; // nº de temas elegidos (1=TOPIC, N=MULTI, todos=SUBJECT) → render bilingüe
   totalCount: number;
   questions: PublicQuizQuestion[];
 }
@@ -63,7 +67,8 @@ export interface QuizAttempt {
   status: QuizAttemptStatus;
   subjectId: string | null;
   topicId: string | null;
-  scopeName: string;
+  scopeName: string; // nombre propio (tema o materia); la etiqueta "N temas de X" la compone el front
+  topicCount: number; // nº de temas elegidos → render bilingüe del historial sin traer items
   totalCount: number;
   correctCount: number; // puntaje (recalculado en el server con cada respuesta)
   completedAt: string | null;

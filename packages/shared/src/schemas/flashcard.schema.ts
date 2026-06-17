@@ -34,6 +34,16 @@ export const generateFlashcardsBodySchema = z.object({
   count: z.number().int().min(1).max(10).optional(),
 });
 
+// POST /flashcards/generate — genera en lote sobre un set de temas (1=individual, N=multi, todos=materia).
+// Cap BAJO: son N llamadas SECUENCIALES a la IA (una por tema) → el free tier se satura con muchas (503).
+// El server genera tema por tema con ÉXITO PARCIAL (conserva lo generado, reporta los temas fallidos).
+export const MAX_FLASHCARD_TOPICS = 5;
+
+export const generateFlashcardsMultiSchema = z.object({
+  topicIds: z.array(z.string().cuid()).min(1).max(MAX_FLASHCARD_TOPICS),
+  count: z.number().int().min(1).max(10).optional(), // por-tema (mismo tope de hoy)
+});
+
 // POST /flashcards/:id/review — calificación SM-2 (Apéndice B): Again=0, Hard=3, Good=4, Easy=5.
 export const reviewFlashcardSchema = z.object({
   quality: z.union([z.literal(0), z.literal(3), z.literal(4), z.literal(5)]),
@@ -48,5 +58,6 @@ export type UpdateFlashcardInput = z.infer<typeof updateFlashcardSchema>;
 export type FlashcardListQuery = z.infer<typeof flashcardListQuerySchema>;
 export type FlashcardDueQuery = z.infer<typeof flashcardDueQuerySchema>;
 export type GenerateFlashcardsBody = z.infer<typeof generateFlashcardsBodySchema>;
+export type GenerateFlashcardsMultiInput = z.infer<typeof generateFlashcardsMultiSchema>;
 export type ReviewFlashcardInput = z.infer<typeof reviewFlashcardSchema>;
 export type ReviewQuality = ReviewFlashcardInput['quality'];

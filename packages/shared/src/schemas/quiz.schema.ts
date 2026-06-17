@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { QuizScope } from '../types/quiz.types';
 
 // Evaluación / Quiz (Agente I). Schemas compartidos API↔web (fuente única de validación).
 // Generar crea el intento IN_PROGRESS (POST /quiz/attempts); responder corrige de a una pregunta en el
@@ -11,31 +10,19 @@ export const DEFAULT_QUIZ_QUESTIONS = 5;
 export const MIN_QUIZ_QUESTIONS = 1;
 export const MAX_QUIZ_QUESTIONS = 10;
 
-// ---- GENERAR (POST /quiz/attempts): scope + materia/tema destino + cantidad ----
-// TOPIC requiere topicId; SUBJECT requiere subjectId.
-export const generateQuizSchema = z
-  .object({
-    scope: z.nativeEnum(QuizScope),
-    topicId: z.string().cuid().optional(),
-    subjectId: z.string().cuid().optional(),
-    count: z.number().int().min(MIN_QUIZ_QUESTIONS).max(MAX_QUIZ_QUESTIONS).optional(),
-  })
-  .superRefine((d, ctx) => {
-    if (d.scope === QuizScope.TOPIC && d.topicId === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'scope TOPIC requiere topicId',
-        path: ['topicId'],
-      });
-    }
-    if (d.scope === QuizScope.SUBJECT && d.subjectId === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'scope SUBJECT requiere subjectId',
-        path: ['subjectId'],
-      });
-    }
-  });
+// Cantidad de temas elegibles en una generación. El quiz manda TODOS los temas en UNA sola llamada de IA,
+// así que el tope sólo acota el tamaño del payload (no satura el free tier como sí lo haría flashcards).
+export const MIN_QUIZ_TOPICS = 1;
+export const MAX_QUIZ_TOPICS = 20;
+
+// ---- GENERAR (POST /quiz/attempts): set de temas dentro de una materia + cantidad ----
+// Contrato unificado: el cliente manda { subjectId, topicIds[] } y el server DERIVA el scope persistido
+// (1 tema=TOPIC, todos los temas de la materia=SUBJECT, subconjunto=MULTI_TOPIC) + scopeName + topicCount.
+export const generateQuizSchema = z.object({
+  subjectId: z.string().cuid(),
+  topicIds: z.array(z.string().cuid()).min(MIN_QUIZ_TOPICS).max(MAX_QUIZ_TOPICS),
+  count: z.number().int().min(MIN_QUIZ_QUESTIONS).max(MAX_QUIZ_QUESTIONS).optional(),
+});
 
 // ---- RESPONDER 1 pregunta (POST /quiz/attempts/:id/answers) ----
 // Solo el order de la pregunta + la opción elegida. El server corrige contra el correctIndex guardado.

@@ -32,3 +32,16 @@ export interface FlashcardWithTopic extends Flashcard {
     subjectName: string;
   };
 }
+
+// Meta de POST /flashcards/generate (multi-tema). Las llamadas a la IA son secuenciales con ÉXITO
+// PARCIAL: cada tema reporta cuántas cartas generó (`generated`) o si falló (`failed`). El front avisa
+// qué temas no se pudieron generar. Solo si TODOS fallan el endpoint devuelve AI_UNAVAILABLE.
+export interface FlashcardGenerateTopicResult {
+  topicId: string;
+  generated: number; // cartas creadas para ese tema (0 si falló)
+  failed: boolean;
+}
+
+export interface FlashcardGenerateMultiMeta {
+  topics: FlashcardGenerateTopicResult[];
+}
