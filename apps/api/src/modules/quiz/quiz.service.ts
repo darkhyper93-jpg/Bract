@@ -57,6 +57,7 @@ function toQuizAttempt(a: PrismaQuizAttempt): QuizAttempt {
     subjectId: a.subjectId,
     topicId: a.topicId,
     scopeName: a.scopeName,
+    topicCount: a.topicCount,
     totalCount: a.totalCount,
     correctCount: a.correctCount,
     completedAt: a.completedAt ? a.completedAt.toISOString() : null,
@@ -119,6 +120,7 @@ function toGeneratedAttempt(row: QuizAttemptWithItemsRow): GeneratedAttempt {
     subjectId: row.subjectId,
     topicId: row.topicId,
     scopeName: row.scopeName,
+    topicCount: row.topicCount,
     totalCount: row.totalCount,
     questions: row.items.map(toPublicQuestion),
   };
@@ -126,39 +128,51 @@ function toGeneratedAttempt(row: QuizAttemptWithItemsRow): GeneratedAttempt {
 
 export const quizService = {
   // ---- Generar: crear el intento IN_PROGRESS (llama a la IA PRIMERO; si falla no persiste nada) ----
+  // Contrato unificado: el cliente manda { subjectId, topicIds[] } y el server DERIVA el scope persistido
+  // (1=TOPIC, todos los temas de la materia=SUBJECT, subconjunto=MULTI_TOPIC) + scopeName + topicCount.
+  // La granularidad fina (I-2) no cambia: cada QuizAttemptItem sigue cayendo en su topicId.
   async generate(userId: string, input: GenerateQuizInput): Promise<GeneratedAttempt> {
-    let aiInput: AiGenerateQuizInput;
-    let subjectId: string | null;
+    // Un solo query: materia + TODOS sus temas (scopeado por userId → valida ownership de la materia).
+    const subject = await quizRepository.findSubjectContext(input.subjectId, userId);
+    if (!subject) throw new AppError('NOT_FOUND', SUBJECT_NOT_FOUND);
+    if (subject.topics.length === 0) throw new AppError('VALIDATION_ERROR', SUBJECT_NO_TOPICS);
+
+    // Dedup defensivo + validación de que TODOS los temas pedidos pertenecen a la materia (y al usuario).
+    const topicsById = new Map(subject.topics.map((t) => [t.id, t]));
+    const uniqueIds = [...new Set(input.topicIds)];
+    const selected = uniqueIds.map((id) => topicsById.get(id));
+    if (selected.some((t) => t === undefined)) throw new AppError('NOT_FOUND', TOPIC_NOT_FOUND);
+    const topics = selected as { id: string; name: string; description: string | null }[];
+
+    // DERIVAR scope/topicId/scopeName/topicCount. scopeName = NOMBRE PROPIO (tema o materia); el front
+    // compone "N temas de X" usando scope + topicCount (la app es bilingüe). topicId solo vive en TOPIC.
+    const topicCount = topics.length;
+    let scope: QuizScope;
     let topicId: string | null;
     let scopeName: string;
-
-    if (input.scope === QuizScope.TOPIC) {
-      // El schema garantiza topicId presente en scope TOPIC.
-      const topic = await quizRepository.findTopicContext(input.topicId as string, userId);
-      if (!topic) throw new AppError('NOT_FOUND', TOPIC_NOT_FOUND);
-      subjectId = topic.subjectId;
-      topicId = topic.id;
-      scopeName = topic.name;
-      aiInput = {
-        scope: 'TOPIC',
-        subjectName: topic.subject.name,
-        topics: [{ id: topic.id, name: topic.name, description: topic.description }],
-        ...(input.count !== undefined ? { count: input.count } : {}),
-      };
-    } else {
-      const subject = await quizRepository.findSubjectContext(input.subjectId as string, userId);
-      if (!subject) throw new AppError('NOT_FOUND', SUBJECT_NOT_FOUND);
-      if (subject.topics.length === 0) throw new AppError('VALIDATION_ERROR', SUBJECT_NO_TOPICS);
-      subjectId = subject.id;
+    if (topicCount === 1) {
+      scope = QuizScope.TOPIC;
+      topicId = topics[0]!.id;
+      scopeName = topics[0]!.name;
+    } else if (topicCount === subject.topics.length) {
+      // El set cubre toda la materia → SUBJECT (caso borde: materia de 1 tema cae en TOPIC, arriba).
+      scope = QuizScope.SUBJECT;
       topicId = null;
       scopeName = subject.name;
-      aiInput = {
-        scope: 'SUBJECT',
-        subjectName: subject.name,
-        topics: subject.topics,
-        ...(input.count !== undefined ? { count: input.count } : {}),
-      };
+    } else {
+      scope = QuizScope.MULTI_TOPIC;
+      topicId = null;
+      scopeName = subject.name;
     }
+
+    // El `scope` que recibe la IA es solo el label del prompt (un tema vs varios temas); lo que importa
+    // es la lista de temas (el subconjunto). MULTI_TOPIC se etiqueta como "varios temas", igual que SUBJECT.
+    const aiInput: AiGenerateQuizInput = {
+      scope: topicCount === 1 ? 'TOPIC' : 'SUBJECT',
+      subjectName: subject.name,
+      topics,
+      ...(input.count !== undefined ? { count: input.count } : {}),
+    };
 
     // IA PRIMERO: si falla (sin key / salida inválida) lanza AI_UNAVAILABLE y NO se persiste nada.
     const generated = await generateQuiz(aiInput);
@@ -178,11 +192,12 @@ export const quizService = {
 
     const attempt: Prisma.QuizAttemptUncheckedCreateInput = {
       userId,
-      scope: input.scope as PrismaQuizAttempt['scope'],
+      scope: scope as PrismaQuizAttempt['scope'],
       // status default IN_PROGRESS
-      subjectId,
+      subjectId: subject.id,
       topicId,
       scopeName,
+      topicCount,
       totalCount: items.length,
       correctCount: 0,
     };

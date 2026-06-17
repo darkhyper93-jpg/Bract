@@ -5,16 +5,9 @@ import type { Prisma, QuizAttempt, QuizAttemptItem } from '@prisma/client';
 // Evaluación / Quiz (Agente I) — solo queries Prisma (sin lógica de negocio ni HTTP). Self-contained:
 // no importa los repos del planner; hace sus propias queries scopeadas por userId (§3.4).
 
-// Contexto de un tema para generar el quiz (scope TOPIC) y validar ownership.
-export type QuizTopicContextRow = {
-  id: string;
-  name: string;
-  description: string | null;
-  subjectId: string;
-  subject: { name: string };
-};
-
-// Contexto de una materia + sus temas (scope SUBJECT).
+// Contexto de una materia + TODOS sus temas. Único query de contexto de generación: el contrato unifica
+// el alcance en un set de temas dentro de una materia, y traer todos los temas permite validar ownership +
+// pertenencia y DERIVAR el scope (1=TOPIC, todos=SUBJECT, subconjunto=MULTI_TOPIC) en el service.
 export type QuizSubjectContextRow = {
   id: string;
   name: string;
@@ -25,21 +18,7 @@ export type QuizAttemptWithItemsRow = QuizAttempt & { items: QuizAttemptItem[] }
 
 export const quizRepository = {
   // ---- Contexto / ownership (para GENERAR) ----
-  // Tema + materia + owner (ownership por userId denormalizado, §3.4).
-  findTopicContext(topicId: string, userId: string): Promise<QuizTopicContextRow | null> {
-    return prisma.topic.findFirst({
-      where: { id: topicId, userId },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        subjectId: true,
-        subject: { select: { name: true } },
-      },
-    });
-  },
-
-  // Materia + sus temas (un solo include, sin N+1).
+  // Materia + sus temas (un solo include, sin N+1). Ownership por userId denormalizado (§3.4).
   findSubjectContext(subjectId: string, userId: string): Promise<QuizSubjectContextRow | null> {
     return prisma.subject.findFirst({
       where: { id: subjectId, userId },

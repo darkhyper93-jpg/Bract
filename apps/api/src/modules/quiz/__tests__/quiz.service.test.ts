@@ -6,7 +6,6 @@ import { AppError } from '../../../lib/errors.js';
 // Mockeamos el repo (Prisma) y la capa de IA: el service corre real, sin DB ni red.
 vi.mock('../quiz.repository.js', () => ({
   quizRepository: {
-    findTopicContext: vi.fn(),
     findSubjectContext: vi.fn(),
     createAttemptWithItems: vi.fn(),
     findAttemptOwned: vi.fn(),
@@ -57,25 +56,19 @@ beforeEach(() => {
 });
 
 describe('generate', () => {
-  it('scope TOPIC: valida ownership, llama a la IA y persiste correctIndex AUTORITATIVO; devuelve preguntas PÚBLICAS', async () => {
-    vi.mocked(quizRepository.findTopicContext).mockResolvedValue({
-      id: 't1',
-      name: 'Integrales',
-      description: 'apuntes',
-      subjectId: 's1',
-      subject: { name: 'Mate' },
-    });
-    vi.mocked(generateQuiz).mockResolvedValue([
-      {
-        topicId: 't1',
-        question: '¿Qué es una integral?',
-        options: [
-          { text: 'a', explanation: 'correcta' },
-          { text: 'b', explanation: 'mal' },
-        ],
-        correctIndex: 0,
-      },
-    ]);
+  // Materia con 3 temas — el universo para derivar el scope desde el set de topicIds.
+  const subjectCtx = {
+    id: 's1',
+    name: 'Mate',
+    topics: [
+      { id: 't1', name: 'Integrales', description: 'apuntes' },
+      { id: 't2', name: 'Derivadas', description: null },
+      { id: 't3', name: 'Límites', description: null },
+    ],
+  };
+
+  // Mock de persistencia: refleja el attempt recibido (incluye el scope/topicCount DERIVADOS).
+  const mockCreate = () =>
     vi.mocked(quizRepository.createAttemptWithItems).mockImplementation((attempt, items) =>
       Promise.resolve({
         id: 'att1',
@@ -85,6 +78,7 @@ describe('generate', () => {
         subjectId: attempt.subjectId ?? null,
         topicId: attempt.topicId ?? null,
         scopeName: attempt.scopeName,
+        topicCount: attempt.topicCount ?? 1,
         totalCount: attempt.totalCount,
         correctCount: attempt.correctCount,
         completedAt: null,
@@ -105,14 +99,32 @@ describe('generate', () => {
       }),
     );
 
-    const result = await quizService.generate('u1', { scope: QuizScope.TOPIC, topicId: 't1' });
+  const oneQuestion = (topicId: string) => [
+    {
+      topicId,
+      question: '¿Qué es una integral?',
+      options: [
+        { text: 'a', explanation: 'correcta' },
+        { text: 'b', explanation: 'mal' },
+      ],
+      correctIndex: 0,
+    },
+  ];
 
+  it('1 tema → DERIVA scope TOPIC: valida ownership, persiste correctIndex AUTORITATIVO, devuelve preguntas PÚBLICAS', async () => {
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue(subjectCtx);
+    vi.mocked(generateQuiz).mockResolvedValue(oneQuestion('t1'));
+    mockCreate();
+
+    const result = await quizService.generate('u1', { subjectId: 's1', topicIds: ['t1'] });
+
+    // A la IA viaja el label 'TOPIC' (un solo tema) + el subconjunto pedido.
     expect(generateQuiz).toHaveBeenCalledWith({
       scope: 'TOPIC',
       subjectName: 'Mate',
       topics: [{ id: 't1', name: 'Integrales', description: 'apuntes' }],
     });
-    // Se persiste el correctIndex autoritativo + opciones con explicación, sin responder.
+    // scope/scopeName/topicId/topicCount DERIVADOS por el server (no vienen del cliente).
     const [attempt, items] = vi.mocked(quizRepository.createAttemptWithItems).mock.calls[0]!;
     expect(attempt).toMatchObject({
       userId: 'u1',
@@ -120,6 +132,7 @@ describe('generate', () => {
       subjectId: 's1',
       topicId: 't1',
       scopeName: 'Integrales',
+      topicCount: 1,
       totalCount: 1,
       correctCount: 0,
     });
@@ -135,6 +148,7 @@ describe('generate', () => {
       subjectId: 's1',
       topicId: 't1',
       scopeName: 'Integrales',
+      topicCount: 1,
       totalCount: 1,
       questions: [
         { order: 0, topicId: 't1', question: '¿Qué es una integral?', options: [{ text: 'a' }, { text: 'b' }] },
@@ -145,17 +159,80 @@ describe('generate', () => {
     expect(serialized).not.toContain('explanation');
   });
 
-  it('scope TOPIC con tema ajeno/inexistente → NOT_FOUND, no llama a la IA ni persiste', async () => {
-    vi.mocked(quizRepository.findTopicContext).mockResolvedValue(null);
+  it('subconjunto de temas → DERIVA scope MULTI_TOPIC (topicId null, scopeName = materia, topicCount = N)', async () => {
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue(subjectCtx);
+    vi.mocked(generateQuiz).mockResolvedValue(oneQuestion('t2'));
+    mockCreate();
+
+    await quizService.generate('u1', { subjectId: 's1', topicIds: ['t1', 't2'] });
+
+    // A la IA: label 'SUBJECT' (varios temas) + SOLO el subconjunto elegido (no toda la materia).
+    expect(generateQuiz).toHaveBeenCalledWith({
+      scope: 'SUBJECT',
+      subjectName: 'Mate',
+      topics: [
+        { id: 't1', name: 'Integrales', description: 'apuntes' },
+        { id: 't2', name: 'Derivadas', description: null },
+      ],
+    });
+    const [attempt] = vi.mocked(quizRepository.createAttemptWithItems).mock.calls[0]!;
+    expect(attempt).toMatchObject({
+      scope: 'MULTI_TOPIC',
+      subjectId: 's1',
+      topicId: null,
+      scopeName: 'Mate',
+      topicCount: 2,
+    });
+  });
+
+  it('todos los temas de la materia → DERIVA scope SUBJECT (topicId null, scopeName = materia)', async () => {
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue(subjectCtx);
+    vi.mocked(generateQuiz).mockResolvedValue(oneQuestion('t1'));
+    mockCreate();
+
+    await quizService.generate('u1', { subjectId: 's1', topicIds: ['t1', 't2', 't3'] });
+
+    const [attempt] = vi.mocked(quizRepository.createAttemptWithItems).mock.calls[0]!;
+    expect(attempt).toMatchObject({
+      scope: 'SUBJECT',
+      subjectId: 's1',
+      topicId: null,
+      scopeName: 'Mate',
+      topicCount: 3,
+    });
+  });
+
+  it('topicIds duplicados → se deduplican (no infla topicCount ni cambia el scope derivado)', async () => {
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue(subjectCtx);
+    vi.mocked(generateQuiz).mockResolvedValue(oneQuestion('t1'));
+    mockCreate();
+
+    await quizService.generate('u1', { subjectId: 's1', topicIds: ['t1', 't1'] });
+
+    const [attempt] = vi.mocked(quizRepository.createAttemptWithItems).mock.calls[0]!;
+    expect(attempt).toMatchObject({ scope: 'TOPIC', topicId: 't1', topicCount: 1 });
+  });
+
+  it('algún tema ajeno/inexistente → NOT_FOUND, no llama a la IA ni persiste', async () => {
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue(subjectCtx);
 
     await expect(
-      quizService.generate('u1', { scope: QuizScope.TOPIC, topicId: 't1' }),
+      quizService.generate('u1', { subjectId: 's1', topicIds: ['t1', 'tX'] }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(generateQuiz).not.toHaveBeenCalled();
     expect(quizRepository.createAttemptWithItems).not.toHaveBeenCalled();
   });
 
-  it('scope SUBJECT sin temas → VALIDATION_ERROR, no llama a la IA', async () => {
+  it('materia ajena/inexistente → NOT_FOUND, no llama a la IA', async () => {
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue(null);
+
+    await expect(
+      quizService.generate('u1', { subjectId: 's1', topicIds: ['t1'] }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(generateQuiz).not.toHaveBeenCalled();
+  });
+
+  it('materia sin temas → VALIDATION_ERROR, no llama a la IA', async () => {
     vi.mocked(quizRepository.findSubjectContext).mockResolvedValue({
       id: 's1',
       name: 'Mate',
@@ -163,25 +240,19 @@ describe('generate', () => {
     });
 
     await expect(
-      quizService.generate('u1', { scope: QuizScope.SUBJECT, subjectId: 's1' }),
+      quizService.generate('u1', { subjectId: 's1', topicIds: ['t1'] }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(generateQuiz).not.toHaveBeenCalled();
   });
 
   it('si la IA falla, propaga y NO persiste el intento', async () => {
-    vi.mocked(quizRepository.findTopicContext).mockResolvedValue({
-      id: 't1',
-      name: 'Integrales',
-      description: null,
-      subjectId: 's1',
-      subject: { name: 'Mate' },
-    });
+    vi.mocked(quizRepository.findSubjectContext).mockResolvedValue(subjectCtx);
     vi.mocked(generateQuiz).mockRejectedValue(
       new AppError('AI_UNAVAILABLE', 'IA no disponible'),
     );
 
     await expect(
-      quizService.generate('u1', { scope: QuizScope.TOPIC, topicId: 't1' }),
+      quizService.generate('u1', { subjectId: 's1', topicIds: ['t1'] }),
     ).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
     expect(quizRepository.createAttemptWithItems).not.toHaveBeenCalled();
   });
@@ -277,6 +348,7 @@ describe('getAttempt', () => {
       subjectId: 's1',
       topicId: 't1',
       scopeName: 'Integrales',
+      topicCount: 1,
       totalCount: 2,
       correctCount: 1,
       completedAt: null,
