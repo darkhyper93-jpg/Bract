@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ConfidenceLevel } from '../types/quiz.types';
 
 // Evaluación / Quiz (Agente I). Schemas compartidos API↔web (fuente única de validación).
 // Generar crea el intento IN_PROGRESS (POST /quiz/attempts); responder corrige de a una pregunta en el
@@ -26,9 +27,12 @@ export const generateQuizSchema = z.object({
 
 // ---- RESPONDER 1 pregunta (POST /quiz/attempts/:id/answers) ----
 // Solo el order de la pregunta + la opción elegida. El server corrige contra el correctIndex guardado.
+// `confidence` es OPCIONAL (calibración): qué tan seguro está el alumno ANTES del reveal. El front la pide
+// pero el contrato la deja opcional (intentos sin confianza no entran al cruce de calibración).
 export const answerQuestionSchema = z.object({
   order: z.number().int().min(0),
   selectedIndex: z.number().int().min(0),
+  confidence: z.nativeEnum(ConfidenceLevel).optional(),
 });
 
 // ---- Listado e id de intento ----

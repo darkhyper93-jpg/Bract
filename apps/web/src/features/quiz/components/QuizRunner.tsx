@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AxiosError } from 'axios';
-import { QuizAttemptStatus } from '@bract/shared';
+import { ConfidenceLevel, QuizAttemptStatus } from '@bract/shared';
 import type { AnswerReveal, PublicQuizQuestion, QuizAttemptWithItems } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -11,6 +11,15 @@ import { cn } from '../../../utils/cn';
 import { useAnswerQuestion, useQuizAttempt } from '../hooks/useQuiz';
 import { QuestionReview } from './QuestionReview';
 import type { AnsweredQuestion, QuizRunResult } from '../types';
+
+// Orden de los chips de confianza (calibración): de menos a más seguro. Las etiquetas vienen de i18n
+// con la clave `quiz.runner.confidence.<NIVEL>` (NIVEL = valor del enum).
+const CONFIDENCE_LEVELS: readonly ConfidenceLevel[] = [
+  ConfidenceLevel.GUESS,
+  ConfidenceLevel.LOW,
+  ConfidenceLevel.MEDIUM,
+  ConfidenceLevel.HIGH,
+];
 
 function apiErrorCode(err: unknown): string | undefined {
   if (err instanceof AxiosError) {
@@ -158,6 +167,8 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
   const [index, setIndex] = useState(startIndex < 0 ? questions.length - 1 : startIndex);
   const [answers, setAnswers] = useState<AnsweredQuestion[]>(seed.answers);
   const [selected, setSelected] = useState<number | null>(null);
+  // Calibración: el alumno declara su confianza ANTES del reveal (se exige para responder).
+  const [confidence, setConfidence] = useState<ConfidenceLevel | null>(null);
   const [reveal, setReveal] = useState<AnswerReveal | null>(null);
 
   const finish = (final: AnsweredQuestion[]) =>
@@ -188,9 +199,9 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
   if (!question) return null;
 
   const submitAnswer = () => {
-    if (selected === null) return;
+    if (selected === null || confidence === null) return;
     answerMutation.mutate(
-      { order: question.order, selectedIndex: selected },
+      { order: question.order, selectedIndex: selected, confidence },
       {
         onSuccess: (r) => {
           setReveal(r);
@@ -207,6 +218,7 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
     }
     setIndex((i) => i + 1);
     setSelected(null);
+    setConfidence(null);
     setReveal(null);
   };
 
@@ -269,6 +281,28 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
               </li>
             ))}
           </ul>
+
+          {/* Calibración: ¿qué tan seguro estás? — se exige antes de responder. */}
+          <div className="mt-1 flex flex-col gap-2 border-t border-border-subtle pt-3">
+            <p className="text-xs text-text-tertiary">{t('quiz.runner.confidenceQuestion')}</p>
+            <div className="flex flex-wrap gap-2">
+              {CONFIDENCE_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setConfidence(level)}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs transition-colors duration-[150ms]',
+                    confidence === level
+                      ? 'border-brand-primary bg-brand-muted text-brand-primary'
+                      : 'border-border-default text-text-secondary hover:border-brand-primary/50 hover:text-text-primary',
+                  )}
+                >
+                  {t(`quiz.runner.confidence.${level}`)}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -287,7 +321,7 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
           <Button
             type="button"
             onClick={submitAnswer}
-            disabled={selected === null}
+            disabled={selected === null || confidence === null}
             loading={answerMutation.isPending}
           >
             {t('quiz.runner.answer')}

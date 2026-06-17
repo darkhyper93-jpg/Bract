@@ -1,9 +1,11 @@
+import { ConfidenceLevel } from '@bract/shared';
 import type { ProgressOverview, SubjectProgress, TopicProgress, WeakTopic } from '@bract/shared';
 import { progressRepository } from './progress.repository.js';
 import { preferencesService } from '../preferences/preferences.service.js';
 import {
   computeTopicWeakness,
   resolvePreferences,
+  summarizeCalibration,
   type ResolvedPreferences,
   type TopicSignals,
   type WeaknessResult,
@@ -85,7 +87,11 @@ function avgOrNull(values: number[]): number | null {
 
 export const progressService = {
   async getOverview(userId: string): Promise<ProgressOverview> {
-    const computed = await computeAll(userId);
+    // computeAll y la calibración son independientes → en paralelo (cada uno con sus propias queries).
+    const [computed, calibrationRows] = await Promise.all([
+      computeAll(userId),
+      progressRepository.getCalibrationStats(userId),
+    ]);
     const bySubject = new Map<string, TopicComputed[]>();
     for (const c of computed) {
       const arr = bySubject.get(c.subjectId) ?? [];
@@ -114,6 +120,10 @@ export const progressService = {
         avgAccuracy: avgOrNull(withData.filter((t) => t.accuracy !== null).map((t) => t.accuracy!)),
         weakestTopicId: weakest?.topicId ?? null,
       },
+      // Cast enum Prisma→shared en el boundary del service (mismo patrón que el resto de los mappers).
+      calibration: summarizeCalibration(
+        calibrationRows.map((r) => ({ ...r, confidence: r.confidence as ConfidenceLevel })),
+      ),
     };
   },
 

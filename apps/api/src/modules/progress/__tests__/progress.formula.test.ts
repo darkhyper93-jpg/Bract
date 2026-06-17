@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { RemediationIntensity } from '@bract/shared';
+import { ConfidenceLevel, RemediationIntensity } from '@bract/shared';
 import {
   computeTopicWeakness,
   resolvePreferences,
+  summarizeCalibration,
   INTENSITY_ALPHA,
   MIN_ANSWERS,
   type TopicSignals,
@@ -98,5 +99,49 @@ describe('progress.formula — computeTopicWeakness', () => {
   it('INTENSITY_ALPHA: OFF=0, HIGH=1', () => {
     expect(INTENSITY_ALPHA[RemediationIntensity.OFF]).toBe(0);
     expect(INTENSITY_ALPHA[RemediationIntensity.HIGH]).toBe(1);
+  });
+});
+
+describe('progress.formula — summarizeCalibration', () => {
+  it('sin filas ⇒ hasData=false, totales en 0', () => {
+    const c = summarizeCalibration([]);
+    expect(c.hasData).toBe(false);
+    expect(c.totalAnswered).toBe(0);
+    expect(c.buckets).toHaveLength(0);
+    expect(c.overconfidentCount).toBe(0);
+    expect(c.underconfidentCount).toBe(0);
+  });
+
+  it('ordena buckets GUESS→HIGH y omite niveles sin datos', () => {
+    const c = summarizeCalibration([
+      { confidence: ConfidenceLevel.HIGH, answered: 4, correct: 1 },
+      { confidence: ConfidenceLevel.GUESS, answered: 2, correct: 1 },
+    ]);
+    expect(c.buckets.map((b) => b.confidence)).toEqual([
+      ConfidenceLevel.GUESS,
+      ConfidenceLevel.HIGH,
+    ]);
+    expect(c.totalAnswered).toBe(6);
+  });
+
+  it('accuracy por bucket = correct/answered', () => {
+    const c = summarizeCalibration([{ confidence: ConfidenceLevel.MEDIUM, answered: 4, correct: 3 }]);
+    expect(c.buckets[0]!.accuracy).toBeCloseTo(0.75, 5);
+  });
+
+  it('sobreconfianza = HIGH incorrectas; infraconfianza = GUESS correctas', () => {
+    const c = summarizeCalibration([
+      { confidence: ConfidenceLevel.HIGH, answered: 5, correct: 2 }, // 3 incorrectas con alta confianza
+      { confidence: ConfidenceLevel.GUESS, answered: 4, correct: 3 }, // 3 aciertos adivinando
+    ]);
+    expect(c.overconfidentCount).toBe(3);
+    expect(c.underconfidentCount).toBe(3);
+    expect(c.hasData).toBe(true);
+  });
+
+  it('un nivel con answered=0 no genera bucket', () => {
+    const c = summarizeCalibration([{ confidence: ConfidenceLevel.LOW, answered: 0, correct: 0 }]);
+    expect(c.buckets).toHaveLength(0);
+    expect(c.hasData).toBe(false);
   });
 });

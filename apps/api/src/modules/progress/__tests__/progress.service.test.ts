@@ -7,6 +7,7 @@ vi.mock('../progress.repository.js', () => ({
     getSubjectTree: vi.fn(),
     getQuizStatsByTopic: vi.fn(),
     getSrsStatsByTopic: vi.fn(),
+    getCalibrationStats: vi.fn(),
   },
 }));
 
@@ -33,6 +34,7 @@ beforeEach(() => {
   vi.mocked(progressRepository.getSrsStatsByTopic).mockResolvedValue([]);
   vi.mocked(progressRepository.getQuizStatsByTopic).mockResolvedValue([]);
   vi.mocked(progressRepository.getSubjectTree).mockResolvedValue([]);
+  vi.mocked(progressRepository.getCalibrationStats).mockResolvedValue([]);
   vi.mocked(preferencesService.get).mockResolvedValue(DEFAULT_PREFS);
 });
 

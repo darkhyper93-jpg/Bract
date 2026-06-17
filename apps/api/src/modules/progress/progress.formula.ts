@@ -1,5 +1,5 @@
-import { RemediationIntensity } from '@bract/shared';
-import type { UserStudyPreferences } from '@bract/shared';
+import { ConfidenceLevel, RemediationIntensity } from '@bract/shared';
+import type { CalibrationBucket, CalibrationSummary, UserStudyPreferences } from '@bract/shared';
 import { DEFAULT_REMEDIATION_INTENSITY, DEFAULT_WEIGHT_QUIZ, DEFAULT_WEIGHT_SRS } from '@bract/shared';
 
 // Fórmula de debilidad por tema (README §3.6). PURA: sin Prisma ni HTTP → testeable en aislamiento y
@@ -106,5 +106,52 @@ export function computeTopicWeakness(s: TopicSignals, prefs: ResolvedPreferences
     answered: s.answered,
     lowConfidence: hasQuiz && s.answered < MIN_ANSWERS,
     hasData: true,
+  };
+}
+
+// ---- Calibración de confianza (Calidad de aprendizaje, fase 1) ----
+// PURA: agrega los conteos por nivel (señal del repo) al resumen del contrato. Cruza confianza×acierto y
+// destaca los dos cuadrantes de metacognición: sobreconfianza (HIGH + incorrecta) e infraconfianza (GUESS
+// + correcta). Niveles sin datos se omiten; sin ningún dato ⇒ hasData=false (EmptyState en el front).
+export interface CalibrationSignal {
+  confidence: ConfidenceLevel;
+  answered: number;
+  correct: number;
+}
+
+const CONFIDENCE_ORDER: readonly ConfidenceLevel[] = [
+  ConfidenceLevel.GUESS,
+  ConfidenceLevel.LOW,
+  ConfidenceLevel.MEDIUM,
+  ConfidenceLevel.HIGH,
+];
+
+export function summarizeCalibration(rows: CalibrationSignal[]): CalibrationSummary {
+  const byLevel = new Map(rows.map((r) => [r.confidence, r]));
+  const buckets: CalibrationBucket[] = [];
+  let totalAnswered = 0;
+  let overconfidentCount = 0;
+  let underconfidentCount = 0;
+
+  for (const level of CONFIDENCE_ORDER) {
+    const r = byLevel.get(level);
+    if (!r || r.answered === 0) continue;
+    buckets.push({
+      confidence: level,
+      answered: r.answered,
+      correct: r.correct,
+      accuracy: r.correct / r.answered,
+    });
+    totalAnswered += r.answered;
+    if (level === ConfidenceLevel.HIGH) overconfidentCount += r.answered - r.correct;
+    if (level === ConfidenceLevel.GUESS) underconfidentCount += r.correct;
+  }
+
+  return {
+    buckets,
+    totalAnswered,
+    overconfidentCount,
+    underconfidentCount,
+    hasData: totalAnswered > 0,
   };
 }

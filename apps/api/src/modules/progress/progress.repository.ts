@@ -1,4 +1,5 @@
 import { prisma } from '../../prisma/client.js';
+import type { ConfidenceLevel } from '@prisma/client';
 
 // Repositorio de progreso (I-2). SOLO Prisma, sin lógica de negocio. Agrega con groupBy sobre los índices
 // existentes (§3.5: [userId, topicId, isCorrect]; flashcards: [userId, dueDate]) — NO trae todo a memoria.
@@ -21,6 +22,12 @@ export interface SubjectTreeRow {
   id: string;
   name: string;
   topics: { id: string; name: string }[];
+}
+
+export interface CalibrationStatRow {
+  confidence: ConfidenceLevel;
+  answered: number;
+  correct: number;
 }
 
 export const progressRepository = {
@@ -84,5 +91,28 @@ export const progressRepository = {
       dueCards: dueMap.get(t.topicId) ?? 0,
       avgEase: t._avg.ease,
     }));
+  },
+
+  // Calibración: confianza declarada × acierto. groupBy [confidence, isCorrect] sobre el índice
+  // [userId, confidence]; solo ítems contestados (selectedIndex != null) y con confianza declarada.
+  // Se colapsa a {answered, correct} por nivel en una sola pasada (igual que getQuizStatsByTopic).
+  async getCalibrationStats(userId: string): Promise<CalibrationStatRow[]> {
+    const rows = await prisma.quizAttemptItem.groupBy({
+      by: ['confidence', 'isCorrect'],
+      where: { userId, selectedIndex: { not: null }, confidence: { not: null } },
+      _count: true,
+      orderBy: { confidence: 'asc' },
+    });
+
+    const map = new Map<ConfidenceLevel, { answered: number; correct: number }>();
+    for (const r of rows) {
+      const confidence = r.confidence as ConfidenceLevel; // confidence != null por el where
+      const count = r._count as number; // Prisma tipa _count como unión; en runtime es number
+      const acc = map.get(confidence) ?? { answered: 0, correct: 0 };
+      acc.answered += count;
+      if (r.isCorrect) acc.correct += count;
+      map.set(confidence, acc);
+    }
+    return [...map.entries()].map(([confidence, v]) => ({ confidence, ...v }));
   },
 };

@@ -5,6 +5,7 @@ import { EmptyState } from '../../../components/ui/EmptyState';
 import { SubjectProgressCard } from './SubjectProgressCard';
 import { WeakTopicsList } from './WeakTopicsList';
 import { PreferencesPanel } from './PreferencesPanel';
+import { CalibrationCard } from './CalibrationCard';
 
 // Vista de primera clase /progress. 4 estados: loading · error · empty · success.
 export default function ProgressPage() {
@@ -67,6 +68,7 @@ export default function ProgressPage() {
         </div>
         <div className="space-y-4">
           <PreferencesPanel />
+          {data.calibration.hasData && <CalibrationCard calibration={data.calibration} />}
           {weak.isSuccess && weak.data.length > 0 && <WeakTopicsList topics={weak.data} />}
         </div>
       </div>

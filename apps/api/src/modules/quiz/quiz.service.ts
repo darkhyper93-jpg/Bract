@@ -1,9 +1,10 @@
 import type {
+  ConfidenceLevel as PrismaConfidenceLevel,
   Prisma,
   QuizAttempt as PrismaQuizAttempt,
   QuizAttemptItem as PrismaQuizAttemptItem,
 } from '@prisma/client';
-import { QuizScope, QuizAttemptStatus } from '@bract/shared';
+import { QuizScope, QuizAttemptStatus, ConfidenceLevel } from '@bract/shared';
 import type {
   AnswerQuestionInput,
   AnswerReveal,
@@ -90,16 +91,18 @@ function toDetailItem(it: PrismaQuizAttemptItem): QuizAttemptItem {
       correctIndex: it.correctIndex,
       selectedIndex: it.selectedIndex,
       isCorrect: it.isCorrect,
+      confidence: it.confidence as ConfidenceLevel | null,
     };
   }
 
-  // Sin contestar: vista PÚBLICA (sin correctIndex ni explicación).
+  // Sin contestar: vista PÚBLICA (sin correctIndex ni explicación). confidence solo existe al responder.
   return {
     ...base,
     options: optionsOf(it).map((o) => ({ text: o.text })),
     correctIndex: null,
     selectedIndex: null,
     isCorrect: false,
+    confidence: null,
   };
 }
 
@@ -236,6 +239,11 @@ export const quizService = {
       input.selectedIndex,
       isCorrect,
       new Date(),
+      // calibración opcional: solo se persiste si el alumno la declaró. Cast enum shared→Prisma
+      // (mismatch nominal de TS; mismo patrón que scope/status en este archivo).
+      input.confidence === undefined
+        ? undefined
+        : (input.confidence as PrismaConfidenceLevel),
     );
     if (!applied) throw new AppError('CONFLICT', QUESTION_ALREADY_ANSWERED);
 

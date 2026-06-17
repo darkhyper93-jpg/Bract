@@ -2,6 +2,8 @@
 // El progreso/debilidad es DERIVADO (on-the-fly): estos tipos describen la salida del motor,
 // no entidades persistidas. El único modelo persistido nuevo es UserStudyPreferences.
 
+import type { ConfidenceLevel } from './quiz.types';
+
 // Espeja el enum de Prisma RemediationIntensity. Zod lo consume con z.nativeEnum.
 export enum RemediationIntensity {
   OFF = 'OFF',
@@ -30,6 +32,23 @@ export interface SubjectProgress {
   topics: TopicProgress[];
 }
 
+// Calibración de confianza (Calidad de aprendizaje, fase 1). Cruza la confianza declarada al responder
+// contra el acierto real. Derivada on-the-fly (no se persiste agregado), igual que el resto del progreso.
+export interface CalibrationBucket {
+  confidence: ConfidenceLevel;
+  answered: number; // ítems contestados con esta confianza
+  correct: number;
+  accuracy: number | null; // correct/answered; null si answered=0
+}
+
+export interface CalibrationSummary {
+  buckets: CalibrationBucket[]; // un bucket por nivel CON datos, en orden GUESS→HIGH
+  totalAnswered: number; // ítems contestados con confianza declarada
+  overconfidentCount: number; // HIGH + incorrecta → el cuadrante peligroso (creés que sabés y no)
+  underconfidentCount: number; // GUESS + correcta → sabías más de lo que creías
+  hasData: boolean; // false ⇒ aún no hay respuestas con confianza (EmptyState)
+}
+
 // Respuesta de GET /progress/overview.
 export interface ProgressOverview {
   subjects: SubjectProgress[];
@@ -38,6 +57,7 @@ export interface ProgressOverview {
     avgAccuracy: number | null;
     weakestTopicId: string | null;
   };
+  calibration: CalibrationSummary;
 }
 
 // Item de GET /progress/weak-topics (solo temas con datos, ordenados por weakness desc).

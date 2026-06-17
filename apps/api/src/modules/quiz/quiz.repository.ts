@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client.js';
 import { QuizAttemptStatus } from '@prisma/client';
-import type { Prisma, QuizAttempt, QuizAttemptItem } from '@prisma/client';
+import type { ConfidenceLevel, Prisma, QuizAttempt, QuizAttemptItem } from '@prisma/client';
 
 // Evaluación / Quiz (Agente I) — solo queries Prisma (sin lógica de negocio ni HTTP). Self-contained:
 // no importa los repos del planner; hace sus propias queries scopeadas por userId (§3.4).
@@ -67,11 +67,13 @@ export const quizRepository = {
     selectedIndex: number,
     isCorrect: boolean,
     now: Date,
+    confidence?: ConfidenceLevel,
   ): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
       const res = await tx.quizAttemptItem.updateMany({
         where: { id: itemId, selectedIndex: null },
-        data: { selectedIndex, isCorrect },
+        // confidence solo se persiste si el alumno la declaró (calibración opcional).
+        data: { selectedIndex, isCorrect, ...(confidence !== undefined ? { confidence } : {}) },
       });
       if (res.count === 0) return false; // ya respondida (carrera) → no aplica, no recalcula
       const correctCount = await tx.quizAttemptItem.count({

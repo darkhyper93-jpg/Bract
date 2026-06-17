@@ -415,12 +415,16 @@ model QuizAttemptItem {
   correctIndex  Int // AUTORITATIVO en el server; nunca se envía antes de responder
   selectedIndex Int? // null = sin responder (lock anti-trampa: no se re-responde)
   isCorrect     Boolean     @default(false) // lo decide el server al comparar contra correctIndex
+  // Calibración (Calidad de aprendizaje, fase 1): confianza declarada por el alumno al responder.
+  // null = sin responder o no declarada → no entra al cruce confianza×acierto.
+  confidence    ConfidenceLevel?
   createdAt     DateTime    @default(now())
 
   @@index([attemptId])
   @@index([attemptId, order]) // buscar la pregunta a responder
   @@index([userId, topicId]) // I-2: % de acierto por tema, sin join
   @@index([userId, topicId, isCorrect])
+  @@index([userId, confidence]) // calibración: groupBy confianza×acierto del usuario, sin join
   @@map("quiz_attempt_items")
 }
 
@@ -433,6 +437,13 @@ enum QuizScope {
 enum QuizAttemptStatus {
   IN_PROGRESS
   COMPLETED
+}
+
+enum ConfidenceLevel {
+  GUESS // adiviné
+  LOW
+  MEDIUM
+  HIGH
 }
 
 // ==========================================

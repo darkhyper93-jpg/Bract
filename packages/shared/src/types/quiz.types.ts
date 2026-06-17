@@ -19,6 +19,16 @@ export enum QuizAttemptStatus {
   COMPLETED = 'COMPLETED',
 }
 
+// Calibración de confianza (Calidad de aprendizaje, fase 1). Antes de revelar, el alumno declara qué tan
+// seguro está; el cruce confianza vs acierto detecta la sobreconfianza (HIGH + incorrecta). Espeja el enum
+// de Prisma → Zod lo consume con z.nativeEnum. Es OPCIONAL al responder (null = no declarada).
+export enum ConfidenceLevel {
+  GUESS = 'GUESS', // adiviné
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+}
+
 // Opción COMPLETA (texto + explicación). Solo se expone tras responder (reveal) o al revisar el detalle.
 export interface QuizOption {
   text: string;
@@ -95,6 +105,8 @@ export interface QuizAttemptItem {
   correctIndex: number | null;
   selectedIndex: number | null; // null = sin responder
   isCorrect: boolean; // lo decide el server al comparar contra correctIndex
+  // Confianza declarada por el alumno al responder (calibración). null = sin responder o no declarada.
+  confidence: ConfidenceLevel | null;
   createdAt: string;
 }
 
