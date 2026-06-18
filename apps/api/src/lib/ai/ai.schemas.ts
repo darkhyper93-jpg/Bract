@@ -92,6 +92,9 @@ export const flashcardsResponseSchema: Schema = {
 const extractedTopicSchema = z.object({
   name: z.string().min(1),
   difficulty: z.string().min(1),
+  // Grounding: resumen fiel del material sobre ESTE tema (opcional; la IA puede omitirlo si el texto
+  // casi no lo cubre). Se trimea/capa en código (dedupeAndCapTopics). NO confiamos en su largo a ciegas.
+  sourceText: z.string().optional(),
 });
 
 export const topicsOutputSchema = z.object({
@@ -110,6 +113,9 @@ export const topicsResponseSchema: Schema = {
         properties: {
           name: { type: Type.STRING },
           difficulty: { type: Type.STRING },
+          // Grounding (opcional, NO en `required`): excerpt fiel del material por tema. La IA puede
+          // omitirlo cuando el texto casi no cubre ese tema → el tema queda sin material (genera como hoy).
+          sourceText: { type: Type.STRING },
         },
         required: ['name', 'difficulty'],
       },

@@ -11,7 +11,8 @@ import type { ConfidenceLevel, Prisma, QuizAttempt, QuizAttemptItem } from '@pri
 export type QuizSubjectContextRow = {
   id: string;
   name: string;
-  topics: { id: string; name: string; description: string | null }[];
+  // sourceText: grounding por tema (NULL ⇒ ese tema genera como hoy). Ver lib/ai/buildQuizUserPrompt.
+  topics: { id: string; name: string; description: string | null; sourceText: string | null }[];
 };
 
 export type QuizAttemptWithItemsRow = QuizAttempt & { items: QuizAttemptItem[] };
@@ -26,7 +27,7 @@ export const quizRepository = {
         id: true,
         name: true,
         topics: {
-          select: { id: true, name: true, description: true },
+          select: { id: true, name: true, description: true, sourceText: true },
           orderBy: { createdAt: 'asc' },
         },
       },

@@ -1,5 +1,5 @@
 import type { Prisma, Subject as PrismaSubject, Topic as PrismaTopic } from '@prisma/client';
-import { ImportMode, MAX_IMPORT_FILE_TEXT_LENGTH } from '@bract/shared';
+import { ImportMode, MAX_IMPORT_FILE_TEXT_LENGTH, MAX_TOPIC_SOURCE_TEXT_LENGTH } from '@bract/shared';
 import type {
   CommitImportInput,
   ExtractTopicsInput,
@@ -118,11 +118,15 @@ export const importService = {
         continue;
       }
       seen.add(key);
+      // Grounding: persistimos el excerpt fiel del material (trim + cap defensivo; el schema Zod ya lo
+      // valida ≤MAX_TOPIC_SOURCE_TEXT_LENGTH). Vacío/ausente ⇒ columna NULL → el tema genera como hoy.
+      const sourceText = topic.sourceText?.trim().slice(0, MAX_TOPIC_SOURCE_TEXT_LENGTH);
       rows.push({
         subjectId: subject.id,
         userId, // denormalizado al crear; nunca se transfiere (§3.4)
         name,
         difficulty: topic.difficulty as PrismaTopic['difficulty'],
+        ...(sourceText ? { sourceText } : {}),
       });
     }
 

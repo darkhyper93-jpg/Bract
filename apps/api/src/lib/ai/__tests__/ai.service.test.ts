@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GoogleGenAI } from '@google/genai';
-import { TopicDifficulty, TopicStatus } from '@bract/shared';
+import { TopicDifficulty, TopicStatus, MAX_TOPIC_SOURCE_TEXT_LENGTH } from '@bract/shared';
 import { AppError } from '../../errors.js';
 
 // Mockeamos la capa de cliente para controlar isAIConfigured + el cliente Gemini,
@@ -188,6 +188,35 @@ describe('extractTopics', () => {
 
     expect(topics).toHaveLength(3);
   });
+
+  it('grounding: arrastra sourceText trimeado y capado; omite el vacío y el ausente', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const longExcerpt = 'x'.repeat(MAX_TOPIC_SOURCE_TEXT_LENGTH + 200);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        topics: [
+          { name: 'Integrales', difficulty: 'HARD', sourceText: '  resumen fiel  ' }, // se trimea
+          { name: 'Derivadas', difficulty: 'MEDIUM', sourceText: longExcerpt }, // se capa
+          { name: 'Límites', difficulty: 'EASY', sourceText: '   ' }, // vacío → se omite
+          { name: 'Series', difficulty: 'EASY' }, // sin sourceText → omitido
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const topics = await extractTopics({ text: 'apuntes' });
+
+    expect(topics).toEqual([
+      { name: 'Integrales', difficulty: TopicDifficulty.HARD, sourceText: 'resumen fiel' },
+      {
+        name: 'Derivadas',
+        difficulty: TopicDifficulty.MEDIUM,
+        sourceText: 'x'.repeat(MAX_TOPIC_SOURCE_TEXT_LENGTH),
+      },
+      { name: 'Límites', difficulty: TopicDifficulty.EASY }, // sin sourceText
+      { name: 'Series', difficulty: TopicDifficulty.EASY },
+    ]);
+  });
 });
 
 describe('generateQuiz', () => {
@@ -264,6 +293,66 @@ describe('generateQuiz', () => {
     vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     await expect(generateQuiz(quizInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+  });
+});
+
+describe('grounding inyectado en el prompt de generación', () => {
+  it('flashcards: inyecta "Material del tema" si hay sourceText; lo omite si es null', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({ cards: [{ question: 'Q', answer: 'A' }] }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    await generateFlashcards({
+      topic: { id: 't1', name: 'Integrales', sourceText: 'La integral es el área bajo la curva.' },
+      subjectName: 'Mate',
+    });
+    const withMaterial = generateContent.mock.calls[0]![0].contents as string;
+    expect(withMaterial).toContain('Material del tema');
+    expect(withMaterial).toContain('área bajo la curva');
+
+    generateContent.mockClear();
+    await generateFlashcards({
+      topic: { id: 't1', name: 'Integrales', sourceText: null }, // sin material → como hoy
+      subjectName: 'Mate',
+    });
+    const noMaterial = generateContent.mock.calls[0]![0].contents as string;
+    expect(noMaterial).not.toContain('Material del tema');
+  });
+
+  it('quiz multi-tema: el total de grounding inyectado respeta el tope (no manda N×1500)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          {
+            topicId: 'm0',
+            question: 'P',
+            options: [
+              { text: 'a', explanation: 'x' },
+              { text: 'b', explanation: 'y' },
+            ],
+            correctIndex: 0,
+          },
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    // 20 temas, cada uno con un excerpt de 1500 'Ω' → SIN tope total serían 20×1500 = 30.000 chars.
+    // Usamos 'Ω' (ausente del texto fijo del prompt) para contar SOLO los chars de grounding.
+    const topics = Array.from({ length: 20 }, (_, i) => ({
+      id: `m${i}`,
+      name: `Tema ${i}`,
+      sourceText: 'Ω'.repeat(1500),
+    }));
+    await generateQuiz({ scope: 'SUBJECT', subjectName: 'Mate', topics });
+
+    const prompt = generateContent.mock.calls[0]![0].contents as string;
+    const groundingChars = (prompt.match(/Ω/g) ?? []).length;
+    expect(groundingChars).toBeGreaterThan(0); // sí ancla en el material
+    expect(groundingChars).toBeLessThanOrEqual(8000); // pero topeado al total (GROUNDING_CHARS_TOTAL)
   });
 });
 

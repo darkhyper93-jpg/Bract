@@ -72,7 +72,8 @@ async function generateForTopic(
 ): Promise<Flashcard[]> {
   const existingRows = await flashcardRepository.findManyByTopicPaged(userId, topic.id, 1, 1000);
   const generated = await generateFlashcards({
-    topic: { id: topic.id, name: topic.name, description: topic.description },
+    // sourceText: grounding del material importado (NULL ⇒ generación como hoy).
+    topic: { id: topic.id, name: topic.name, description: topic.description, sourceText: topic.sourceText },
     subjectName: topic.subject.name,
     ...(count !== undefined ? { count } : {}),
     existing: existingRows.map((c) => ({ question: c.question })),

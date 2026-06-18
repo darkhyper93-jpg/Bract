@@ -10,6 +10,27 @@ import type {
 // Prompts por feature. La IA AFINA una distribución base calculada en código (Apéndice C):
 // "la distribución base puede calcularse en código y usar la IA para afinar/ordenar".
 
+// ---- Topes de grounding inyectado (Calidad de aprendizaje §2) -------------------------------------
+// El excerpt (`sourceText`) ancla quiz/flashcards al material real del alumno. Dos topes:
+// - POR TEMA: cada excerpt se recorta a este largo (espeja el cap de almacenamiento de shared).
+// - TOTAL: en multi-tema (quiz de materia con N temas) el grounding inyectado NO puede superar este
+//   total, o un quiz de 50 temas × 1500 chars revienta el budget de tokens del free tier. Se reparte
+//   el presupuesto entre los temas QUE TIENEN material: perTema = min(POR_TEMA, floor(TOTAL / conMaterial)).
+const GROUNDING_CHARS_PER_TOPIC = 1500;
+const GROUNDING_CHARS_TOTAL = 8000;
+
+// Largo de excerpt asignado a cada tema según cuántos temas traen material (≥1). Garantiza
+// conMaterial × perTema ≤ GROUNDING_CHARS_TOTAL. Determinístico, sin estado.
+function groundingCharsPerTopic(topicsWithMaterial: number): number {
+  if (topicsWithMaterial <= 1) return GROUNDING_CHARS_PER_TOPIC;
+  return Math.min(GROUNDING_CHARS_PER_TOPIC, Math.floor(GROUNDING_CHARS_TOTAL / topicsWithMaterial));
+}
+
+// Normaliza el excerpt de un tema: trim + recorte al presupuesto. '' si no hay material (omitir).
+function groundingExcerpt(sourceText: string | null | undefined, perTopic: number): string {
+  return (sourceText ?? '').trim().slice(0, perTopic);
+}
+
 export const PLAN_SYSTEM = [
   'Sos un planificador de estudio para una app de estudiantes.',
   'Recibís una distribución base ya calculada (por día, con temas y minutos) y la MEJORÁS:',
@@ -52,17 +73,24 @@ export const FLASHCARDS_SYSTEM = [
   'Sos un tutor experto que crea flashcards de estudio (pregunta al frente, respuesta atrás).',
   'Cubrí los conceptos clave del tema, con tarjetas claras, concretas y autocontenidas.',
   'Generá COMO MÁXIMO la cantidad pedida. No repitas preguntas ya existentes.',
+  // GROUNDING: si viene "Material del tema", es el material real del alumno → es la fuente de verdad.
+  'Si se incluye "Material del tema", basá las tarjetas ESTRICTAMENTE en ese material: no introduzcas hechos, datos ni definiciones que no estén ahí. Si NO se incluye material, usá tu conocimiento general del tema.',
   'Respondé en el mismo idioma del tema.',
   'Devolvé las tarjetas en el formato estructurado pedido, sin texto adicional.',
 ].join('\n');
 
 export function buildFlashcardsUserPrompt(input: GenerateFlashcardsInput, cap: number): string {
   const existing = (input.existing ?? []).map((e) => e.question);
+  // Flashcards = siempre 1 tema → presupuesto = tope por-tema completo. Omitido si no hay material.
+  const material = groundingExcerpt(input.topic.sourceText, GROUNDING_CHARS_PER_TOPIC);
   return [
     `Cantidad máxima: ${cap}.`,
     `Materia: ${input.subjectName}`,
     `Tema: ${input.topic.name}`,
     `Contexto del tema: ${input.topic.description ?? '—'}`,
+    ...(material
+      ? [`Material del tema (extracto del material del alumno — basá las tarjetas EN ESTO): ${material}`]
+      : []),
     `Preguntas ya existentes (no repetir): ${JSON.stringify(existing)}`,
   ].join('\n');
 }
@@ -71,13 +99,19 @@ export function buildFlashcardsUserPrompt(input: GenerateFlashcardsInput, cap: n
 // NUNCA interpreta intención de borrado (eso lo decide el MODE de la UI en el commit).
 export const EXTRACT_TOPICS_SYSTEM = [
   'Sos un asistente que extrae el temario de un texto de estudio (apuntes, índice, programa, lista).',
-  'Tu única tarea es identificar los TEMAS y clasificar la dificultad de cada uno.',
+  'Para cada tema identificás: su título, su dificultad y un resumen fiel del material sobre ese tema.',
   'REGLAS DURAS (no las violes):',
   '- Devolvé cada tema como un título corto y autocontenido (no oraciones largas ni párrafos).',
   '- No inventes temas que no estén implícitos en el texto. No agregues relleno.',
   '- No repitas temas (deduplicá los equivalentes).',
   '- Clasificá la dificultad de cada tema como exactamente uno de: EASY, MEDIUM, HARD.',
   '- Si no podés inferir la dificultad, usá MEDIUM.',
+  // GROUNDING — el campo `sourceText` es el ancla anti-alucinación de quiz/flashcards: DEBE salir
+  // 100% del texto del alumno, jamás de conocimiento externo.
+  '- Para cada tema generá "sourceText": un resumen FIEL y CONCISO (2 a 5 oraciones) de lo que el texto dice sobre ESE tema.',
+  '- "sourceText" se construye ESTRICTAMENTE a partir del texto provisto: condensá o citá lo que el texto dice; PROHIBIDO agregar definiciones, datos, ejemplos o afirmaciones que no estén explícitas en el texto.',
+  '- Si el texto casi no dice nada sobre un tema, dejá "sourceText" corto o vacío. NUNCA lo rellenes con conocimiento propio.',
+  '- Mantené "sourceText" breve (máximo ~1500 caracteres).',
   '- Respondé en el mismo idioma del texto.',
   'Devolvé los temas en el formato estructurado pedido, sin texto adicional.',
 ].join('\n');
@@ -103,6 +137,8 @@ export const QUIZ_SYSTEM = [
   '- TODA opción lleva una "explanation": en la correcta, por qué es correcta; en cada distractora, por qué está mal.',
   '- Asigná a cada pregunta el "topicId" del tema (de los provistos) al que pertenece su subconcepto.',
   '- Usá ÚNICAMENTE los topicId presentes en la entrada. No inventes temas.',
+  // GROUNDING: el campo "material" de un tema es el material real del alumno → fuente de verdad de ese tema.
+  '- Si un tema trae "material", basá SUS preguntas ESTRICTAMENTE en ese material: no introduzcas hechos ni datos que no estén ahí. Para los temas SIN "material", usá tu conocimiento general del tema.',
   '- Generá COMO MÁXIMO la cantidad de preguntas pedida. Preguntas claras, concretas y autocontenidas.',
   '- Respondé en el mismo idioma del tema/materia.',
   'Devolvé el quiz en el formato estructurado pedido, sin texto adicional.',
@@ -110,16 +146,26 @@ export const QUIZ_SYSTEM = [
 
 export function buildQuizUserPrompt(input: GenerateQuizInput, cap: number): string {
   const scopeLabel = input.scope === 'TOPIC' ? 'un tema' : 'una materia (varios temas)';
+  // Tope TOTAL de grounding: repartimos el presupuesto entre los temas que tienen material, así el
+  // total inyectado nunca supera GROUNDING_CHARS_TOTAL aunque la materia tenga decenas de temas.
+  const withMaterial = input.topics.filter(
+    (t) => (t.sourceText ?? '').trim().length > 0,
+  ).length;
+  const perTopic = groundingCharsPerTopic(withMaterial);
   return [
     `Cantidad máxima de preguntas: ${cap}.`,
     `Alcance del quiz: ${scopeLabel}.`,
     `Materia: ${input.subjectName}`,
-    `Temas a evaluar (usá su id como topicId): ${JSON.stringify(
-      input.topics.map((t) => ({
-        topicId: t.id,
-        name: t.name,
-        context: t.description ?? '—',
-      })),
+    `Temas a evaluar (usá su id como topicId; "material" = extracto del material del alumno, basá sus preguntas EN ESO): ${JSON.stringify(
+      input.topics.map((t) => {
+        const material = groundingExcerpt(t.sourceText, perTopic);
+        return {
+          topicId: t.id,
+          name: t.name,
+          context: t.description ?? '—',
+          ...(material ? { material } : {}),
+        };
+      }),
     )}`,
   ].join('\n');
 }

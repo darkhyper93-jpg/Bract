@@ -11,6 +11,10 @@ export const MAX_IMPORT_TEXT_LENGTH = 20000;
 export const MAX_IMPORT_TOPICS = 50;
 // Largo máximo del nombre de un tema/materia (consistente con subject.schema: 120).
 const MAX_NAME_LENGTH = 120;
+// Tope de chars del excerpt de grounding por tema (resumen fiel del material importado que la IA
+// usa para anclar quiz/flashcards). Acotado por costo de tokens y crecimiento de DB. Opcional:
+// un tema sin excerpt genera como hoy (name + description).
+export const MAX_TOPIC_SOURCE_TEXT_LENGTH = 1500;
 
 // ---- Importación desde ARCHIVOS (follow-up Agente K) ----
 // Tope de tamaño del archivo subido (PDF/.pptx/.txt/.md). 8 MB: cubre programas/apuntes razonables
@@ -42,9 +46,12 @@ export const extractFileFieldsSchema = z.object({
 });
 
 // Tema confirmado del preview (editable por el usuario antes de commitear).
+// `sourceText`: excerpt de grounding fiel al material importado (lo produce la IA en el extract y
+// viaja silencioso hasta el commit). Opcional y capado — ausente ⇒ el tema genera como hoy.
 export const extractedTopicSchema = z.object({
   name: z.string().trim().min(1).max(MAX_NAME_LENGTH),
   difficulty: z.nativeEnum(TopicDifficulty),
+  sourceText: z.string().trim().max(MAX_TOPIC_SOURCE_TEXT_LENGTH).optional(),
 });
 
 // ---- COMMIT (paso 2): temas confirmados + materia destino + modo ----

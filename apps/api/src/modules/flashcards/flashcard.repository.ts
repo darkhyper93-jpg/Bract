@@ -13,6 +13,7 @@ export type TopicContextRow = {
   id: string;
   name: string;
   description: string | null;
+  sourceText: string | null; // grounding: excerpt fiel del material importado (NULL ⇒ genera como hoy)
   difficulty: TopicDifficulty;
   userId: string;
   subject: { name: string };
@@ -62,6 +63,7 @@ export const flashcardRepository = {
         id: true,
         name: true,
         description: true,
+        sourceText: true,
         difficulty: true,
         userId: true,
         subject: { select: { name: true } },

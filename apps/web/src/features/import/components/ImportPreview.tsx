@@ -15,6 +15,9 @@ interface EditableTopic {
   key: number;
   name: string;
   difficulty: TopicDifficulty;
+  // Grounding (Calidad de aprendizaje §2): excerpt fiel del material que produjo la IA en el extract.
+  // Viaja SILENCIOSO (no se muestra ni se edita en v1) y se reenvía en el commit para persistirlo.
+  sourceText?: string;
 }
 
 interface ImportPreviewProps {
@@ -57,7 +60,13 @@ export function ImportPreview({
   const keyCounter = useRef(0);
 
   const [topics, setTopics] = useState<EditableTopic[]>(() =>
-    initialTopics.map((tp) => ({ key: keyCounter.current++, name: tp.name, difficulty: tp.difficulty })),
+    initialTopics.map((tp) => ({
+      key: keyCounter.current++,
+      name: tp.name,
+      difficulty: tp.difficulty,
+      // Conservamos el excerpt de grounding sin exponerlo en la UI; se reenvía tal cual en el commit.
+      ...(tp.sourceText ? { sourceText: tp.sourceText } : {}),
+    })),
   );
   const [mode, setMode] = useState<ImportMode>(ImportMode.ADD);
 
@@ -83,7 +92,12 @@ export function ImportPreview({
   const handleConfirm = () => {
     if (validTopics.length === 0) return;
     const payload: CommitImportInput = {
-      topics: validTopics.map((tp) => ({ name: tp.name.trim(), difficulty: tp.difficulty })),
+      topics: validTopics.map((tp) => ({
+        name: tp.name.trim(),
+        difficulty: tp.difficulty,
+        // Reenviamos el excerpt de grounding para que el backend lo persista en Topic.sourceText.
+        ...(tp.sourceText ? { sourceText: tp.sourceText } : {}),
+      })),
       mode: effectiveMode,
       ...(target.kind === 'existing'
         ? { subjectId: target.subjectId }

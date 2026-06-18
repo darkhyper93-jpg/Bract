@@ -1,5 +1,5 @@
 import type { Content, GenerateContentParameters } from '@google/genai';
-import { TopicDifficulty } from '@bract/shared';
+import { TopicDifficulty, MAX_TOPIC_SOURCE_TEXT_LENGTH } from '@bract/shared';
 import type { ChatLanguage, TopicStatus } from '@bract/shared';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
@@ -65,7 +65,9 @@ export interface PlanDay {
 }
 
 export interface GenerateFlashcardsInput {
-  topic: { id: string; name: string; description?: string | null };
+  // sourceText: grounding (excerpt fiel del material importado). Presente ⇒ las tarjetas se anclan a él;
+  // ausente/null ⇒ generación como hoy (name + description). Ver buildFlashcardsUserPrompt.
+  topic: { id: string; name: string; description?: string | null; sourceText?: string | null };
   subjectName: string;
   count?: number; // default 10, tope duro 10
   existing?: { question: string }[]; // para deduplicar
@@ -93,12 +95,16 @@ export interface ExtractTopicsInput {
 export interface ExtractedTopicAI {
   name: string;
   difficulty: TopicDifficulty;
+  // Grounding: excerpt fiel del material sobre el tema (ya trimeado/capado). Ausente ⇒ tema sin material.
+  sourceText?: string;
 }
 
 export interface GenerateQuizInput {
   scope: 'TOPIC' | 'SUBJECT';
   subjectName: string;
-  topics: { id: string; name: string; description?: string | null }[]; // 1 (TOPIC) o N (SUBJECT)
+  // sourceText por tema: grounding (excerpt fiel). Ausente/null ⇒ ese tema genera como hoy. En multi-tema
+  // el total inyectado se topea (ver buildQuizUserPrompt) para no reventar el budget de tokens.
+  topics: { id: string; name: string; description?: string | null; sourceText?: string | null }[]; // 1 (TOPIC) o N (SUBJECT)
   count?: number; // default DEFAULT_QUIZ_COUNT, tope duro MAX_QUIZ_COUNT
 }
 
@@ -128,7 +134,8 @@ const MAX_QUIZ_OPTIONS = 6;
 const PLAN_MAX_TOKENS = 8192;
 const FLASHCARDS_MAX_TOKENS = 2048;
 const CHAT_MAX_TOKENS = 4096;
-const EXTRACT_TOPICS_MAX_TOKENS = 4096;
+// Subido de 4096: la salida del extract ahora incluye un `sourceText` por tema (hasta MAX_EXTRACT_TOPICS).
+const EXTRACT_TOPICS_MAX_TOKENS = 8192;
 const QUIZ_MAX_TOKENS = 8192;
 
 // Minutos base por dificultad (sesga la duración del bloque y el orden).
@@ -344,7 +351,9 @@ function normalizeDifficulty(raw: string): TopicDifficulty {
 }
 
 function dedupeAndCapTopics(
-  topics: { name: string; difficulty: string }[],
+  // sourceText incluye `| undefined` explícito: lo infiere así Zod (.optional()) y el proyecto usa
+  // exactOptionalPropertyTypes. El trim/omit de abajo lo normaliza.
+  topics: { name: string; difficulty: string; sourceText?: string | undefined }[],
   cap: number,
 ): ExtractedTopicAI[] {
   const seen = new Set<string>();
@@ -355,7 +364,13 @@ function dedupeAndCapTopics(
     const key = normalizeQuestion(name);
     if (key.length === 0 || seen.has(key)) continue;
     seen.add(key);
-    out.push({ name, difficulty: normalizeDifficulty(t.difficulty) });
+    // Grounding: trim + cap defensivo del excerpt (la IA puede excederse). Vacío ⇒ se omite (tema sin material).
+    const sourceText = t.sourceText?.trim().slice(0, MAX_TOPIC_SOURCE_TEXT_LENGTH);
+    out.push({
+      name,
+      difficulty: normalizeDifficulty(t.difficulty),
+      ...(sourceText ? { sourceText } : {}),
+    });
     if (out.length >= cap) break;
   }
   return out;

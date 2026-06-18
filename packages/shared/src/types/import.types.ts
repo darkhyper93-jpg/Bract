@@ -15,9 +15,14 @@ export enum ImportMode {
 
 // Tema extraído por la IA: nombre + dificultad clasificada (EASY/MEDIUM/HARD). Editable en el
 // preview antes de confirmar.
+// `sourceText`: excerpt de grounding (resumen fiel del material importado, ≤MAX_TOPIC_SOURCE_TEXT_LENGTH)
+// que la IA produce en la MISMA extracción. Viaja preview→commit y se persiste en Topic. Opcional:
+// si falta (texto sin material para ese tema, o tema creado a mano), la generación cae al comportamiento
+// de hoy (name + description).
 export interface ExtractedTopic {
   name: string;
   difficulty: TopicDifficulty;
+  sourceText?: string;
 }
 
 // Respuesta del EXTRACT: el preview de temas (no se escribió nada en DB).

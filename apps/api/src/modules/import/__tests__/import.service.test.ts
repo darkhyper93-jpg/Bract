@@ -24,7 +24,7 @@ import { importRepository } from '../import.repository.js';
 import { extractTopics } from '../../../lib/ai/index.js';
 import { detectFileKind, extractTextFromFile } from '../file-text.js';
 import { importService } from '../import.service.js';
-import { MAX_IMPORT_FILE_TEXT_LENGTH } from '@bract/shared';
+import { MAX_IMPORT_FILE_TEXT_LENGTH, MAX_TOPIC_SOURCE_TEXT_LENGTH } from '@bract/shared';
 
 const now = new Date('2026-06-12T00:00:00.000Z');
 
@@ -195,6 +195,28 @@ describe('commitImport — materia nueva (subjectName)', () => {
     expect(rows).toHaveLength(1);
     expect(result.subject.name).toBe('Física');
     expect(result.createdCount).toBe(1);
+  });
+});
+
+describe('commitImport — grounding (sourceText)', () => {
+  it('persiste el excerpt trimeado/capado y omite el vacío/ausente (columna NULL)', async () => {
+    vi.mocked(importRepository.createSubject).mockResolvedValue(makeSubject({ id: 's3', name: 'Bio' }));
+    const long = 'y'.repeat(MAX_TOPIC_SOURCE_TEXT_LENGTH + 100);
+
+    await importService.commitImport('u1', {
+      mode: ImportMode.ADD,
+      subjectName: 'Bio',
+      topics: [
+        { name: 'Célula', difficulty: TopicDifficulty.MEDIUM, sourceText: '  la célula es la unidad  ' },
+        { name: 'ADN', difficulty: TopicDifficulty.HARD, sourceText: long }, // excede el cap → se recorta
+        { name: 'Mitosis', difficulty: TopicDifficulty.EASY }, // sin sourceText → NULL
+      ],
+    });
+
+    const [, , rows] = vi.mocked(importRepository.applyImport).mock.calls[0]!;
+    expect(rows[0]).toMatchObject({ name: 'Célula', sourceText: 'la célula es la unidad' });
+    expect(rows[1]?.sourceText).toHaveLength(MAX_TOPIC_SOURCE_TEXT_LENGTH);
+    expect(rows[2]).not.toHaveProperty('sourceText'); // omitido → la columna queda NULL (genera como hoy)
   });
 });
 

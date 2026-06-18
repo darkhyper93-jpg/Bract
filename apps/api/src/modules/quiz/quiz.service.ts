@@ -145,7 +145,13 @@ export const quizService = {
     const uniqueIds = [...new Set(input.topicIds)];
     const selected = uniqueIds.map((id) => topicsById.get(id));
     if (selected.some((t) => t === undefined)) throw new AppError('NOT_FOUND', TOPIC_NOT_FOUND);
-    const topics = selected as { id: string; name: string; description: string | null }[];
+    // sourceText (grounding) viaja hasta el aiInput; el tope total en multi-tema lo aplica lib/ai.
+    const topics = selected as {
+      id: string;
+      name: string;
+      description: string | null;
+      sourceText: string | null;
+    }[];
 
     // DERIVAR scope/topicId/scopeName/topicCount. scopeName = NOMBRE PROPIO (tema o materia); el front
     // compone "N temas de X" usando scope + topicCount (la app es bilingüe). topicId solo vive en TOPIC.
