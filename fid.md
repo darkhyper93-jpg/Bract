@@ -1,7 +1,12 @@
 # FID — Snapshot de handoff (Bract)
-> Agente I (quiz) + I-2 (progreso/personalización) COMPLETOS y deployados · L Voz (Web Speech API) COMPLETA en branch `agente-l-voz` (NO mergeada, pendiente ff-only a main) · Próximo: J Gamificación · Retomar en: repo Bract (darkhyper93-jpg/Bract)
+> Calidad de aprendizaje: v1 calibración de confianza + Fase 2 grounding del material importado — AMBAS mergeadas y deployadas · Próximo posible: (b) preguntas abiertas o (c) modo Feynman (o lo que elija el usuario) · Retomar en: repo Bract (darkhyper93-jpg/Bract)
 
 ## ESTADO REAL (jun 2026) — leer esto primero, lo de abajo quedó viejo
+
+**Calidad de aprendizaje — v1 (calibración de confianza) + Fase 2 (grounding) AMBAS mergeadas y deployadas.**
+- **v1 calibración de confianza** (commit `f828384`): al responder el quiz el alumno declara confianza; se mide calibración. Ya en main/producción.
+- **Fase 2 — grounding del material importado** (branch `calidad-aprendizaje-grounding`, ff-only a main): cierra el riesgo #1 de VISION_FUTURO (alucinación). El import captura, en la MISMA llamada de extracción, un excerpt fiel por tema (resumen estricto del texto del alumno, prohibido inventar) → `Topic.sourceText String?` (nullable, db push aplicado vía Session pooler 5432) → se inyecta en los prompts de quiz/flashcards. DOS topes: por-tema (`MAX_TOPIC_SOURCE_TEXT_LENGTH`/`GROUNDING_CHARS_PER_TOPIC`=1500) y TOTAL multi-tema (`GROUNDING_CHARS_TOTAL`=8000, repartido entre temas con material) para no reventar el free tier. **Retrocompatible**: `sourceText` NULL ⇒ no se inyecta material ⇒ genera idéntico a hoy. Sin pgvector/embeddings (free tier). typecheck+lint+test(108)+build verdes. Gemini sin cambios; Prisma se mantiene en 5.22.0.
+- **Próximo posible:** (b) preguntas abiertas o (c) modo Feynman — o lo que elija el usuario.
 
 Bract está deployado y funcional: MVP completo (A–H) + post-MVP K (importación texto/archivos) + Temario + **Agente I (Evaluación/quiz) COMPLETO** + **I-2 (Progreso, puntos débiles y personalización) COMPLETO**. Todo en main, en producción (Render + Supabase + Upstash + Gemini free tier). Último merge I-2: `ff1d061`.
 
