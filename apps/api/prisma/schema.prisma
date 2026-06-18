@@ -405,25 +405,35 @@ model QuizAttempt {
 }
 
 model QuizAttemptItem {
-  id            String           @id @default(cuid())
-  attemptId     String
-  attempt       QuizAttempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  id             String           @id @default(cuid())
+  attemptId      String
+  attempt        QuizAttempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   // DECISIÓN: userId denormalizado (§3.4) → índice [userId, topicId] para "puntos débiles" (I-2)
   // sin join. Mismo patrón que Topic/Flashcard. Ver error.md.
-  userId        String
-  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topicId       String? // subconcepto evaluado (granularidad I-2)
-  topic         Topic?           @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  order         Int // posición de la pregunta
-  question      String // snapshot
-  options       Json // snapshot [{ text, explanation }] AUTORITATIVO (la explicación nunca viaja antes de responder)
-  correctIndex  Int // AUTORITATIVO en el server; nunca se envía antes de responder
-  selectedIndex Int? // null = sin responder (lock anti-trampa: no se re-responde)
-  isCorrect     Boolean          @default(false) // lo decide el server al comparar contra correctIndex
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId        String? // subconcepto evaluado (granularidad I-2)
+  topic          Topic?           @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  // Tipo de pregunta (Calidad de aprendizaje, fase abiertas). default MCQ ⇒ filas viejas retrocompatibles.
+  type           QuestionType     @default(MCQ)
+  order          Int // posición de la pregunta
+  question       String // snapshot
+  options        Json // MCQ: snapshot [{ text, explanation }] AUTORITATIVO (no viaja antes de responder). OPEN: []
+  correctIndex   Int? // MCQ: AUTORITATIVO en el server, nunca se envía antes de responder. OPEN: null
+  selectedIndex  Int? // MCQ: null = sin responder (lock anti-trampa). OPEN: siempre null
+  isCorrect      Boolean          @default(false) // MCQ: selectedIndex===correctIndex. OPEN: grade===CORRECT
+  // ---- OPEN (respuesta corta corregida por IA). En MCQ todos null. ----
+  // expectedAnswer = criterio/respuesta esperada generado desde el material (sourceText). AUTORITATIVO
+  // server-only: NUNCA viaja al cliente antes de responder (análogo de correctIndex). La corrección la
+  // hace la IA en el server, anclada a sourceText + expectedAnswer (fuente de verdad).
+  expectedAnswer String?
+  studentAnswer  String? // texto libre del alumno (null hasta responder)
+  grade          OpenGrade? // nota de 3 estados (para el feedback al alumno); isCorrect se deriva de acá
+  feedback       String? // devolución de la IA (null hasta responder)
   // Calibración (Calidad de aprendizaje, fase 1): confianza declarada por el alumno al responder.
   // null = sin responder o no declarada → no entra al cruce confianza×acierto.
-  confidence    ConfidenceLevel?
-  createdAt     DateTime         @default(now())
+  confidence     ConfidenceLevel?
+  createdAt      DateTime         @default(now())
 
   @@index([attemptId])
   @@index([attemptId, order]) // buscar la pregunta a responder
@@ -442,6 +452,17 @@ enum QuizScope {
 enum QuizAttemptStatus {
   IN_PROGRESS
   COMPLETED
+}
+
+enum QuestionType {
+  MCQ // opción múltiple (anti-trampa por correctIndex)
+  OPEN // respuesta corta libre corregida por la IA (anti-trampa por expectedAnswer server-only)
+}
+
+enum OpenGrade {
+  CORRECT
+  PARTIAL // cuenta como NO correcta para puntos débiles (isCorrect=false), pero se muestra al alumno
+  INCORRECT
 }
 
 enum ConfidenceLevel {
