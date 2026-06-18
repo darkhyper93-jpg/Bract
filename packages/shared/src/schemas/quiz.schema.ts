@@ -16,24 +16,57 @@ export const MAX_QUIZ_QUESTIONS = 10;
 export const MIN_QUIZ_TOPICS = 1;
 export const MAX_QUIZ_TOPICS = 20;
 
+// Preguntas ABIERTAS (Calidad de aprendizaje). Cada abierta respondida = 1 llamada de corrección a la IA,
+// así que el tope duro de abiertas es la PALANCA DE COSTO (máx. 3 correcciones por quiz). Default 0 ⇒
+// quiz idéntico a hoy (solo MCQ).
+export const MAX_OPEN_QUESTIONS = 3;
+// Tope del texto libre del alumno al responder una abierta (acota tokens del prompt de corrección).
+export const MAX_OPEN_ANSWER_LENGTH = 2000;
+
 // ---- GENERAR (POST /quiz/attempts): set de temas dentro de una materia + cantidad ----
 // Contrato unificado: el cliente manda { subjectId, topicIds[] } y el server DERIVA el scope persistido
 // (1 tema=TOPIC, todos los temas de la materia=SUBJECT, subconjunto=MULTI_TOPIC) + scopeName + topicCount.
-export const generateQuizSchema = z.object({
-  subjectId: z.string().cuid(),
-  topicIds: z.array(z.string().cuid()).min(MIN_QUIZ_TOPICS).max(MAX_QUIZ_TOPICS),
-  count: z.number().int().min(MIN_QUIZ_QUESTIONS).max(MAX_QUIZ_QUESTIONS).optional(),
-});
+// `openCount` = cuántas de las `count` preguntas son abiertas (default 0; tope duro MAX_OPEN_QUESTIONS).
+export const generateQuizSchema = z
+  .object({
+    subjectId: z.string().cuid(),
+    topicIds: z.array(z.string().cuid()).min(MIN_QUIZ_TOPICS).max(MAX_QUIZ_TOPICS),
+    count: z.number().int().min(MIN_QUIZ_QUESTIONS).max(MAX_QUIZ_QUESTIONS).optional(),
+    openCount: z.number().int().min(0).max(MAX_OPEN_QUESTIONS).optional(),
+  })
+  .superRefine((val, ctx) => {
+    // No pidas más abiertas que el total de preguntas (si count viene; si no, el default de count lo cubre).
+    if (val.count !== undefined && val.openCount !== undefined && val.openCount > val.count) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['openCount'],
+        message: 'openCount no puede superar count',
+      });
+    }
+  });
 
 // ---- RESPONDER 1 pregunta (POST /quiz/attempts/:id/answers) ----
-// Solo el order de la pregunta + la opción elegida. El server corrige contra el correctIndex guardado.
-// `confidence` es OPCIONAL (calibración): qué tan seguro está el alumno ANTES del reveal. El front la pide
-// pero el contrato la deja opcional (intentos sin confianza no entran al cruce de calibración).
-export const answerQuestionSchema = z.object({
-  order: z.number().int().min(0),
-  selectedIndex: z.number().int().min(0),
-  confidence: z.nativeEnum(ConfidenceLevel).optional(),
-});
+// Una pregunta a la vez. MCQ → `selectedIndex` (el server corrige contra el correctIndex guardado);
+// OPEN → `answerText` (texto libre; el server lo corrige con la IA contra el material + expectedAnswer).
+// Exactamente UNO de los dos (superRefine). El server cruza el tipo con el item guardado.
+// `confidence` es OPCIONAL (calibración): qué tan seguro está el alumno ANTES del reveal.
+export const answerQuestionSchema = z
+  .object({
+    order: z.number().int().min(0),
+    selectedIndex: z.number().int().min(0).optional(),
+    answerText: z.string().trim().min(1).max(MAX_OPEN_ANSWER_LENGTH).optional(),
+    confidence: z.nativeEnum(ConfidenceLevel).optional(),
+  })
+  .superRefine((val, ctx) => {
+    const hasMcq = val.selectedIndex !== undefined;
+    const hasOpen = val.answerText !== undefined;
+    if (hasMcq === hasOpen) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Mandá selectedIndex (opción múltiple) o answerText (abierta), exactamente uno',
+      });
+    }
+  });
 
 // ---- Listado e id de intento ----
 export const quizAttemptListQuerySchema = z.object({
