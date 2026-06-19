@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AxiosError } from 'axios';
-import { ConfidenceLevel, QuizAttemptStatus } from '@bract/shared';
+import {
+  ConfidenceLevel,
+  QuizAttemptStatus,
+  QuestionType,
+  OpenGrade,
+  MAX_OPEN_ANSWER_LENGTH,
+} from '@bract/shared';
 import type { AnswerReveal, PublicQuizQuestion, QuizAttemptWithItems } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { EmptyState } from '../../../components/ui/EmptyState';
+import { Textarea } from '../../../components/ui/Textarea';
 import { cn } from '../../../utils/cn';
 import { useAnswerQuestion, useQuizAttempt } from '../hooks/useQuiz';
 import { QuestionReview } from './QuestionReview';
@@ -115,35 +122,49 @@ function hydrate(detail: QuizAttemptWithItems): {
   answers: AnsweredQuestion[];
   startIndex: number;
 } {
-  const questions: PublicQuizQuestion[] = detail.items.map((it) => ({
+  type Item = QuizAttemptWithItems['items'][number];
+  const toPublic = (it: Item): PublicQuizQuestion => ({
     order: it.order,
+    type: it.type,
     topicId: it.topicId,
     question: it.question,
+    // OPEN ⇒ options []; MCQ ⇒ solo el texto (sin explicación hasta responder).
     options: it.options.map((o) => ({ text: o.text })),
-  }));
+  });
+  // "Contestada" abarca ambos tipos: MCQ tiene selectedIndex, OPEN tiene studentAnswer.
+  const isAnswered = (it: Item) => it.selectedIndex !== null || it.studentAnswer !== null;
 
-  const answers: AnsweredQuestion[] = detail.items
-    .filter((it) => it.selectedIndex !== null)
-    .map((it) => ({
-      question: {
-        order: it.order,
-        topicId: it.topicId,
-        question: it.question,
-        options: it.options.map((o) => ({ text: o.text })),
-      },
-      selectedIndex: it.selectedIndex as number, // filtrado: no es null
-      reveal: {
-        order: it.order,
-        isCorrect: it.isCorrect,
-        // Item contestado ⇒ correctIndex y explicaciones presentes (el backend los devuelve solo
-        // para los contestados). Los ?? satisfacen el tipo (correctIndex number|null / explanation?)
-        // y no se ejecutan en la práctica.
-        correctIndex: it.correctIndex ?? 0,
-        options: it.options.map((o) => ({ text: o.text, explanation: o.explanation ?? '' })),
-      },
-    }));
+  const questions: PublicQuizQuestion[] = detail.items.map(toPublic);
 
-  const startIndex = detail.items.findIndex((it) => it.selectedIndex === null);
+  const answers: AnsweredQuestion[] = detail.items.filter(isAnswered).map((it) => {
+    // Item contestado ⇒ el backend ya devolvió la reveal completa según el tipo. Los ?? satisfacen el
+    // tipo y no se ejecutan en la práctica (un contestado siempre trae sus campos).
+    const reveal: AnswerReveal =
+      it.type === QuestionType.OPEN
+        ? {
+            type: QuestionType.OPEN,
+            order: it.order,
+            isCorrect: it.isCorrect,
+            grade: it.grade ?? OpenGrade.INCORRECT,
+            feedback: it.feedback ?? '',
+            expectedAnswer: it.expectedAnswer ?? '',
+          }
+        : {
+            type: QuestionType.MCQ,
+            order: it.order,
+            isCorrect: it.isCorrect,
+            correctIndex: it.correctIndex ?? 0,
+            options: it.options.map((o) => ({ text: o.text, explanation: o.explanation ?? '' })),
+          };
+    return {
+      question: toPublic(it),
+      selectedIndex: it.selectedIndex,
+      studentAnswer: it.studentAnswer,
+      reveal,
+    };
+  });
+
+  const startIndex = detail.items.findIndex((it) => !isAnswered(it));
   return { questions, answers, startIndex };
 }
 
@@ -166,7 +187,8 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
 
   const [index, setIndex] = useState(startIndex < 0 ? questions.length - 1 : startIndex);
   const [answers, setAnswers] = useState<AnsweredQuestion[]>(seed.answers);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(null); // MCQ
+  const [answerText, setAnswerText] = useState(''); // OPEN
   // Calibración: el alumno declara su confianza ANTES del reveal (se exige para responder).
   const [confidence, setConfidence] = useState<ConfidenceLevel | null>(null);
   const [reveal, setReveal] = useState<AnswerReveal | null>(null);
@@ -198,17 +220,41 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
 
   if (!question) return null;
 
+  const isOpen = question.type === QuestionType.OPEN;
+  const trimmedAnswer = answerText.trim();
+  // Para responder se exige confianza + (MCQ: una opción / OPEN: texto no vacío).
+  const canSubmit = confidence !== null && (isOpen ? trimmedAnswer.length > 0 : selected !== null);
+
   const submitAnswer = () => {
-    if (selected === null || confidence === null) return;
-    answerMutation.mutate(
-      { order: question.order, selectedIndex: selected, confidence },
-      {
-        onSuccess: (r) => {
-          setReveal(r);
-          setAnswers((prev) => [...prev, { question, selectedIndex: selected, reveal: r }]);
+    if (!canSubmit || confidence === null) return;
+    if (isOpen) {
+      answerMutation.mutate(
+        { order: question.order, answerText: trimmedAnswer, confidence },
+        {
+          onSuccess: (r) => {
+            setReveal(r);
+            setAnswers((prev) => [
+              ...prev,
+              { question, selectedIndex: null, studentAnswer: trimmedAnswer, reveal: r },
+            ]);
+          },
         },
-      },
-    );
+      );
+    } else {
+      if (selected === null) return;
+      answerMutation.mutate(
+        { order: question.order, selectedIndex: selected, confidence },
+        {
+          onSuccess: (r) => {
+            setReveal(r);
+            setAnswers((prev) => [
+              ...prev,
+              { question, selectedIndex: selected, studentAnswer: null, reveal: r },
+            ]);
+          },
+        },
+      );
+    }
   };
 
   const next = () => {
@@ -218,6 +264,7 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
     }
     setIndex((i) => i + 1);
     setSelected(null);
+    setAnswerText('');
     setConfidence(null);
     setReveal(null);
   };
@@ -247,40 +294,64 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
       </div>
 
       {reveal ? (
-        // Reveal: la pregunta ya corregida por el server.
-        <QuestionReview
-          index={index}
-          question={question.question}
-          options={reveal.options}
-          correctIndex={reveal.correctIndex}
-          selectedIndex={selected}
-          isCorrect={reveal.isCorrect}
-        />
+        // Reveal: la pregunta ya corregida por el server. Ramifica por tipo.
+        reveal.type === QuestionType.OPEN ? (
+          <QuestionReview
+            index={index}
+            type={QuestionType.OPEN}
+            question={question.question}
+            isCorrect={reveal.isCorrect}
+            studentAnswer={trimmedAnswer}
+            grade={reveal.grade}
+            feedback={reveal.feedback}
+            expectedAnswer={reveal.expectedAnswer}
+          />
+        ) : (
+          <QuestionReview
+            index={index}
+            type={QuestionType.MCQ}
+            question={question.question}
+            isCorrect={reveal.isCorrect}
+            options={reveal.options}
+            correctIndex={reveal.correctIndex}
+            selectedIndex={selected}
+          />
+        )
       ) : (
-        // Pregunta pública (sin pistas): elegís una opción.
+        // Pregunta pública (sin pistas): MCQ → elegís una opción; OPEN → escribís la respuesta.
         <div className="flex flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface p-4">
           <p className="text-sm font-medium text-text-primary">
             <span className="text-text-tertiary">{index + 1}. </span>
             {question.question}
           </p>
-          <ul className="flex flex-col gap-2">
-            {question.options.map((opt, i) => (
-              <li key={i}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(i)}
-                  className={cn(
-                    'w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors duration-[150ms]',
-                    selected === i
-                      ? 'border-brand-primary bg-brand-muted text-brand-primary'
-                      : 'border-border-default text-text-secondary hover:border-brand-primary/50 hover:text-text-primary',
-                  )}
-                >
-                  {opt.text}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {isOpen ? (
+            <Textarea
+              value={answerText}
+              onChange={(e) => setAnswerText(e.target.value)}
+              placeholder={t('quiz.runner.open.placeholder')}
+              maxLength={MAX_OPEN_ANSWER_LENGTH}
+              rows={5}
+            />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {question.options.map((opt, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(i)}
+                    className={cn(
+                      'w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors duration-[150ms]',
+                      selected === i
+                        ? 'border-brand-primary bg-brand-muted text-brand-primary'
+                        : 'border-border-default text-text-secondary hover:border-brand-primary/50 hover:text-text-primary',
+                    )}
+                  >
+                    {opt.text}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* Calibración: ¿qué tan seguro estás? — se exige antes de responder. */}
           <div className="mt-1 flex flex-col gap-2 border-t border-border-subtle pt-3">
@@ -312,6 +383,11 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
         </p>
       )}
 
+      {/* La corrección de una abierta es una 2da llamada a la IA → aviso de que está corrigiendo. */}
+      {isOpen && answerMutation.isPending && !reveal && (
+        <p className="text-xs text-text-tertiary">{t('quiz.runner.open.grading')}</p>
+      )}
+
       <div className="flex justify-end">
         {reveal ? (
           <Button type="button" onClick={next}>
@@ -321,7 +397,7 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
           <Button
             type="button"
             onClick={submitAnswer}
-            disabled={selected === null || confidence === null}
+            disabled={!canSubmit}
             loading={answerMutation.isPending}
           >
             {t('quiz.runner.answer')}

@@ -1,10 +1,12 @@
 import type { AnswerReveal, PublicQuizQuestion, QuizScope } from '@bract/shared';
 
-// Una pregunta ya respondida en el runner: la pregunta pública + lo que elegiste + la reveal del server.
-// Se acumula en el runner y alimenta la pantalla de resultados (repaso local, sin refetch).
+// Una pregunta ya respondida en el runner: la pregunta pública + lo que respondiste + la reveal del
+// server. Se acumula en el runner y alimenta la pantalla de resultados (repaso local, sin refetch).
+// MCQ usa `selectedIndex`; OPEN usa `studentAnswer` (texto libre). El otro queda null según el tipo.
 export interface AnsweredQuestion {
   question: PublicQuizQuestion;
-  selectedIndex: number;
+  selectedIndex: number | null;
+  studentAnswer: string | null;
   reveal: AnswerReveal;
 }
 

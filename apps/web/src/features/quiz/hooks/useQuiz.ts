@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QuestionType } from '@bract/shared';
 import type { AnswerQuestionInput, AnswerReveal, QuizAttemptWithItems } from '@bract/shared';
 import { queryKeys } from '../../../lib/queryKeys';
 import { quizApi } from '../api/quiz.api';
@@ -16,9 +17,10 @@ export function useAnswerQuestion(attemptId: string) {
   return useMutation({
     mutationFn: (input: AnswerQuestionInput) => quizApi.answer(attemptId, input),
     // Mantener el detalle cacheado en sincronía con el server: marcar la pregunta como contestada con
-    // su reveal (selectedIndex + correctIndex + isCorrect + explicaciones). Sin esto, el cache queda
-    // "sin responder" y al volver de Historial el runner se re-siembra desde datos viejos, deselecciona
-    // la respuesta y choca con el lock anti-trampa ("la pregunta ya fue respondida").
+    // su reveal. Sin esto, el cache queda "sin responder" y al volver de Historial el runner se re-siembra
+    // desde datos viejos, deselecciona la respuesta y choca con el lock anti-trampa ("ya fue respondida").
+    // Ramifica por tipo: MCQ persiste selectedIndex + correctIndex + opciones con explicación; OPEN
+    // persiste studentAnswer + grade + feedback + expectedAnswer (el texto del alumno sale del input).
     onSuccess: (reveal: AnswerReveal, input: AnswerQuestionInput) => {
       queryClient.setQueryData<QuizAttemptWithItems>(
         queryKeys.quiz.attempt(attemptId),
@@ -26,17 +28,26 @@ export function useAnswerQuestion(attemptId: string) {
           prev
             ? {
                 ...prev,
-                items: prev.items.map((it) =>
-                  it.order === reveal.order
-                    ? {
-                        ...it,
-                        selectedIndex: input.selectedIndex,
-                        isCorrect: reveal.isCorrect,
-                        correctIndex: reveal.correctIndex,
-                        options: reveal.options,
-                      }
-                    : it,
-                ),
+                items: prev.items.map((it) => {
+                  if (it.order !== reveal.order) return it;
+                  if (reveal.type === QuestionType.OPEN) {
+                    return {
+                      ...it,
+                      isCorrect: reveal.isCorrect,
+                      studentAnswer: input.answerText ?? '',
+                      grade: reveal.grade,
+                      feedback: reveal.feedback,
+                      expectedAnswer: reveal.expectedAnswer,
+                    };
+                  }
+                  return {
+                    ...it,
+                    selectedIndex: input.selectedIndex ?? null,
+                    isCorrect: reveal.isCorrect,
+                    correctIndex: reveal.correctIndex,
+                    options: reveal.options,
+                  };
+                }),
               }
             : prev,
       );

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { QuestionType } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
 import { QuestionReview } from './QuestionReview';
 import { scopeLabel } from '../lib/scopeLabel';
@@ -31,17 +32,32 @@ export function QuizResults({ scope, scopeName, topicCount, totalCount, answers,
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-medium text-text-secondary">{t('quiz.results.review')}</h3>
         <div className="mt-2 flex flex-col gap-3">
-          {answers.map((a, i) => (
-            <QuestionReview
-              key={a.question.order}
-              index={i}
-              question={a.question.question}
-              options={a.reveal.options}
-              correctIndex={a.reveal.correctIndex}
-              selectedIndex={a.selectedIndex}
-              isCorrect={a.reveal.isCorrect}
-            />
-          ))}
+          {answers.map((a, i) =>
+            a.reveal.type === QuestionType.OPEN ? (
+              <QuestionReview
+                key={a.question.order}
+                index={i}
+                type={QuestionType.OPEN}
+                question={a.question.question}
+                isCorrect={a.reveal.isCorrect}
+                studentAnswer={a.studentAnswer}
+                grade={a.reveal.grade}
+                feedback={a.reveal.feedback}
+                expectedAnswer={a.reveal.expectedAnswer}
+              />
+            ) : (
+              <QuestionReview
+                key={a.question.order}
+                index={i}
+                type={QuestionType.MCQ}
+                question={a.question.question}
+                isCorrect={a.reveal.isCorrect}
+                options={a.reveal.options}
+                correctIndex={a.reveal.correctIndex}
+                selectedIndex={a.selectedIndex}
+              />
+            ),
+          )}
         </div>
       </div>
 

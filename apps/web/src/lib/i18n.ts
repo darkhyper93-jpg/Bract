@@ -667,6 +667,9 @@ const resources = {
           topicsRequired: 'Choose at least one topic',
           wholeSubject: 'Whole subject',
           count: 'Number of questions',
+          openCount: 'Open-ended questions',
+          openCountHint: 'Short answers graded by AI (max {{max}})',
+          openCountOff: 'None',
           generate: 'Generate quiz',
           subjectRequired: 'Choose a subject',
           emptyTitle: 'No subjects yet',
@@ -694,6 +697,10 @@ const resources = {
             MEDIUM: 'Fairly sure',
             HIGH: 'Very sure',
           },
+          open: {
+            placeholder: 'Write your answer…',
+            grading: 'Grading your answer…',
+          },
         },
         results: {
           score: '{{correct}} of {{total}}',
@@ -707,6 +714,13 @@ const resources = {
           correctAnswer: 'Correct answer',
           yourAnswer: 'Your answer',
           noAnswer: 'Not answered',
+          feedback: 'Feedback',
+          expectedAnswer: 'Expected answer',
+          grade: {
+            CORRECT: 'Correct',
+            PARTIAL: 'Partially correct',
+            INCORRECT: 'Incorrect',
+          },
         },
         history: {
           emptyTitle: 'No quizzes yet',
@@ -1422,6 +1436,9 @@ const resources = {
           topicsRequired: 'Elegí al menos un tema',
           wholeSubject: 'Toda la materia',
           count: 'Cantidad de preguntas',
+          openCount: 'Preguntas abiertas',
+          openCountHint: 'Respuestas cortas corregidas por IA (máx. {{max}})',
+          openCountOff: 'Ninguna',
           generate: 'Generar quiz',
           subjectRequired: 'Elegí una materia',
           emptyTitle: 'Todavía no hay materias',
@@ -1449,6 +1466,10 @@ const resources = {
             MEDIUM: 'Bastante seguro',
             HIGH: 'Muy seguro',
           },
+          open: {
+            placeholder: 'Escribí tu respuesta…',
+            grading: 'Corrigiendo tu respuesta…',
+          },
         },
         results: {
           score: '{{correct}} de {{total}}',
@@ -1462,6 +1483,13 @@ const resources = {
           correctAnswer: 'Respuesta correcta',
           yourAnswer: 'Tu respuesta',
           noAnswer: 'Sin responder',
+          feedback: 'Devolución',
+          expectedAnswer: 'Respuesta esperada',
+          grade: {
+            CORRECT: 'Correcta',
+            PARTIAL: 'Parcialmente correcta',
+            INCORRECT: 'Incorrecta',
+          },
         },
         history: {
           emptyTitle: 'Todavía no hay quizzes',

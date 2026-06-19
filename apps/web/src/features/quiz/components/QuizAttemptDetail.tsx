@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { QuestionType } from '@bract/shared';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { useQuizAttempt } from '../hooks/useQuiz';
@@ -63,17 +64,32 @@ export function QuizAttemptDetail({ id, onBack }: QuizAttemptDetailProps) {
       </div>
 
       <div className="flex flex-col gap-3">
-        {attempt.items.map((it, i) => (
-          <QuestionReview
-            key={it.id}
-            index={i}
-            question={it.question}
-            options={it.options}
-            correctIndex={it.correctIndex}
-            selectedIndex={it.selectedIndex}
-            isCorrect={it.isCorrect}
-          />
-        ))}
+        {attempt.items.map((it, i) =>
+          it.type === QuestionType.OPEN ? (
+            <QuestionReview
+              key={it.id}
+              index={i}
+              type={QuestionType.OPEN}
+              question={it.question}
+              isCorrect={it.isCorrect}
+              studentAnswer={it.studentAnswer}
+              grade={it.grade}
+              feedback={it.feedback}
+              expectedAnswer={it.expectedAnswer}
+            />
+          ) : (
+            <QuestionReview
+              key={it.id}
+              index={i}
+              type={QuestionType.MCQ}
+              question={it.question}
+              isCorrect={it.isCorrect}
+              options={it.options}
+              correctIndex={it.correctIndex}
+              selectedIndex={it.selectedIndex}
+            />
+          ),
+        )}
       </div>
     </div>
   );

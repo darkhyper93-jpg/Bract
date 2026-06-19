@@ -9,6 +9,7 @@ import {
   type GenerateQuizInput,
   MIN_QUIZ_QUESTIONS,
   MAX_QUIZ_QUESTIONS,
+  MAX_OPEN_QUESTIONS,
   DEFAULT_QUIZ_QUESTIONS,
 } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
@@ -44,11 +45,15 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
 
   const { control, handleSubmit, watch, setValue } = useForm<QuizSetupValues>({
     resolver: zodResolver(quizSetupSchema),
-    defaultValues: { subjectId: '', topicIds: [], count: DEFAULT_QUIZ_QUESTIONS },
+    defaultValues: { subjectId: '', topicIds: [], count: DEFAULT_QUIZ_QUESTIONS, openCount: 0 },
   });
 
   const subjectId = watch('subjectId');
   const topicIds = watch('topicIds');
+  const count = watch('count');
+  // Tope de abiertas: no más que MAX_OPEN_QUESTIONS ni que el total de preguntas. Opciones 0..maxOpen.
+  const maxOpen = Math.min(MAX_OPEN_QUESTIONS, count);
+  const openCountOptions = Array.from({ length: maxOpen + 1 }, (_, i) => i);
   const hasSubjects = subjects.length > 0;
   const selectedSubject = subjects.find((s) => s.id === subjectId);
   const topics = selectedSubject?.topics ?? [];
@@ -67,6 +72,7 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
       subjectId: values.subjectId,
       topicIds: values.topicIds,
       count: values.count,
+      openCount: values.openCount,
     };
     generate.mutate(input, { onSuccess: onGenerated });
   };
@@ -142,8 +148,35 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
             label={t('quiz.setup.count')}
             options={COUNT_OPTIONS.map((n) => ({ value: String(n), label: String(n) }))}
             value={String(field.value)}
-            onChange={(v) => field.onChange(Number(v))}
+            onChange={(v) => {
+              const next = Number(v);
+              field.onChange(next);
+              // Si el nuevo total es menor que las abiertas elegidas, recortamos las abiertas al tope.
+              const openCount = watch('openCount');
+              if (openCount > next) setValue('openCount', Math.min(next, MAX_OPEN_QUESTIONS));
+            }}
           />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="openCount"
+        render={({ field }) => (
+          <div className="flex flex-col gap-1.5">
+            <Select
+              label={t('quiz.setup.openCount')}
+              options={openCountOptions.map((n) => ({
+                value: String(n),
+                label: n === 0 ? t('quiz.setup.openCountOff') : String(n),
+              }))}
+              value={String(field.value)}
+              onChange={(v) => field.onChange(Number(v))}
+            />
+            <p className="text-xs text-text-tertiary">
+              {t('quiz.setup.openCountHint', { max: MAX_OPEN_QUESTIONS })}
+            </p>
+          </div>
         )}
       />
 
