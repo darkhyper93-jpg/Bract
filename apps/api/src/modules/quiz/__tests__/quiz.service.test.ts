@@ -491,6 +491,9 @@ describe('getAttempt', () => {
 
     const detail = await quizService.getAttempt('att1', 'u1');
 
+    // Sin abiertas PARTIAL → puntaje sin crédito parcial.
+    expect(detail.partialCount).toBe(0);
+
     // Contestada → completa (reveal disponible al revisar).
     const answered = detail.items[0]!;
     expect(answered.selectedIndex).toBe(2);
@@ -556,6 +559,9 @@ describe('getAttempt', () => {
     });
 
     const detail = await quizService.getAttempt('att1', 'u1');
+
+    // partialCount derivado en lectura desde los grades guardados (1 abierta PARTIAL) → puntaje con crédito parcial.
+    expect(detail.partialCount).toBe(1);
 
     const answered = detail.items[0]!;
     expect(answered.type).toBe('OPEN');

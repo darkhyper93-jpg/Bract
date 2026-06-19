@@ -53,7 +53,9 @@ function optionsOf(it: PrismaQuizAttemptItem): QuizOption[] {
   return it.options as unknown as QuizOption[];
 }
 
-function toQuizAttempt(a: PrismaQuizAttempt): QuizAttempt {
+// `partialCount` se DERIVA en lectura (no es columna): lo provee el caller (groupBy en el listado, conteo
+// en memoria en el detalle). Default 0 para cualquier lectura que no necesite el puntaje parcial.
+function toQuizAttempt(a: PrismaQuizAttempt, partialCount = 0): QuizAttempt {
   return {
     id: a.id,
     userId: a.userId,
@@ -65,6 +67,7 @@ function toQuizAttempt(a: PrismaQuizAttempt): QuizAttempt {
     topicCount: a.topicCount,
     totalCount: a.totalCount,
     correctCount: a.correctCount,
+    partialCount,
     completedAt: a.completedAt ? a.completedAt.toISOString() : null,
     createdAt: a.createdAt.toISOString(),
   };
@@ -377,12 +380,18 @@ export const quizService = {
       quizRepository.findManyCompletedByUserPaged(userId, query.page, query.perPage),
       quizRepository.countCompletedByUser(userId),
     ]);
-    return { attempts: rows.map(toQuizAttempt), total };
+    // partialCount derivado en lote (un groupBy sobre la página) → puntaje con crédito parcial en el historial.
+    const partials = await quizRepository.countPartialByAttempt(rows.map((r) => r.id));
+    return { attempts: rows.map((r) => toQuizAttempt(r, partials.get(r.id) ?? 0)), total };
   },
 
   async getAttempt(id: string, userId: string): Promise<QuizAttemptWithItems> {
     const attempt = await quizRepository.findByIdAndUserWithItems(id, userId);
     if (!attempt) throw new AppError('NOT_FOUND', ATTEMPT_NOT_FOUND);
-    return { ...toQuizAttempt(attempt), items: attempt.items.map(toDetailItem) };
+    // Detalle: los items ya están en memoria → contamos las abiertas PARTIAL acá (sin query extra).
+    const partialCount = attempt.items.filter(
+      (it) => (it.grade as OpenGrade | null) === OpenGrade.PARTIAL,
+    ).length;
+    return { ...toQuizAttempt(attempt, partialCount), items: attempt.items.map(toDetailItem) };
   },
 };

@@ -112,7 +112,10 @@ export interface QuizAttempt {
   scopeName: string; // nombre propio (tema o materia); la etiqueta "N temas de X" la compone el front
   topicCount: number; // nº de temas elegidos → render bilingüe del historial sin traer items
   totalCount: number;
-  correctCount: number; // puntaje (recalculado en el server con cada respuesta)
+  correctCount: number; // nº de aciertos plenos (isCorrect; recalculado en el server con cada respuesta)
+  // nº de abiertas PARTIAL del intento. DERIVADO en lectura desde los grades guardados (sin columna nueva):
+  // habilita el puntaje con crédito parcial (correctCount + 0.5×partialCount) sin tocar el lock/anti-trampa.
+  partialCount: number;
   completedAt: string | null;
   createdAt: string;
 }

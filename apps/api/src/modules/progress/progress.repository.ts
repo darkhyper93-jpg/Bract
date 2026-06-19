@@ -1,4 +1,5 @@
 import { prisma } from '../../prisma/client.js';
+import { OpenGrade } from '@prisma/client';
 import type { ConfidenceLevel } from '@prisma/client';
 
 // Repositorio de progreso (I-2). SOLO Prisma, sin lógica de negocio. Agrega con groupBy sobre los índices
@@ -8,7 +9,8 @@ import type { ConfidenceLevel } from '@prisma/client';
 export interface QuizStatRow {
   topicId: string;
   answered: number;
-  correct: number;
+  correct: number; // aciertos plenos (isCorrect)
+  partial: number; // abiertas PARTIAL → el service les da crédito parcial (0.5) en la señal de debilidad
 }
 
 export interface SrsStatRow {
@@ -44,13 +46,15 @@ export const progressRepository = {
     });
   },
 
-  // % de acierto por tema: agrupado por [topicId, isCorrect], solo ítems contestados y con topicId.
+  // % de acierto por tema: agrupado por [topicId, isCorrect, grade], solo ítems contestados y con topicId.
   // "Contestado" = MCQ con selectedIndex O ABIERTA con studentAnswer (una abierta respondida tiene
   // selectedIndex null pero studentAnswer no-null) → así las abiertas cuentan en puntos débiles (I-2).
-  // Se colapsa a {answered, correct} por tema en una sola pasada. La fórmula de debilidad no cambia.
+  // Se colapsa a {answered, correct, partial} por tema en una sola pasada: `partial` son las abiertas
+  // PARTIAL (no acertadas plenas pero tampoco fallo total). El service les da el crédito parcial (0.5)
+  // al armar la señal; la fórmula de debilidad no cambia.
   async getQuizStatsByTopic(userId: string): Promise<QuizStatRow[]> {
     const rows = await prisma.quizAttemptItem.groupBy({
-      by: ['topicId', 'isCorrect'],
+      by: ['topicId', 'isCorrect', 'grade'],
       where: {
         userId,
         topicId: { not: null },
@@ -60,13 +64,14 @@ export const progressRepository = {
       orderBy: { topicId: 'asc' },
     });
 
-    const map = new Map<string, { answered: number; correct: number }>();
+    const map = new Map<string, { answered: number; correct: number; partial: number }>();
     for (const r of rows) {
       const topicId = r.topicId as string; // topicId != null por el where
       const count = r._count as number; // Prisma 5.22 tipa _count como unión; en runtime es number
-      const acc = map.get(topicId) ?? { answered: 0, correct: 0 };
+      const acc = map.get(topicId) ?? { answered: 0, correct: 0, partial: 0 };
       acc.answered += count;
       if (r.isCorrect) acc.correct += count;
+      else if (r.grade === OpenGrade.PARTIAL) acc.partial += count; // crédito parcial lo aplica el service
       map.set(topicId, acc);
     }
     return [...map.entries()].map(([topicId, v]) => ({ topicId, ...v }));

@@ -1,8 +1,7 @@
 import { prisma } from '../../prisma/client.js';
-import { QuizAttemptStatus } from '@prisma/client';
+import { QuizAttemptStatus, OpenGrade } from '@prisma/client';
 import type {
   ConfidenceLevel,
-  OpenGrade,
   Prisma,
   QuizAttempt,
   QuizAttemptItem,
@@ -172,6 +171,18 @@ export const quizRepository = {
     return prisma.quizAttempt.count({
       where: { userId, status: QuizAttemptStatus.COMPLETED },
     });
+  },
+
+  // Nº de abiertas PARTIAL por intento (para el puntaje con crédito parcial del historial). UN solo groupBy
+  // sobre los intentos de la página (sin N+1, sin traer items). El resto de los grades/MCQ no entran.
+  async countPartialByAttempt(attemptIds: string[]): Promise<Map<string, number>> {
+    if (attemptIds.length === 0) return new Map();
+    const rows = await prisma.quizAttemptItem.groupBy({
+      by: ['attemptId'],
+      where: { attemptId: { in: attemptIds }, grade: OpenGrade.PARTIAL },
+      _count: true,
+    });
+    return new Map(rows.map((r) => [r.attemptId, r._count as number]));
   },
 
   // Intento + items (sin N+1: un include). Ownership por userId.

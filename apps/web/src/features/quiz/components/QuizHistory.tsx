@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { quizScore } from '@bract/shared';
 import type { QuizAttempt } from '@bract/shared';
 import { Badge } from '../../../components/ui/Badge';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -11,8 +12,13 @@ interface QuizHistoryProps {
   onOpen: (id: string) => void;
 }
 
+// Puntaje con crédito parcial (correctas + 0.5×parciales), derivado de los grades guardados.
+function attemptScore(a: QuizAttempt): number {
+  return quizScore(a.correctCount, a.partialCount);
+}
+
 function scorePct(a: QuizAttempt): number {
-  return a.totalCount > 0 ? Math.round((a.correctCount / a.totalCount) * 100) : 0;
+  return a.totalCount > 0 ? Math.round((attemptScore(a) / a.totalCount) * 100) : 0;
 }
 
 // Historial de intentos COMPLETED. Click en un intento → detalle revisable.
@@ -62,7 +68,7 @@ export function QuizHistory({ onOpen }: QuizHistoryProps) {
             </div>
             <div className="flex shrink-0 flex-col items-end gap-0.5">
               <span className="text-sm font-semibold text-text-primary">
-                {t('quiz.results.score', { correct: a.correctCount, total: a.totalCount })}
+                {t('quiz.results.score', { correct: attemptScore(a), total: a.totalCount })}
               </span>
               <span className="text-xs text-text-tertiary">
                 {t('quiz.results.percent', { pct: scorePct(a) })}

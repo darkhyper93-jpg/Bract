@@ -103,7 +103,6 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
   }
 
   const isAIUnavailable = apiErrorCode(generate.error) === 'AI_UNAVAILABLE';
-  const isNoTopics = apiErrorCode(generate.error) === 'VALIDATION_ERROR';
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
@@ -193,7 +192,10 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
         <p className="text-sm text-error">
           {isAIUnavailable
             ? t('quiz.setup.aiUnavailable')
-            : isNoTopics
+            : // "No hay temas" SOLO si la materia elegida realmente no tiene temas (señal autoritativa
+              // del cliente, igual condición que el server). Un VALIDATION_ERROR genérico (p. ej. payload
+              // inválido) ya NO se confunde con "sin temas": mostramos un mensaje acertado/genérico.
+              subjectHasNoTopics
               ? t('quiz.setup.noTopics')
               : t('quiz.setup.error')}
         </p>

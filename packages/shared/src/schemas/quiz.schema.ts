@@ -14,7 +14,10 @@ export const MAX_QUIZ_QUESTIONS = 10;
 // Cantidad de temas elegibles en una generación. El quiz manda TODOS los temas en UNA sola llamada de IA,
 // así que el tope sólo acota el tamaño del payload (no satura el free tier como sí lo haría flashcards).
 export const MIN_QUIZ_TOPICS = 1;
-export const MAX_QUIZ_TOPICS = 20;
+// Tope generoso para cubrir materias reales con muchos temas (p. ej. "seleccionar todos"). El costo de IA
+// lo acotan `count` y el tope total de grounding, NO la cantidad de temas elegibles; este max solo evita
+// payloads absurdos. Antes era 20, lo que rompía "seleccionar todos" en materias con +20 temas.
+export const MAX_QUIZ_TOPICS = 100;
 
 // Preguntas ABIERTAS (Calidad de aprendizaje). Cada abierta respondida = 1 llamada de corrección a la IA,
 // así que el tope duro de abiertas es la PALANCA DE COSTO (máx. 3 correcciones por quiz). Default 0 ⇒

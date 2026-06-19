@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { QuestionType } from '@bract/shared';
+import { QuestionType, quizScore } from '@bract/shared';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { useQuizAttempt } from '../hooks/useQuiz';
@@ -46,7 +46,9 @@ export function QuizAttemptDetail({ id, onBack }: QuizAttemptDetailProps) {
     );
   }
 
-  const pct = attempt.totalCount > 0 ? Math.round((attempt.correctCount / attempt.totalCount) * 100) : 0;
+  // Puntaje con crédito parcial (correctas + 0.5×parciales), derivado de los grades guardados.
+  const score = quizScore(attempt.correctCount, attempt.partialCount);
+  const pct = attempt.totalCount > 0 ? Math.round((score / attempt.totalCount) * 100) : 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -55,7 +57,7 @@ export function QuizAttemptDetail({ id, onBack }: QuizAttemptDetailProps) {
       <div className="flex flex-col items-center gap-1 rounded-lg border border-border-subtle bg-bg-surface py-6 text-center">
         <span className="text-xs uppercase tracking-wide text-text-tertiary">{scopeLabel(t, attempt)}</span>
         <p className="text-2xl font-semibold text-text-primary">
-          {t('quiz.results.score', { correct: attempt.correctCount, total: attempt.totalCount })}
+          {t('quiz.results.score', { correct: score, total: attempt.totalCount })}
         </p>
         <span className="text-sm text-text-secondary">{t('quiz.results.percent', { pct })}</span>
         <span className="text-xs text-text-tertiary">

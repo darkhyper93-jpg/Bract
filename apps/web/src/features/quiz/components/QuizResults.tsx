@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { QuestionType } from '@bract/shared';
+import { QuestionType, quizScore, tallyScore } from '@bract/shared';
 import { Button } from '../../../components/ui/Button';
 import { QuestionReview } from './QuestionReview';
 import { scopeLabel } from '../lib/scopeLabel';
@@ -13,7 +13,9 @@ type QuizResultsProps = QuizRunResult & {
 // El intento ya quedó COMPLETED en el server al responder la última pregunta.
 export function QuizResults({ scope, scopeName, topicCount, totalCount, answers, onRestart }: QuizResultsProps) {
   const { t } = useTranslation();
-  const correct = answers.filter((a) => a.reveal.isCorrect).length;
+  // Puntaje con crédito parcial: cada parcial vale 0.5 (derivado de los grades de cada reveal). P. ej. 8.5/N.
+  const { correctCount, partialCount } = tallyScore(answers.map((a) => a.reveal));
+  const correct = quizScore(correctCount, partialCount);
   const total = totalCount;
   const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
 

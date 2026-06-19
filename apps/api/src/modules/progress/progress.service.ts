@@ -1,4 +1,4 @@
-import { ConfidenceLevel } from '@bract/shared';
+import { ConfidenceLevel, PARTIAL_CREDIT } from '@bract/shared';
 import type { ProgressOverview, SubjectProgress, TopicProgress, WeakTopic } from '@bract/shared';
 import { progressRepository } from './progress.repository.js';
 import { preferencesService } from '../preferences/preferences.service.js';
@@ -50,7 +50,9 @@ async function computeAll(userId: string): Promise<TopicComputed[]> {
         topicId: topic.id,
         subjectId: subject.id,
         answered: q?.answered ?? 0,
-        correct: q?.correct ?? 0,
+        // Crédito parcial (I-2): una abierta PARTIAL vale 0.5 (entre acierto y fallo). `correct` queda
+        // fraccionario → accuracy = correct/answered lo refleja sin tocar la fórmula de debilidad.
+        correct: (q?.correct ?? 0) + PARTIAL_CREDIT * (q?.partial ?? 0),
         totalCards: s?.totalCards ?? 0,
         dueCards: s?.dueCards ?? 0,
         avgEase: s?.avgEase ?? null,

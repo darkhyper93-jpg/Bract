@@ -64,6 +64,20 @@ describe('progressService.getOverview', () => {
     expect(ov.totals.topicsWithData).toBe(1);
     expect(ov.totals.weakestTopicId).toBe('t1');
   });
+
+  it('crédito parcial (I-2): una abierta PARTIAL vale 0.5 en accuracy/weakness, no fallo total', async () => {
+    vi.mocked(progressRepository.getSubjectTree).mockResolvedValue([
+      { id: 's1', name: 'Mate', topics: [{ id: 't1', name: 'Álgebra' }] },
+    ]);
+    // 4 contestadas: 1 acierto pleno + 2 parciales + 1 fallo → correct efectivo = 1 + 0.5×2 = 2 → accuracy 0.5.
+    vi.mocked(progressRepository.getQuizStatsByTopic).mockResolvedValue([
+      { topicId: 't1', answered: 4, correct: 1, partial: 2 },
+    ]);
+    const ov = await progressService.getOverview('u1');
+    const topic = ov.subjects[0]!.topics[0]!;
+    expect(topic.accuracy).toBeCloseTo(0.5, 5);
+    expect(topic.weakness).toBeCloseTo(0.5, 5);
+  });
 });
 
 describe('progressService.getWeakTopics', () => {
