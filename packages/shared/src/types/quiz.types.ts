@@ -94,10 +94,14 @@ export type AnswerReveal =
   | {
       type: QuestionType.OPEN;
       order: number;
-      isCorrect: boolean; // true SOLO si grade === CORRECT
-      grade: OpenGrade; // nota de 3 estados (fuente de verdad de la IA)
-      feedback: string; // devolución de la IA, anclada al material
-      expectedAnswer: string; // criterio/respuesta esperada (recién acá se expone)
+      // DESACOPLE registrar↔corregir: responder GUARDA al instante (grade=null=pendiente) y NO depende
+      // de la IA; la corrección corre aparte (POST /quiz/attempts/:id/grade) con reintento. Mientras
+      // `grade === null` el ítem está "Evaluando…" (isCorrect false, feedback/expectedAnswer null —
+      // el criterio sigue server-only hasta que llega la nota). Al corregir se completan los tres.
+      isCorrect: boolean; // true SOLO si grade === CORRECT (false mientras pendiente)
+      grade: OpenGrade | null; // null = aún evaluando (pendiente); 3 estados al corregir
+      feedback: string | null; // devolución de la IA, anclada al material (null mientras pendiente)
+      expectedAnswer: string | null; // criterio/respuesta esperada (null hasta corregir — server-only)
     };
 
 // ---- Entidades persistidas (mappers Date→ISO, enum casteado, en el service) ----

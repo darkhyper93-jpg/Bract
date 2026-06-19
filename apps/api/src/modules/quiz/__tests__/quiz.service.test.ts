@@ -11,7 +11,8 @@ vi.mock('../quiz.repository.js', () => ({
     findAttemptOwned: vi.fn(),
     findItemByOrder: vi.fn(),
     recordAnswer: vi.fn(),
-    recordOpenAnswer: vi.fn(),
+    recordOpenAnswerPending: vi.fn(),
+    recordOpenGrade: vi.fn(),
     findManyCompletedByUserPaged: vi.fn(),
     countCompletedByUser: vi.fn(),
     findByIdAndUserWithItems: vi.fn(),
@@ -62,7 +63,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   // record* aplican por defecto (true = afectó la fila). Los tests de carrera los overridean.
   vi.mocked(quizRepository.recordAnswer).mockResolvedValue(true);
-  vi.mocked(quizRepository.recordOpenAnswer).mockResolvedValue(true);
+  vi.mocked(quizRepository.recordOpenAnswerPending).mockResolvedValue(true);
+  vi.mocked(quizRepository.recordOpenGrade).mockResolvedValue(true);
 });
 
 describe('generate', () => {
@@ -348,7 +350,7 @@ describe('answer — corrección server-side + lock anti-trampa', () => {
   });
 });
 
-describe('answer — preguntas ABIERTAS (corrección IA server-side, anti-trampa)', () => {
+describe('answer — preguntas ABIERTAS (registrar al instante, SIN IA)', () => {
   // Item OPEN persistido: sin opciones, sin correctIndex, con expectedAnswer server-only + topic.sourceText.
   const openItem = (over: Partial<PrismaQuizAttemptItem> = {}) => ({
     ...makeItem({
@@ -361,24 +363,106 @@ describe('answer — preguntas ABIERTAS (corrección IA server-side, anti-trampa
     topic: { sourceText: 'La integral es el área bajo la curva.' },
   });
 
-  it('corrige con la IA (anclada a material + expectedAnswer), deriva isCorrect del grade y persiste', async () => {
+  it('GUARDA la respuesta al instante (grade=null=pendiente) SIN llamar a la IA y devuelve reveal pendiente', async () => {
     vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
     vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
-    vi.mocked(gradeOpenAnswer).mockResolvedValue({ grade: 'CORRECT', feedback: '¡Bien!' });
 
     const reveal = await quizService.answer('att1', 'u1', {
       order: 0,
       answerText: '  el área debajo de la curva  ',
     });
 
-    // La IA recibe la pregunta + criterio server-only + material del tema + respuesta TRIMEADA del alumno.
+    // DESACOPLE: responder NO depende de la IA.
+    expect(gradeOpenAnswer).not.toHaveBeenCalled();
+    // Reveal PENDIENTE: confirma el registro, sin criterio ni feedback (server-only hasta corregir).
+    expect(reveal).toEqual({
+      type: 'OPEN',
+      order: 0,
+      isCorrect: false,
+      grade: null,
+      feedback: null,
+      expectedAnswer: null,
+    });
+    // Persistió SOLO el texto TRIMEADO (lock atómico WHERE studentAnswer null vive en el repo).
+    const [attemptId, itemId, studentAnswer] = vi.mocked(
+      quizRepository.recordOpenAnswerPending,
+    ).mock.calls[0]!;
+    expect(attemptId).toBe('att1');
+    expect(itemId).toBe('i0');
+    expect(studentAnswer).toBe('el área debajo de la curva');
+  });
+
+  it('falta answerText en una abierta → VALIDATION_ERROR, no guarda', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, selectedIndex: 1 }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(quizRepository.recordOpenAnswerPending).not.toHaveBeenCalled();
+  });
+
+  it('abierta ya respondida (studentAnswer no-null) → CONFLICT, no guarda', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem({ studentAnswer: 'ya escribí' }));
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, answerText: 'otra' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(quizRepository.recordOpenAnswerPending).not.toHaveBeenCalled();
+  });
+
+  it('carrera: recordOpenAnswerPending no afectó fila (false) → CONFLICT', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(quizRepository.recordOpenAnswerPending).mockResolvedValue(false);
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('una abierta sin expectedAnswer (no debería pasar) → VALIDATION_ERROR, no guarda', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem({ expectedAnswer: null }));
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(quizRepository.recordOpenAnswerPending).not.toHaveBeenCalled();
+  });
+});
+
+describe('gradeOpenItem — corrección aparte (IA server-side, idempotente, sin romper si falla)', () => {
+  // Item OPEN ya RESPONDIDO pero SIN nota (studentAnswer no-null, grade null) — lo que corrige el endpoint.
+  const answeredPending = (over: Partial<PrismaQuizAttemptItem> = {}) => ({
+    ...makeItem({
+      type: 'OPEN',
+      options: [] as unknown as PrismaQuizAttemptItem['options'],
+      correctIndex: null,
+      expectedAnswer: 'El área bajo la curva',
+      studentAnswer: 'el área debajo de la curva',
+      grade: null,
+      ...over,
+    }),
+    topic: { sourceText: 'La integral es el área bajo la curva.' },
+  });
+
+  it('corrige con la IA (anclada a material + expectedAnswer), deriva isCorrect del grade y persiste la nota', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(answeredPending());
+    vi.mocked(gradeOpenAnswer).mockResolvedValue({ grade: 'CORRECT', feedback: '¡Bien!' });
+
+    const reveal = await quizService.gradeOpenItem('att1', 'u1', { order: 0 });
+
+    // La IA recibe la pregunta + criterio server-only + material + el texto YA guardado del alumno.
     expect(gradeOpenAnswer).toHaveBeenCalledWith({
       question: 'P1',
       expectedAnswer: 'El área bajo la curva',
       sourceText: 'La integral es el área bajo la curva.',
       studentAnswer: 'el área debajo de la curva',
     });
-    // Reveal: recién acá viajan grade + feedback + expectedAnswer (antes nunca salieron del server).
+    // Reveal completo: recién acá viajan grade + feedback + expectedAnswer.
     expect(reveal).toEqual({
       type: 'OPEN',
       order: 0,
@@ -387,10 +471,9 @@ describe('answer — preguntas ABIERTAS (corrección IA server-side, anti-trampa
       feedback: '¡Bien!',
       expectedAnswer: 'El área bajo la curva',
     });
-    const [, , studentAnswer, grade, feedback, isCorrect] = vi.mocked(
-      quizRepository.recordOpenAnswer,
+    const [, , grade, feedback, isCorrect] = vi.mocked(
+      quizRepository.recordOpenGrade,
     ).mock.calls[0]!;
-    expect(studentAnswer).toBe('el área debajo de la curva');
     expect(grade).toBe('CORRECT');
     expect(feedback).toBe('¡Bien!');
     expect(isCorrect).toBe(true); // CORRECT → true
@@ -398,66 +481,92 @@ describe('answer — preguntas ABIERTAS (corrección IA server-side, anti-trampa
 
   it('PARTIAL cuenta como NO correcta (isCorrect=false) pero conserva la nota de 3 estados', async () => {
     vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
-    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(answeredPending());
     vi.mocked(gradeOpenAnswer).mockResolvedValue({ grade: 'PARTIAL', feedback: 'Te faltó precisión' });
 
-    const reveal = await quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' });
+    const reveal = await quizService.gradeOpenItem('att1', 'u1', { order: 0 });
 
     expect(reveal).toMatchObject({ type: 'OPEN', isCorrect: false, grade: 'PARTIAL' });
-    // isCorrect persistido (índice 5 de recordOpenAnswer) = false.
-    expect(vi.mocked(quizRepository.recordOpenAnswer).mock.calls[0]![5]).toBe(false);
+    // isCorrect persistido (índice 4 de recordOpenGrade) = false.
+    expect(vi.mocked(quizRepository.recordOpenGrade).mock.calls[0]![4]).toBe(false);
   });
 
-  it('IA-PRIMERO: si la corrección falla, propaga AI_UNAVAILABLE y NO consume el lock', async () => {
+  it('IDEMPOTENTE: si ya está corregida (grade no-null) devuelve el reveal SIN re-llamar a la IA', async () => {
     vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
-    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(
+      answeredPending({ grade: 'PARTIAL', feedback: 'ya estaba', isCorrect: false }),
+    );
+
+    const reveal = await quizService.gradeOpenItem('att1', 'u1', { order: 0 });
+
+    expect(gradeOpenAnswer).not.toHaveBeenCalled();
+    expect(quizRepository.recordOpenGrade).not.toHaveBeenCalled();
+    expect(reveal).toMatchObject({
+      type: 'OPEN',
+      grade: 'PARTIAL',
+      feedback: 'ya estaba',
+      expectedAnswer: 'El área bajo la curva',
+    });
+  });
+
+  it('IA caída TRANSITORIA (AI_UNAVAILABLE): NO tira error, devuelve reveal pendiente y NO graba la nota', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(answeredPending());
     vi.mocked(gradeOpenAnswer).mockRejectedValue(new AppError('AI_UNAVAILABLE', 'IA caída'));
 
-    await expect(
-      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
-    ).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
-    expect(quizRepository.recordOpenAnswer).not.toHaveBeenCalled();
+    const reveal = await quizService.gradeOpenItem('att1', 'u1', { order: 0 });
+
+    expect(reveal).toEqual({
+      type: 'OPEN',
+      order: 0,
+      isCorrect: false,
+      grade: null,
+      feedback: null,
+      expectedAnswer: null,
+    });
+    expect(quizRepository.recordOpenGrade).not.toHaveBeenCalled();
   });
 
-  it('falta answerText en una abierta → VALIDATION_ERROR, no llama a la IA', async () => {
+  it('error NO transitorio de la IA → se propaga (no lo tragamos)', async () => {
     vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
-    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(answeredPending());
+    vi.mocked(gradeOpenAnswer).mockRejectedValue(new AppError('INTERNAL_ERROR', 'bug'));
 
     await expect(
-      quizService.answer('att1', 'u1', { order: 0, selectedIndex: 1 }),
+      quizService.gradeOpenItem('att1', 'u1', { order: 0 }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+  });
+
+  it('aún no respondida (studentAnswer null) → VALIDATION_ERROR, no llama a la IA', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(answeredPending({ studentAnswer: null }));
+
+    await expect(
+      quizService.gradeOpenItem('att1', 'u1', { order: 0 }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(gradeOpenAnswer).not.toHaveBeenCalled();
   });
 
-  it('abierta ya respondida (studentAnswer no-null) → CONFLICT, no llama a la IA', async () => {
+  it('pregunta MCQ (no abierta) → VALIDATION_ERROR', async () => {
     vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
-    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem({ studentAnswer: 'ya escribí' }));
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue({
+      ...makeItem({ selectedIndex: 1 }),
+      topic: null,
+    });
 
     await expect(
-      quizService.answer('att1', 'u1', { order: 0, answerText: 'otra' }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
-    expect(gradeOpenAnswer).not.toHaveBeenCalled();
-  });
-
-  it('carrera: recordOpenAnswer no afectó fila (false) → CONFLICT', async () => {
-    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
-    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
-    vi.mocked(gradeOpenAnswer).mockResolvedValue({ grade: 'CORRECT', feedback: 'ok' });
-    vi.mocked(quizRepository.recordOpenAnswer).mockResolvedValue(false);
-
-    await expect(
-      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
-  });
-
-  it('una abierta sin expectedAnswer (no debería pasar) → VALIDATION_ERROR, no llama a la IA', async () => {
-    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
-    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem({ expectedAnswer: null }));
-
-    await expect(
-      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
+      quizService.gradeOpenItem('att1', 'u1', { order: 0 }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(gradeOpenAnswer).not.toHaveBeenCalled();
+  });
+
+  it('intento ajeno → NOT_FOUND, no busca la pregunta', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue(null);
+
+    await expect(
+      quizService.gradeOpenItem('att1', 'u1', { order: 0 }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(quizRepository.findItemByOrder).not.toHaveBeenCalled();
   });
 });
 
@@ -581,5 +690,52 @@ describe('getAttempt', () => {
     // Defensa extra: el criterio real de la pendiente NUNCA viaja en el payload serializado.
     const pendingSerialized = JSON.stringify(pending);
     expect(pendingSerialized).not.toContain('La derivada es la pendiente');
+  });
+
+  it('abierta RESPONDIDA pero PENDIENTE de nota (grade null): muestra el texto del alumno pero OCULTA criterio/feedback', async () => {
+    vi.mocked(quizRepository.findByIdAndUserWithItems).mockResolvedValue({
+      id: 'att1',
+      userId: 'u1',
+      scope: 'TOPIC',
+      status: 'COMPLETED',
+      subjectId: 's1',
+      topicId: 't1',
+      scopeName: 'Integrales',
+      topicCount: 1,
+      totalCount: 1,
+      correctCount: 0,
+      completedAt: now,
+      createdAt: now,
+      items: [
+        makeItem({
+          id: 'i0',
+          order: 0,
+          type: 'OPEN',
+          options: [] as unknown as PrismaQuizAttemptItem['options'],
+          correctIndex: null,
+          selectedIndex: null,
+          studentAnswer: 'el área debajo de la curva',
+          grade: null, // pendiente: la corrección todavía no llegó
+          feedback: null,
+          expectedAnswer: 'El área bajo la curva entre límites', // server-only hasta corregir
+          isCorrect: false,
+        }),
+      ],
+    });
+
+    const detail = await quizService.getAttempt('att1', 'u1');
+
+    // Sin nota → no suma crédito parcial todavía.
+    expect(detail.partialCount).toBe(0);
+
+    const pending = detail.items[0]!;
+    expect(pending.type).toBe('OPEN');
+    expect(pending.studentAnswer).toBe('el área debajo de la curva'); // el texto SÍ viaja (ya respondida)
+    expect(pending.grade).toBeNull(); // "Evaluando…"
+    expect(pending.feedback).toBeNull();
+    expect(pending.expectedAnswer).toBeNull(); // criterio OCULTO hasta que llegue la nota
+
+    // Defensa extra: el criterio real NO viaja mientras está pendiente.
+    expect(JSON.stringify(pending)).not.toContain('entre límites');
   });
 });

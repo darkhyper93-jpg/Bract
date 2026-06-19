@@ -71,6 +71,15 @@ export const answerQuestionSchema = z
     }
   });
 
+// ---- CORREGIR/REINTENTAR 1 abierta (POST /quiz/attempts/:id/grade) ----
+// Desacople de "registrar" y "corregir": responder una abierta la GUARDA al instante (grade=null) sin
+// depender de la IA; la corrección se dispara aparte con este endpoint (idempotente, con reintento del
+// lado del cliente). Solo identifica la pregunta por `order` — el server corrige el item respondido sin
+// nota (studentAnswer != null, grade == null), anclado al material + expectedAnswer (server-only).
+export const gradeOpenItemSchema = z.object({
+  order: z.number().int().min(0),
+});
+
 // ---- Listado e id de intento ----
 export const quizAttemptListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -83,4 +92,5 @@ export const quizAttemptIdParamSchema = z.object({
 
 export type GenerateQuizInput = z.infer<typeof generateQuizSchema>;
 export type AnswerQuestionInput = z.infer<typeof answerQuestionSchema>;
+export type GradeOpenItemInput = z.infer<typeof gradeOpenItemSchema>;
 export type QuizAttemptListQuery = z.infer<typeof quizAttemptListQuerySchema>;

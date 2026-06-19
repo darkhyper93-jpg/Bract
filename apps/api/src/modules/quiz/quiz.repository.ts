@@ -120,33 +120,50 @@ export const quizRepository = {
     });
   },
 
-  // Persiste la respuesta ABIERTA de un item (texto + nota IA) y recalcula los agregados, atómico.
+  // GUARDA la respuesta ABIERTA al instante, SIN nota (grade=null=pendiente) — desacople registrar↔corregir.
   // LOCK ATÓMICO anti-trampa (espeja recordAnswer): el update es CONDICIONAL (`where studentAnswer: null`)
-  // → si otra request ya la respondió, `updateMany` afecta 0 filas y devolvemos `false` (no infla nada).
-  // isCorrect ya viene derivado del grade (true SOLO si CORRECT) desde el service. La nota cruda de la IA
-  // (gradeOpenAnswer) se hizo ANTES del lock (IA-primero): si la carrera la pierde, esa corrección se descarta.
-  async recordOpenAnswer(
+  // → si dos respuestas simultáneas corren, solo UNA afecta una fila; la otra ve 0 filas y devolvemos
+  // `false` (CONFLICT, no infla nada). NO toca grade/feedback/isCorrect: quedan en su default (null/null/
+  // false) hasta que la corrección (gradeOpenAnswer, aparte) los complete. Igual recalcula los agregados:
+  // una abierta pendiente YA cuenta como respondida (si era la última, el intento pasa a COMPLETED).
+  async recordOpenAnswerPending(
     attemptId: string,
     itemId: string,
     studentAnswer: string,
-    grade: OpenGrade,
-    feedback: string,
-    isCorrect: boolean,
     now: Date,
     confidence?: ConfidenceLevel,
   ): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
       const res = await tx.quizAttemptItem.updateMany({
         where: { id: itemId, studentAnswer: null },
-        data: {
-          studentAnswer,
-          grade,
-          feedback,
-          isCorrect,
-          ...(confidence !== undefined ? { confidence } : {}),
-        },
+        // confidence solo se persiste si el alumno la declaró (calibración opcional).
+        data: { studentAnswer, ...(confidence !== undefined ? { confidence } : {}) },
       });
       if (res.count === 0) return false; // ya respondida (carrera) → no aplica, no recalcula
+      await recomputeAttemptAggregates(tx, attemptId, now);
+      return true;
+    });
+  },
+
+  // Completa la NOTA de una abierta ya respondida (corrección aparte, con reintento del lado cliente).
+  // IDEMPOTENTE/seguro: el update es CONDICIONAL (`where grade: null`) → si otra request (o un doble
+  // disparo del front) ya corrigió el item, afecta 0 filas, devolvemos `false` y NO re-grabamos ni
+  // recalculamos. isCorrect ya viene derivado del grade (true SOLO si CORRECT) desde el service. Solo si
+  // aplicó la nota (1 fila) recalculamos los agregados (correctCount con el nuevo acierto pleno).
+  async recordOpenGrade(
+    attemptId: string,
+    itemId: string,
+    grade: OpenGrade,
+    feedback: string,
+    isCorrect: boolean,
+    now: Date,
+  ): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      const res = await tx.quizAttemptItem.updateMany({
+        where: { id: itemId, grade: null },
+        data: { grade, feedback, isCorrect },
+      });
+      if (res.count === 0) return false; // ya corregida (carrera/doble disparo) → no re-aplica
       await recomputeAttemptAggregates(tx, attemptId, now);
       return true;
     });

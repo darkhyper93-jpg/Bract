@@ -11,6 +11,7 @@ import type {
   AnswerReveal,
   GeneratedAttempt,
   GenerateQuizInput,
+  GradeOpenItemInput,
   PublicQuizQuestion,
   QuizAttempt,
   QuizAttemptItem,
@@ -42,6 +43,8 @@ const INVALID_OPTION = 'Opción inválida';
 const MISSING_SELECTED_INDEX = 'Falta selectedIndex para una pregunta de opción múltiple';
 const MISSING_ANSWER_TEXT = 'Falta answerText para una pregunta abierta';
 const UNGRADABLE_OPEN = 'No se puede corregir esta pregunta (sin criterio)';
+const NOT_OPEN_QUESTION = 'Solo las preguntas abiertas se corrigen con IA';
+const QUESTION_NOT_ANSWERED = 'La pregunta todavía no fue respondida';
 
 // ---- Mappers Prisma → contrato @bract/shared ------------------------------
 // DECISIÓN: cast de enum Prisma → enum compartido (mismatch nominal de TS); mismo patrón que
@@ -113,7 +116,10 @@ function toDetailItem(it: PrismaQuizAttemptItem): QuizAttemptItem {
   }
 
   if (type === QuestionType.OPEN) {
-    // Abierta contestada: recién acá viajan grade + feedback + expectedAnswer (el criterio era server-only).
+    // Abierta contestada. Si todavía está PENDIENTE de corrección (grade null), viaja SOLO el texto del
+    // alumno: el criterio (expectedAnswer) y la devolución de la IA siguen server-only hasta que llega la
+    // nota (consistente con el reveal; el front muestra "Evaluando…" y reintenta la corrección aparte).
+    const graded = it.grade !== null;
     return {
       ...base,
       options: [], // OPEN no tiene opciones
@@ -123,8 +129,8 @@ function toDetailItem(it: PrismaQuizAttemptItem): QuizAttemptItem {
       confidence: it.confidence as ConfidenceLevel | null,
       studentAnswer: it.studentAnswer,
       grade: it.grade as OpenGrade | null,
-      feedback: it.feedback,
-      expectedAnswer: it.expectedAnswer,
+      feedback: graded ? it.feedback : null,
+      expectedAnswer: graded ? it.expectedAnswer : null,
     };
   }
 
@@ -303,36 +309,28 @@ export const quizService = {
         throw new AppError('VALIDATION_ERROR', UNGRADABLE_OPEN);
       }
 
-      // IA-PRIMERO: la corrección se hace ANTES del lock. Si falla lanza AI_UNAVAILABLE y NO se consume
-      // el lock (el alumno reintenta). Anclada al material (sourceText del tema) + expectedAnswer.
-      const graded = await gradeOpenAnswer({
-        question: item.question,
-        expectedAnswer: item.expectedAnswer,
-        sourceText: item.topic?.sourceText ?? null,
-        studentAnswer: answerText,
-      });
-      // isCorrect deriva del grade: true SOLO si CORRECT (PARTIAL/INCORRECT ⇒ false → cuenta como débil en I-2).
-      const isCorrect = graded.grade === OpenGrade.CORRECT;
-      const applied = await quizRepository.recordOpenAnswer(
+      // DESACOPLE registrar↔corregir: responder GUARDA la respuesta al instante (grade=null=pendiente) y
+      // NO depende de la IA → nunca falla por una caída de la IA. La corrección corre APARTE
+      // (gradeOpenItem / POST :id/grade) con reintento del cliente. El lock anti-trampa se mantiene
+      // (studentAnswer != null ⇒ no se re-responde) gracias al update atómico condicional del repo.
+      const applied = await quizRepository.recordOpenAnswerPending(
         attemptId,
         item.id,
         answerText,
-        graded.grade as PrismaOpenGrade,
-        graded.feedback,
-        isCorrect,
         new Date(),
         confidence,
       );
       if (!applied) throw new AppError('CONFLICT', QUESTION_ALREADY_ANSWERED);
 
-      // Reveal SOLO de esta pregunta (recién acá viajan grade + feedback + expectedAnswer).
+      // Reveal PENDIENTE: solo confirma el registro. El criterio (expectedAnswer) y la devolución de la
+      // IA siguen server-only hasta que llegue la nota (se exponen juntos al corregir, como en MCQ).
       return {
         type: QuestionType.OPEN,
         order: item.order,
-        isCorrect,
-        grade: graded.grade,
-        feedback: graded.feedback,
-        expectedAnswer: item.expectedAnswer,
+        isCorrect: false,
+        grade: null,
+        feedback: null,
+        expectedAnswer: null,
       };
     }
 
@@ -369,6 +367,89 @@ export const quizService = {
 
     // Reveal SOLO de esta pregunta (recién acá viajan correctIndex + explicaciones).
     return { type: QuestionType.MCQ, order: item.order, isCorrect, correctIndex: item.correctIndex, options };
+  },
+
+  // ---- Corregir 1 abierta respondida (corrección server-side, anclada al material) ----
+  // Va APARTE de responder: el cliente lo dispara tras registrar (o lo reintenta) hasta que llega la nota.
+  // SEGURO/IDEMPOTENTE: solo corrige un item OPEN ya respondido (studentAnswer != null) y SIN nota
+  // (grade == null); si ya está corregido devuelve el reveal existente sin re-llamar a la IA. Si la IA
+  // falla transitoriamente NO tira error: deja el ítem pendiente y devuelve un reveal pendiente (el
+  // cliente reintenta). El criterio (expectedAnswer) recién se expone acá, al completarse la nota.
+  async gradeOpenItem(
+    attemptId: string,
+    userId: string,
+    input: GradeOpenItemInput,
+  ): Promise<AnswerReveal> {
+    const attempt = await quizRepository.findAttemptOwned(attemptId, userId);
+    if (!attempt) throw new AppError('NOT_FOUND', ATTEMPT_NOT_FOUND);
+
+    const item = await quizRepository.findItemByOrder(attemptId, input.order);
+    if (!item) throw new AppError('VALIDATION_ERROR', QUESTION_NOT_FOUND);
+    if ((item.type as QuestionType) !== QuestionType.OPEN) {
+      throw new AppError('VALIDATION_ERROR', NOT_OPEN_QUESTION);
+    }
+    // Debe estar respondida (registramos primero, corregimos después). Sin texto no hay qué corregir.
+    if (item.studentAnswer === null) throw new AppError('VALIDATION_ERROR', QUESTION_NOT_ANSWERED);
+    if (item.expectedAnswer === null) throw new AppError('VALIDATION_ERROR', UNGRADABLE_OPEN);
+
+    // Ya corregida (grade != null): idempotente, devolvemos el reveal completo SIN re-llamar a la IA.
+    if (item.grade !== null) {
+      return {
+        type: QuestionType.OPEN,
+        order: item.order,
+        isCorrect: item.isCorrect,
+        grade: item.grade as OpenGrade,
+        feedback: item.feedback ?? '',
+        expectedAnswer: item.expectedAnswer,
+      };
+    }
+
+    // Corrección con IA (mantiene su withAIRetry interno), anclada al material (sourceText) + criterio.
+    let graded: { grade: OpenGrade; feedback: string };
+    try {
+      graded = await gradeOpenAnswer({
+        question: item.question,
+        expectedAnswer: item.expectedAnswer,
+        sourceText: item.topic?.sourceText ?? null,
+        studentAnswer: item.studentAnswer,
+      });
+    } catch (err) {
+      // Falla TRANSITORIA de la IA (AI_UNAVAILABLE): NO tiramos error — el ítem queda pendiente y el
+      // cliente reintenta. Cualquier otro error (bug, etc.) se propaga normal.
+      if (err instanceof AppError && err.code === 'AI_UNAVAILABLE') {
+        return {
+          type: QuestionType.OPEN,
+          order: item.order,
+          isCorrect: false,
+          grade: null,
+          feedback: null,
+          expectedAnswer: null,
+        };
+      }
+      throw err;
+    }
+
+    // isCorrect deriva del grade: true SOLO si CORRECT (PARTIAL/INCORRECT ⇒ false → cuenta como débil en I-2).
+    const isCorrect = graded.grade === OpenGrade.CORRECT;
+    // Update condicional (WHERE grade: null): si otra corrección ganó la carrera, no re-aplica.
+    await quizRepository.recordOpenGrade(
+      attemptId,
+      item.id,
+      graded.grade as PrismaOpenGrade,
+      graded.feedback,
+      isCorrect,
+      new Date(),
+    );
+
+    // Reveal completo: recién acá viajan grade + feedback + expectedAnswer.
+    return {
+      type: QuestionType.OPEN,
+      order: item.order,
+      isCorrect,
+      grade: graded.grade,
+      feedback: graded.feedback,
+      expectedAnswer: item.expectedAnswer,
+    };
   },
 
   // ---- Lectura (historial COMPLETED) ----

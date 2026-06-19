@@ -32,11 +32,22 @@ export const quizApi = {
     return res.data.data.attempt;
   },
 
-  // RESPONDER 1 pregunta: el server corrige y devuelve la reveal (correctIndex + explicaciones) de esa pregunta.
+  // RESPONDER 1 pregunta: el server registra. MCQ corrige al instante (reveal completa); OPEN GUARDA al
+  // instante y devuelve reveal PENDIENTE (grade=null) — la corrección va aparte (grade()).
   async answer(attemptId: string, input: AnswerQuestionInput): Promise<AnswerReveal> {
     const res = await apiClient.post<Envelope<{ reveal: AnswerReveal }>>(
       `/quiz/attempts/${attemptId}/answers`,
       input,
+    );
+    return res.data.data.reveal;
+  },
+
+  // CORREGIR/REINTENTAR 1 abierta ya respondida (corrección aparte). Idempotente: devuelve la reveal
+  // completa cuando llega la nota, o una reveal PENDIENTE (grade=null) si la IA aún no respondió.
+  async grade(attemptId: string, order: number): Promise<AnswerReveal> {
+    const res = await apiClient.post<Envelope<{ reveal: AnswerReveal }>>(
+      `/quiz/attempts/${attemptId}/grade`,
+      { order },
     );
     return res.data.data.reveal;
   },

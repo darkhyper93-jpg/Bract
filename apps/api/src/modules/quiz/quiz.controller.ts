@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import {
   generateQuizSchema,
   answerQuestionSchema,
+  gradeOpenItemSchema,
   quizAttemptListQuerySchema,
   quizAttemptIdParamSchema,
 } from '@bract/shared';
@@ -27,6 +28,20 @@ export const quizController = {
       const { id } = quizAttemptIdParamSchema.parse(req.params);
       const input = answerQuestionSchema.parse(req.body);
       const reveal = await quizService.answer(id, req.user!.id, input);
+      res.json({ success: true, data: { reveal } });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // POST /quiz/attempts/:id/grade — CORREGIR/REINTENTAR 1 abierta ya respondida (corrección aparte).
+  // Idempotente: si ya está corregida devuelve el reveal; si la IA falla transitoriamente devuelve un
+  // reveal pendiente (sin error) y el cliente reintenta.
+  async grade(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = quizAttemptIdParamSchema.parse(req.params);
+      const input = gradeOpenItemSchema.parse(req.body);
+      const reveal = await quizService.gradeOpenItem(id, req.user!.id, input);
       res.json({ success: true, data: { reveal } });
     } catch (err) {
       next(err);

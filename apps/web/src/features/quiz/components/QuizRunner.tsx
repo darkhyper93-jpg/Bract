@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AxiosError } from 'axios';
 import {
   ConfidenceLevel,
   QuizAttemptStatus,
   QuestionType,
-  OpenGrade,
   MAX_OPEN_ANSWER_LENGTH,
 } from '@bract/shared';
 import type { AnswerReveal, PublicQuizQuestion, QuizAttemptWithItems } from '@bract/shared';
@@ -15,7 +14,7 @@ import { ErrorState } from '../../../components/ui/ErrorState';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { Textarea } from '../../../components/ui/Textarea';
 import { cn } from '../../../utils/cn';
-import { useAnswerQuestion, useQuizAttempt } from '../hooks/useQuiz';
+import { useAnswerQuestion, useGradeOpenAnswer, useQuizAttempt } from '../hooks/useQuiz';
 import { QuestionReview } from './QuestionReview';
 import type { AnsweredQuestion, QuizRunResult } from '../types';
 
@@ -27,6 +26,10 @@ const CONFIDENCE_LEVELS: readonly ConfidenceLevel[] = [
   ConfidenceLevel.MEDIUM,
   ConfidenceLevel.HIGH,
 ];
+
+// Tiempo "Evaluando…" tras el cual ofrecemos "Continuar de todas formas" (válvula IA caída mucho rato).
+// El camino normal es esperar la nota (suele llegar en segundos); esto solo evita dejar trabado al alumno.
+const ESCAPE_AFTER_MS = 20_000;
 
 function apiErrorCode(err: unknown): string | undefined {
   if (err instanceof AxiosError) {
@@ -145,9 +148,11 @@ function hydrate(detail: QuizAttemptWithItems): {
             type: QuestionType.OPEN,
             order: it.order,
             isCorrect: it.isCorrect,
-            grade: it.grade ?? OpenGrade.INCORRECT,
-            feedback: it.feedback ?? '',
-            expectedAnswer: it.expectedAnswer ?? '',
+            // grade null = abierta respondida pero PENDIENTE de corrección ("Evaluando…"): se preserva
+            // tal cual (NO se fuerza a INCORRECT) para reanudar el reintento de la nota.
+            grade: it.grade,
+            feedback: it.feedback,
+            expectedAnswer: it.expectedAnswer,
           }
         : {
             type: QuestionType.MCQ,
@@ -180,6 +185,7 @@ interface RunnerSessionProps {
 function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
   const { t } = useTranslation();
   const answerMutation = useAnswerQuestion(detail.id);
+  const { startGrading } = useGradeOpenAnswer(detail.id);
 
   // Semilla calculada UNA sola vez (los inicializadores de useState ignoran cambios posteriores).
   const [seed] = useState(() => hydrate(detail));
@@ -192,6 +198,31 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
   // Calibración: el alumno declara su confianza ANTES del reveal (se exige para responder).
   const [confidence, setConfidence] = useState<ConfidenceLevel | null>(null);
   const [reveal, setReveal] = useState<AnswerReveal | null>(null);
+  // Válvula de seguridad: si la corrección de una abierta tarda demasiado (IA caída un rato largo),
+  // habilitamos "Continuar de todas formas" para no dejar al alumno trabado (la nota se completa después).
+  const [escapeUnlocked, setEscapeUnlocked] = useState(false);
+
+  // Llega la nota de una abierta (corrección aparte): actualiza esa entrada en `answers` y, si seguís
+  // parado en esa pregunta, el reveal visible. Estable para usarse desde startGrading.
+  const handleGraded = useCallback((graded: AnswerReveal) => {
+    setAnswers((prev) =>
+      prev.map((a) => (a.question.order === graded.order ? { ...a, reveal: graded } : a)),
+    );
+    setReveal((prev) => (prev && prev.order === graded.order ? graded : prev));
+  }, []);
+
+  // Reanudación: arrancar el reintento de corrección de las abiertas que quedaron PENDIENTES (grade null)
+  // en un intento guardado/recargado a mitad de evaluación. Guard para no dispararlo dos veces.
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    for (const a of seed.answers) {
+      if (a.reveal.type === QuestionType.OPEN && a.reveal.grade === null) {
+        startGrading(a.reveal.order, handleGraded);
+      }
+    }
+  }, [seed.answers, startGrading, handleGraded]);
 
   const finish = (final: AnsweredQuestion[]) =>
     onFinished({
@@ -214,6 +245,19 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startIndex]);
 
+  // Una abierta del reveal visible que sigue "Evaluando…" (respondida pero sin nota).
+  const isEvaluating = reveal?.type === QuestionType.OPEN && reveal.grade === null;
+  // Tras ESCAPE_AFTER_MS evaluando sin nota, habilitar "Continuar de todas formas". Se reinicia al
+  // dejar de evaluar o al cambiar de pregunta.
+  useEffect(() => {
+    if (!isEvaluating) {
+      setEscapeUnlocked(false);
+      return;
+    }
+    const timer = setTimeout(() => setEscapeUnlocked(true), ESCAPE_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [isEvaluating, index]);
+
   const question = questions[index];
   const total = questions.length;
   const isLast = index >= total - 1;
@@ -232,11 +276,16 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
         { order: question.order, answerText: trimmedAnswer, confidence },
         {
           onSuccess: (r) => {
+            // Registrada al instante (reveal PENDIENTE, grade=null). Disparamos la corrección aparte:
+            // reintento silencioso hasta que llega la nota → handleGraded actualiza el reveal.
             setReveal(r);
             setAnswers((prev) => [
               ...prev,
               { question, selectedIndex: null, studentAnswer: trimmedAnswer, reveal: r },
             ]);
+            if (r.type === QuestionType.OPEN && r.grade === null) {
+              startGrading(r.order, handleGraded);
+            }
           },
         },
       );
@@ -267,6 +316,7 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
     setAnswerText('');
     setConfidence(null);
     setReveal(null);
+    setEscapeUnlocked(false);
   };
 
   const isConflict = apiErrorCode(answerMutation.error) === 'CONFLICT';
@@ -383,15 +433,25 @@ function RunnerSession({ detail, onFinished, onQuit }: RunnerSessionProps) {
         </p>
       )}
 
-      {/* La corrección de una abierta es una 2da llamada a la IA → aviso de que está corrigiendo. */}
-      {isOpen && answerMutation.isPending && !reveal && (
-        <p className="text-xs text-text-tertiary">{t('quiz.runner.open.grading')}</p>
-      )}
-
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {/* Mientras la abierta se corrige (grade=null): "Evaluando…". El alumno espera la nota antes de
+            avanzar; la respuesta YA quedó guardada, así que nunca hay error ni pérdida. */}
+        {isEvaluating && (
+          <span className="text-xs text-text-tertiary">{t('quiz.runner.open.evaluating')}</span>
+        )}
         {reveal ? (
-          <Button type="button" onClick={next}>
-            {isLast ? t('quiz.runner.seeResults') : t('quiz.runner.next')}
+          // Avance gateado mientras evalúa; tras el umbral, "Continuar de todas formas" (la nota se
+          // completa después). Si ya hay nota, botón normal Siguiente / Ver resultados.
+          <Button
+            type="button"
+            onClick={next}
+            disabled={isEvaluating && !escapeUnlocked}
+          >
+            {isEvaluating && escapeUnlocked
+              ? t('quiz.runner.open.continueAnyway')
+              : isLast
+                ? t('quiz.runner.seeResults')
+                : t('quiz.runner.next')}
           </Button>
         ) : (
           <Button

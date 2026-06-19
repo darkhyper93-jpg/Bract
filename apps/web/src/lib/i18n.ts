@@ -699,7 +699,8 @@ const resources = {
           },
           open: {
             placeholder: 'Write your answer…',
-            grading: 'Grading your answer…',
+            evaluating: 'Evaluating…',
+            continueAnyway: 'Continue anyway',
           },
         },
         results: {
@@ -716,6 +717,8 @@ const resources = {
           noAnswer: 'Not answered',
           feedback: 'Feedback',
           expectedAnswer: 'Expected answer',
+          evaluating: 'Evaluating…',
+          evaluatingHint: 'Grading your answer. The result will appear in a moment.',
           grade: {
             CORRECT: 'Correct',
             PARTIAL: 'Partially correct',
@@ -1468,7 +1471,8 @@ const resources = {
           },
           open: {
             placeholder: 'Escribí tu respuesta…',
-            grading: 'Corrigiendo tu respuesta…',
+            evaluating: 'Evaluando…',
+            continueAnyway: 'Continuar de todas formas',
           },
         },
         results: {
@@ -1485,6 +1489,8 @@ const resources = {
           noAnswer: 'Sin responder',
           feedback: 'Devolución',
           expectedAnswer: 'Respuesta esperada',
+          evaluating: 'Evaluando…',
+          evaluatingHint: 'Estamos corrigiendo tu respuesta. La nota aparece en un momento.',
           grade: {
             CORRECT: 'Correcta',
             PARTIAL: 'Parcialmente correcta',

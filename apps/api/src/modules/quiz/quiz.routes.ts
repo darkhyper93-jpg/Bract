@@ -9,6 +9,7 @@ const router: Router = Router();
 
 router.post('/quiz/attempts', authenticate, quizController.generate); // GENERAR (crea intento IN_PROGRESS)
 router.post('/quiz/attempts/:id/answers', authenticate, quizController.answer); // RESPONDER 1 pregunta
+router.post('/quiz/attempts/:id/grade', authenticate, quizController.grade); // CORREGIR/REINTENTAR 1 abierta
 router.get('/quiz/attempts', authenticate, quizController.listAttempts);
 router.get('/quiz/attempts/:id', authenticate, quizController.getAttempt);
 

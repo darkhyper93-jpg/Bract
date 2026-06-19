@@ -134,6 +134,9 @@ interface OpenReviewProps {
 function OpenReview({ index, question, studentAnswer, grade, feedback, expectedAnswer }: OpenReviewProps) {
   const { t } = useTranslation();
   const answered = studentAnswer !== null;
+  // Respondida pero SIN nota = la corrección (aparte) todavía no llegó → "Evaluando…". El criterio y la
+  // devolución de la IA recién aparecen con la nota (consistente con el reveal de MCQ).
+  const evaluating = answered && grade === null;
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface p-4">
@@ -142,10 +145,17 @@ function OpenReview({ index, question, studentAnswer, grade, feedback, expectedA
           <span className="text-text-tertiary">{index + 1}. </span>
           {question}
         </p>
-        {answered && grade && (
-          <Badge variant={GRADE_VARIANT[grade]} className="shrink-0">
-            {t(`quiz.review.grade.${grade}`)}
+        {evaluating ? (
+          <Badge variant="neutral" className="shrink-0">
+            {t('quiz.review.evaluating')}
           </Badge>
+        ) : (
+          answered &&
+          grade && (
+            <Badge variant={GRADE_VARIANT[grade]} className="shrink-0">
+              {t(`quiz.review.grade.${grade}`)}
+            </Badge>
+          )
         )}
       </div>
 
@@ -155,6 +165,9 @@ function OpenReview({ index, question, studentAnswer, grade, feedback, expectedA
             <p className="text-xs text-text-tertiary">{t('quiz.review.yourAnswer')}</p>
             <p className="mt-1 whitespace-pre-wrap text-sm text-text-secondary">{studentAnswer}</p>
           </div>
+          {evaluating && (
+            <p className="text-xs text-text-tertiary">{t('quiz.review.evaluatingHint')}</p>
+          )}
           {feedback && (
             <div className="rounded-lg border border-brand-primary/20 bg-brand-muted/40 px-3 py-2">
               <p className="text-xs text-brand-primary">{t('quiz.review.feedback')}</p>

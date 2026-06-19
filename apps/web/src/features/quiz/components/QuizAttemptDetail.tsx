@@ -1,8 +1,9 @@
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QuestionType, quizScore } from '@bract/shared';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/ui/ErrorState';
-import { useQuizAttempt } from '../hooks/useQuiz';
+import { useGradeOpenAnswer, useQuizAttempt } from '../hooks/useQuiz';
 import { QuestionReview } from './QuestionReview';
 import { scopeLabel } from '../lib/scopeLabel';
 
@@ -16,6 +17,21 @@ interface QuizAttemptDetailProps {
 export function QuizAttemptDetail({ id, onBack }: QuizAttemptDetailProps) {
   const { t, i18n } = useTranslation();
   const { attempt, isLoading, isError, refetch } = useQuizAttempt(id);
+  const { startGrading } = useGradeOpenAnswer(id);
+
+  // Recuperación "después": si una abierta quedó respondida pero PENDIENTE de nota (IA caída un rato y el
+  // alumno usó "Continuar de todas formas"), al abrir el detalle reintentamos la corrección en silencio
+  // hasta completarla; el cache (setQueryData en el hook) actualiza la nota y el puntaje. Guard anti-doble.
+  const recoveredRef = useRef(false);
+  useEffect(() => {
+    if (recoveredRef.current || !attempt) return;
+    const pendings = attempt.items.filter(
+      (it) => it.type === QuestionType.OPEN && it.studentAnswer !== null && it.grade === null,
+    );
+    if (pendings.length === 0) return;
+    recoveredRef.current = true;
+    for (const it of pendings) startGrading(it.order);
+  }, [attempt, startGrading]);
 
   const back = (
     <button
