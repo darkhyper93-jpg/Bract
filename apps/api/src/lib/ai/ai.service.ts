@@ -1,5 +1,11 @@
 import type { Content, GenerateContentParameters } from '@google/genai';
-import { TopicDifficulty, MAX_TOPIC_SOURCE_TEXT_LENGTH } from '@bract/shared';
+import {
+  TopicDifficulty,
+  QuestionType,
+  OpenGrade,
+  MAX_TOPIC_SOURCE_TEXT_LENGTH,
+  MAX_OPEN_QUESTIONS,
+} from '@bract/shared';
 import type { ChatLanguage, TopicStatus } from '@bract/shared';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
@@ -10,6 +16,8 @@ import type { StudentContext } from './ai.context.js';
 import {
   flashcardsOutputSchema,
   flashcardsResponseSchema,
+  gradeOpenOutputSchema,
+  gradeOpenResponseSchema,
   planOutputSchema,
   planResponseSchema,
   quizOutputSchema,
@@ -20,11 +28,13 @@ import {
 import {
   EXTRACT_TOPICS_SYSTEM,
   FLASHCARDS_SYSTEM,
+  GRADE_OPEN_SYSTEM,
   PLAN_SYSTEM,
   QUIZ_SYSTEM,
   buildChatSystemPrompt,
   buildExtractTopicsUserPrompt,
   buildFlashcardsUserPrompt,
+  buildGradeOpenUserPrompt,
   buildPlanUserPrompt,
   buildQuizUserPrompt,
 } from './ai.prompts.js';
@@ -106,6 +116,9 @@ export interface GenerateQuizInput {
   // el total inyectado se topea (ver buildQuizUserPrompt) para no reventar el budget de tokens.
   topics: { id: string; name: string; description?: string | null; sourceText?: string | null }[]; // 1 (TOPIC) o N (SUBJECT)
   count?: number; // default DEFAULT_QUIZ_COUNT, tope duro MAX_QUIZ_COUNT
+  // openCount: cuántas de las `count` preguntas pedir como ABIERTAS (default 0 = solo MCQ, como hoy).
+  // Tope duro MAX_OPEN_QUESTIONS → palanca de costo (máx. esa cantidad de correcciones por intento).
+  openCount?: number;
 }
 
 export interface GeneratedQuizOption {
@@ -113,11 +126,36 @@ export interface GeneratedQuizOption {
   explanation: string;
 }
 
-export interface GeneratedQuizQuestion {
-  topicId: string;
+// Pregunta generada — unión discriminada por `type`. MCQ trae opciones + correctIndex (corrección local);
+// OPEN trae expectedAnswer (criterio server-only; la corrección es una 2da llamada, gradeOpenAnswer).
+export type GeneratedQuizQuestion =
+  | {
+      type: QuestionType.MCQ;
+      topicId: string;
+      question: string;
+      options: GeneratedQuizOption[];
+      correctIndex: number;
+    }
+  | {
+      type: QuestionType.OPEN;
+      topicId: string;
+      question: string;
+      expectedAnswer: string;
+    };
+
+// ---- Corrección de respuesta abierta (gradeOpenAnswer) --------------------
+export interface GradeOpenInput {
   question: string;
-  options: GeneratedQuizOption[];
-  correctIndex: number;
+  expectedAnswer: string; // criterio generado desde el material (server-only)
+  // sourceText: material del tema re-inyectado para anclar la corrección. Ausente/null ⇒ corrige solo
+  // contra expectedAnswer (degradación suave si el tema fue borrado).
+  sourceText?: string | null;
+  studentAnswer: string; // texto libre del alumno
+}
+
+export interface GradeOpenResult {
+  grade: OpenGrade; // nota de 3 estados (fuente de verdad de la IA)
+  feedback: string;
 }
 
 // ---- Constantes -----------------------------------------------------------
@@ -131,6 +169,7 @@ const DEFAULT_QUIZ_COUNT = 5;
 const MAX_QUIZ_COUNT = 10; // tope duro de preguntas por quiz (Agente I)
 const MIN_QUIZ_OPTIONS = 2;
 const MAX_QUIZ_OPTIONS = 6;
+const GRADE_OPEN_MAX_TOKENS = 512; // corrección de 1 abierta: nota + feedback breve (salida chica)
 const PLAN_MAX_TOKENS = 8192;
 const FLASHCARDS_MAX_TOKENS = 2048;
 const CHAT_MAX_TOKENS = 4096;
@@ -376,16 +415,41 @@ function dedupeAndCapTopics(
   return out;
 }
 
-// Valida la salida cruda del quiz (la IA puede devolver basura) e impone los invariantes de negocio:
-// - cada opción con texto y explicación no vacíos; nº de opciones en [MIN, MAX];
-// - correctIndex entero dentro del rango de opciones;
-// - topicId ∈ temas de entrada (si no, cae al tema único/primero — siempre hay ≥1);
-// - dedup de preguntas por texto normalizado; cap a `cap`.
-// Descarta la pregunta entera si no cumple (nunca recorta opciones, que correría el correctIndex).
+// Normaliza el `type` crudo de la IA: 'OPEN' (laxo, case-insensitive) ⇒ OPEN; cualquier otra cosa
+// (ausente, 'MCQ', desconocido) ⇒ MCQ. Default MCQ = retrocompatible y conservador (camino probado).
+function normalizeQuestionType(raw: string | undefined): QuestionType {
+  return (raw ?? '').trim().toUpperCase() === QuestionType.OPEN ? QuestionType.OPEN : QuestionType.MCQ;
+}
+
+// Normaliza la nota cruda de la corrección de una abierta (la IA puede devolver "correcto"/minúsculas/
+// español). INCORRECT primero (para no confundir "incorrecta" con "correcta"); desconocido ⇒ PARTIAL
+// (no premia ni castiga al máximo, y para I-2 cuenta como NO correcta). Nunca falla el parse por esto.
+function normalizeOpenGrade(raw: string): OpenGrade {
+  const v = raw.trim().toUpperCase();
+  if (v.startsWith('INCORRECT')) return OpenGrade.INCORRECT; // incl. "INCORRECTO/A"
+  if (v.startsWith('CORRECT')) return OpenGrade.CORRECT; // incl. "CORRECTO/A"
+  return OpenGrade.PARTIAL; // "PARTIAL"/"PARCIAL"/desconocido
+}
+
+// Valida la salida cruda del quiz (la IA puede devolver basura) e impone los invariantes de negocio,
+// RAMIFICANDO por tipo de pregunta:
+// - MCQ: cada opción con texto y explicación no vacíos; nº de opciones en [MIN, MAX]; correctIndex entero
+//   dentro del rango. Descarta la pregunta entera si no cumple (nunca recorta opciones, que correría el índice).
+// - OPEN: expectedAnswer no vacío; HARD CAP a `openCap` abiertas (palanca de costo: cada abierta = 1
+//   futura llamada de corrección). Las abiertas de más se descartan (se completan con MCQ hasta `cap`).
+// Comunes: topicId ∈ temas de entrada (si no, cae al primero — siempre hay ≥1); dedup por texto; cap a `cap`.
 function validateAndCapQuiz(
-  questions: { topicId: string; question: string; options: { text: string; explanation: string }[]; correctIndex: number }[],
+  questions: {
+    type?: string | undefined;
+    topicId: string;
+    question: string;
+    options?: { text: string; explanation: string }[] | undefined;
+    correctIndex?: number | undefined;
+    expectedAnswer?: string | undefined;
+  }[],
   input: GenerateQuizInput,
   cap: number,
+  openCap: number,
 ): GeneratedQuizQuestion[] {
   const validTopicIds = new Set(input.topics.map((t) => t.id));
   const fallbackTopicId = input.topics[0]?.id;
@@ -393,35 +457,52 @@ function validateAndCapQuiz(
 
   const seen = new Set<string>();
   const out: GeneratedQuizQuestion[] = [];
+  let openUsed = 0;
 
   for (const q of questions) {
     const question = q.question.trim();
     if (question.length === 0) continue;
 
-    const options: GeneratedQuizOption[] = [];
-    let optionsOk = true;
-    for (const o of q.options) {
-      const text = o.text.trim();
-      const explanation = o.explanation.trim();
-      if (text.length === 0 || explanation.length === 0) {
-        optionsOk = false;
-        break;
-      }
-      options.push({ text, explanation });
-    }
-    if (!optionsOk) continue;
-    if (options.length < MIN_QUIZ_OPTIONS || options.length > MAX_QUIZ_OPTIONS) continue;
-
-    if (!Number.isInteger(q.correctIndex) || q.correctIndex < 0 || q.correctIndex >= options.length) {
-      continue;
-    }
-
     const key = normalizeQuestion(question);
     if (key.length === 0 || seen.has(key)) continue;
-    seen.add(key);
 
     const topicId = validTopicIds.has(q.topicId) ? q.topicId : fallbackTopicId;
-    out.push({ topicId, question, options, correctIndex: q.correctIndex });
+
+    if (normalizeQuestionType(q.type) === QuestionType.OPEN) {
+      if (openUsed >= openCap) continue; // tope duro de abiertas (costo de corrección)
+      const expectedAnswer = (q.expectedAnswer ?? '').trim();
+      if (expectedAnswer.length === 0) continue; // OPEN sin criterio de corrección → inservible
+      seen.add(key);
+      out.push({ type: QuestionType.OPEN, topicId, question, expectedAnswer });
+      openUsed++;
+    } else {
+      const options: GeneratedQuizOption[] = [];
+      let optionsOk = true;
+      for (const o of q.options ?? []) {
+        const text = o.text.trim();
+        const explanation = o.explanation.trim();
+        if (text.length === 0 || explanation.length === 0) {
+          optionsOk = false;
+          break;
+        }
+        options.push({ text, explanation });
+      }
+      if (!optionsOk) continue;
+      if (options.length < MIN_QUIZ_OPTIONS || options.length > MAX_QUIZ_OPTIONS) continue;
+
+      const correctIndex = q.correctIndex;
+      if (
+        correctIndex === undefined ||
+        !Number.isInteger(correctIndex) ||
+        correctIndex < 0 ||
+        correctIndex >= options.length
+      ) {
+        continue;
+      }
+      seen.add(key);
+      out.push({ type: QuestionType.MCQ, topicId, question, options, correctIndex });
+    }
+
     if (out.length >= cap) break;
   }
 
@@ -559,11 +640,12 @@ export async function extractTopics(input: ExtractTopicsInput): Promise<Extracte
 }
 
 /**
- * Genera un quiz de opción múltiple para un tema o materia (Agente I). Cada pregunta trae su
- * respuesta correcta y la explicación POR OPCIÓN en la MISMA llamada → la corrección es local
- * (comparar) y la explicación ya está lista, sin 2da llamada a la IA. Inherente a IA: lanza
- * `AI_UNAVAILABLE` (503) sin la key. La salida se valida con Zod + invariantes (correctIndex en
- * rango, topicId ∈ entrada, dedup, cap). NO escribe en DB (la persistencia del intento es del Agente I).
+ * Genera un quiz para un tema o materia (Agente I) mezclando preguntas MCQ y ABIERTAS en UNA sola
+ * llamada. MCQ: respuesta correcta + explicación POR OPCIÓN → corrección local, sin 2da llamada. OPEN:
+ * `expectedAnswer` (criterio generado desde el material, server-only) → la corrección del texto del alumno
+ * es una 2da llamada (gradeOpenAnswer) recién al responder. `openCount` (default 0) decide cuántas abiertas;
+ * se topea a MAX_OPEN_QUESTIONS y a `cap` (palanca de costo). Inherente a IA: lanza `AI_UNAVAILABLE` (503)
+ * sin la key. La salida se valida con Zod + invariantes que ramifican por tipo. NO escribe en DB.
  */
 export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQuizQuestion[]> {
   if (!isAIConfigured()) {
@@ -573,11 +655,13 @@ export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQ
     throw new AppError('AI_UNAVAILABLE', 'No hay temas para generar el quiz');
   }
   const cap = Math.min(input.count ?? DEFAULT_QUIZ_COUNT, MAX_QUIZ_COUNT);
+  // openCap ≤ MAX_OPEN_QUESTIONS y ≤ cap: garantiza como mucho esa cantidad de futuras correcciones IA.
+  const openCap = Math.min(Math.max(input.openCount ?? 0, 0), MAX_OPEN_QUESTIONS, cap);
   try {
     const client = getAIClient();
     const res = await client.models.generateContent({
       model: AI_MODELS.generation,
-      contents: buildQuizUserPrompt(input, cap),
+      contents: buildQuizUserPrompt(input, cap, openCap),
       config: {
         systemInstruction: QUIZ_SYSTEM,
         maxOutputTokens: QUIZ_MAX_TOKENS,
@@ -589,11 +673,49 @@ export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQ
     if (!parsed) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió un quiz válido');
     }
-    const questions = validateAndCapQuiz(parsed.questions, input, cap);
+    const questions = validateAndCapQuiz(parsed.questions, input, cap, openCap);
     if (questions.length === 0) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió preguntas válidas');
     }
     return questions;
+  } catch (err) {
+    throw mapAIError(err);
+  }
+}
+
+/**
+ * Corrige UNA respuesta abierta (2da llamada a la IA, al responder — Calidad de aprendizaje). Evalúa el
+ * texto del alumno ESTRICTAMENTE contra `expectedAnswer` + el `sourceText` re-inyectado (anti-trampa: el
+ * criterio nunca salió del server; anti-alucinación: prohibido conocimiento externo). Devuelve una nota de
+ * 3 estados (normalizada) + feedback breve. Inherente a IA: lanza `AI_UNAVAILABLE` (503) si falla o falta la
+ * key → el service NO consume el lock (el alumno reintenta). Modelo flash-lite, salida chica (~512 tokens).
+ */
+export async function gradeOpenAnswer(input: GradeOpenInput): Promise<GradeOpenResult> {
+  if (!isAIConfigured()) {
+    throw new AppError('AI_UNAVAILABLE', 'IA no disponible: configurá AI_API_KEY');
+  }
+  try {
+    const client = getAIClient();
+    const res = await client.models.generateContent({
+      model: AI_MODELS.generation,
+      contents: buildGradeOpenUserPrompt({
+        question: input.question,
+        expectedAnswer: input.expectedAnswer,
+        sourceText: input.sourceText ?? null,
+        studentAnswer: input.studentAnswer,
+      }),
+      config: {
+        systemInstruction: GRADE_OPEN_SYSTEM,
+        maxOutputTokens: GRADE_OPEN_MAX_TOKENS,
+        responseMimeType: 'application/json',
+        responseSchema: gradeOpenResponseSchema,
+      },
+    });
+    const parsed = parseStructured(res.text ?? '', gradeOpenOutputSchema);
+    if (!parsed) {
+      throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió una corrección válida');
+    }
+    return { grade: normalizeOpenGrade(parsed.grade), feedback: parsed.feedback.trim() };
   } catch (err) {
     throw mapAIError(err);
   }

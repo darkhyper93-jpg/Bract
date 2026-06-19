@@ -13,6 +13,7 @@ export {
   generateQuiz,
   generateStudyPlan,
   generateStudyPlanBaseline,
+  gradeOpenAnswer,
   streamChatReply,
 } from './ai.service.js';
 export type {
@@ -25,6 +26,8 @@ export type {
   GenerateFlashcardsInput,
   GeneratePlanInput,
   GenerateQuizInput,
+  GradeOpenInput,
+  GradeOpenResult,
   PlanDay,
   PlanItem,
 } from './ai.service.js';

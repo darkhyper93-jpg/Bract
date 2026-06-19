@@ -125,26 +125,32 @@ export function buildExtractTopicsUserPrompt(input: ExtractTopicsInput, cap: num
   ].join('\n');
 }
 
-// QUIZ — evaluación (Agente I). La IA genera, en UNA sola llamada, cada pregunta de opción múltiple
-// CON su respuesta correcta y la explicación de CADA opción → la corrección es local (comparar) y la
-// explicación ya está lista, sin una 2da llamada a la IA.
+// QUIZ — evaluación (Agente I). La IA genera, en UNA sola llamada, preguntas MCQ (opción múltiple) y/o
+// OPEN (respuesta corta). MCQ: respuesta correcta + explicación por opción (corrección local). OPEN: una
+// "expectedAnswer" (criterio/respuesta esperada) generada desde el material → la corrección del texto del
+// alumno es una 2da llamada (gradeOpen) recién al responder.
 export const QUIZ_SYSTEM = [
-  'Sos un evaluador experto que crea quizzes de opción múltiple para que un estudiante se autoevalúe.',
+  'Sos un evaluador experto que crea quizzes para que un estudiante se autoevalúe.',
   'Descomponé el contenido en sus subconceptos clave y cubrílos SIN dejar huecos y SIN repetir preguntas.',
+  'Cada pregunta tiene un "type": "MCQ" (opción múltiple) u "OPEN" (respuesta corta a desarrollar).',
   'REGLAS DURAS (no las violes):',
-  '- Cada pregunta tiene EXACTAMENTE 4 opciones: 1 correcta y 3 distractoras plausibles.',
+  '- Generá EXACTAMENTE la cantidad de preguntas OPEN indicada (puede ser 0) y el resto como MCQ, hasta el máximo total pedido.',
+  '- Asigná a cada pregunta el "topicId" del tema (de los provistos) al que pertenece su subconcepto. Usá ÚNICAMENTE los topicId presentes en la entrada; no inventes temas.',
+  'PREGUNTAS MCQ:',
+  '- "type": "MCQ", EXACTAMENTE 4 opciones en "options": 1 correcta y 3 distractoras plausibles.',
   '- "correctIndex" es el índice (0-based) de la opción correcta dentro de "options".',
   '- TODA opción lleva una "explanation": en la correcta, por qué es correcta; en cada distractora, por qué está mal.',
-  '- Asigná a cada pregunta el "topicId" del tema (de los provistos) al que pertenece su subconcepto.',
-  '- Usá ÚNICAMENTE los topicId presentes en la entrada. No inventes temas.',
+  '- NO incluyas "expectedAnswer" en las MCQ.',
+  'PREGUNTAS OPEN:',
+  '- "type": "OPEN", SIN "options" ni "correctIndex". La pregunta pide una respuesta breve a desarrollar (1 a 4 oraciones).',
+  '- "expectedAnswer": la respuesta esperada / criterio de corrección — qué debe contener una respuesta correcta (concepto y puntos clave). Concreta y autocontenida; servirá para corregir lo que escriba el alumno.',
   // GROUNDING: el campo "material" de un tema es el material real del alumno → fuente de verdad de ese tema.
-  '- Si un tema trae "material", basá SUS preguntas ESTRICTAMENTE en ese material: no introduzcas hechos ni datos que no estén ahí. Para los temas SIN "material", usá tu conocimiento general del tema.',
-  '- Generá COMO MÁXIMO la cantidad de preguntas pedida. Preguntas claras, concretas y autocontenidas.',
-  '- Respondé en el mismo idioma del tema/materia.',
+  '- Si un tema trae "material", basá SUS preguntas y su "expectedAnswer" ESTRICTAMENTE en ese material: no introduzcas hechos ni datos que no estén ahí. Para los temas SIN "material", usá tu conocimiento general del tema.',
+  '- Preguntas claras, concretas y autocontenidas. Respondé en el mismo idioma del tema/materia.',
   'Devolvé el quiz en el formato estructurado pedido, sin texto adicional.',
 ].join('\n');
 
-export function buildQuizUserPrompt(input: GenerateQuizInput, cap: number): string {
+export function buildQuizUserPrompt(input: GenerateQuizInput, cap: number, openCount: number): string {
   const scopeLabel = input.scope === 'TOPIC' ? 'un tema' : 'una materia (varios temas)';
   // Tope TOTAL de grounding: repartimos el presupuesto entre los temas que tienen material, así el
   // total inyectado nunca supera GROUNDING_CHARS_TOTAL aunque la materia tenga decenas de temas.
@@ -154,6 +160,7 @@ export function buildQuizUserPrompt(input: GenerateQuizInput, cap: number): stri
   const perTopic = groundingCharsPerTopic(withMaterial);
   return [
     `Cantidad máxima de preguntas: ${cap}.`,
+    `De esas, EXACTAMENTE ${openCount} deben ser de tipo OPEN (respuesta corta); el resto, MCQ.`,
     `Alcance del quiz: ${scopeLabel}.`,
     `Materia: ${input.subjectName}`,
     `Temas a evaluar (usá su id como topicId; "material" = extracto del material del alumno, basá sus preguntas EN ESO): ${JSON.stringify(
@@ -167,6 +174,38 @@ export function buildQuizUserPrompt(input: GenerateQuizInput, cap: number): stri
         };
       }),
     )}`,
+  ].join('\n');
+}
+
+// GRADE OPEN — corrección de una respuesta abierta (Calidad de aprendizaje). La IA evalúa el texto del
+// alumno ESTRICTAMENTE contra el material + la respuesta esperada (anti-trampa: el criterio nunca salió
+// del server). Nota de 3 estados + feedback breve para el alumno. Prohibido inventar conocimiento externo.
+export const GRADE_OPEN_SYSTEM = [
+  'Sos un evaluador que corrige la respuesta abierta de un estudiante a una pregunta de estudio.',
+  'Comparás la respuesta del alumno contra la respuesta esperada y el material provistos. Tu fuente de verdad son ESOS, no tu conocimiento general.',
+  'REGLAS DURAS (no las violes):',
+  '- Devolvé "grade" como EXACTAMENTE uno de: CORRECT (correcta), PARTIAL (parcialmente correcta o incompleta), INCORRECT (incorrecta o sin relación).',
+  '- Basá la corrección SOLO en la respuesta esperada y el material. NO penalices ni premies por información ausente de ellos. Si la respuesta del alumno contradice el material, es INCORRECT.',
+  '- "feedback": 1 a 3 oraciones, en segunda persona, explicando por qué esa nota y qué le faltó o qué estuvo bien. Tono cálido y concreto. Sin revelar texto que no corresponda.',
+  '- Respondé en el mismo idioma de la pregunta.',
+  'Devolvé el resultado en el formato estructurado pedido, sin texto adicional.',
+].join('\n');
+
+export interface BuildGradeOpenArgs {
+  question: string;
+  expectedAnswer: string;
+  sourceText?: string | null;
+  studentAnswer: string;
+}
+
+export function buildGradeOpenUserPrompt(args: BuildGradeOpenArgs): string {
+  // Re-inyectamos el material (recortado al tope por-tema) para anclar la corrección al texto real.
+  const material = groundingExcerpt(args.sourceText, GROUNDING_CHARS_PER_TOPIC);
+  return [
+    `Pregunta: ${args.question}`,
+    `Respuesta esperada (criterio de corrección): ${args.expectedAnswer}`,
+    ...(material ? [`Material del tema (fuente de verdad — corregí contra esto): ${material}`] : []),
+    `Respuesta del alumno: ${args.studentAnswer}`,
   ].join('\n');
 }
 

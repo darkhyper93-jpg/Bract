@@ -44,12 +44,18 @@ export const progressRepository = {
     });
   },
 
-  // % de acierto por tema: agrupado por [topicId, isCorrect], solo ítems contestados (selectedIndex != null)
-  // y con topicId. Se colapsa a {answered, correct} por tema en una sola pasada.
+  // % de acierto por tema: agrupado por [topicId, isCorrect], solo ítems contestados y con topicId.
+  // "Contestado" = MCQ con selectedIndex O ABIERTA con studentAnswer (una abierta respondida tiene
+  // selectedIndex null pero studentAnswer no-null) → así las abiertas cuentan en puntos débiles (I-2).
+  // Se colapsa a {answered, correct} por tema en una sola pasada. La fórmula de debilidad no cambia.
   async getQuizStatsByTopic(userId: string): Promise<QuizStatRow[]> {
     const rows = await prisma.quizAttemptItem.groupBy({
       by: ['topicId', 'isCorrect'],
-      where: { userId, selectedIndex: { not: null }, topicId: { not: null } },
+      where: {
+        userId,
+        topicId: { not: null },
+        OR: [{ selectedIndex: { not: null } }, { studentAnswer: { not: null } }],
+      },
       _count: true,
       orderBy: { topicId: 'asc' },
     });
@@ -94,12 +100,17 @@ export const progressRepository = {
   },
 
   // Calibración: confianza declarada × acierto. groupBy [confidence, isCorrect] sobre el índice
-  // [userId, confidence]; solo ítems contestados (selectedIndex != null) y con confianza declarada.
+  // [userId, confidence]; solo ítems contestados (MCQ con selectedIndex O abierta con studentAnswer) y con
+  // confianza declarada. Las abiertas con confianza también entran al cruce confianza×acierto.
   // Se colapsa a {answered, correct} por nivel en una sola pasada (igual que getQuizStatsByTopic).
   async getCalibrationStats(userId: string): Promise<CalibrationStatRow[]> {
     const rows = await prisma.quizAttemptItem.groupBy({
       by: ['confidence', 'isCorrect'],
-      where: { userId, selectedIndex: { not: null }, confidence: { not: null } },
+      where: {
+        userId,
+        confidence: { not: null },
+        OR: [{ selectedIndex: { not: null } }, { studentAnswer: { not: null } }],
+      },
       _count: true,
       orderBy: { confidence: 'asc' },
     });

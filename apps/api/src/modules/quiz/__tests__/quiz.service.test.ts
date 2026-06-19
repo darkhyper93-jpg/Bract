@@ -11,6 +11,7 @@ vi.mock('../quiz.repository.js', () => ({
     findAttemptOwned: vi.fn(),
     findItemByOrder: vi.fn(),
     recordAnswer: vi.fn(),
+    recordOpenAnswer: vi.fn(),
     findManyCompletedByUserPaged: vi.fn(),
     countCompletedByUser: vi.fn(),
     findByIdAndUserWithItems: vi.fn(),
@@ -18,10 +19,11 @@ vi.mock('../quiz.repository.js', () => ({
 }));
 vi.mock('../../../lib/ai/index.js', () => ({
   generateQuiz: vi.fn(),
+  gradeOpenAnswer: vi.fn(),
 }));
 
 import { quizRepository } from '../quiz.repository.js';
-import { generateQuiz } from '../../../lib/ai/index.js';
+import { generateQuiz, gradeOpenAnswer } from '../../../lib/ai/index.js';
 import { quizService } from '../quiz.service.js';
 
 const now = new Date('2026-06-13T00:00:00.000Z');
@@ -30,12 +32,14 @@ const now = new Date('2026-06-13T00:00:00.000Z');
 const fullOpts = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ text: `o${i}`, explanation: `e${i}` }));
 
-// Item persistido (fila Prisma) para los tests de answer.
+// Item persistido (fila Prisma) para los tests de answer. Default MCQ; los campos OPEN van null
+// (retrocompat con filas viejas). Los tests de abiertas overridean type + expectedAnswer + topic.
 function makeItem(over: Partial<PrismaQuizAttemptItem> = {}): PrismaQuizAttemptItem {
   return {
     id: 'i0',
     attemptId: 'att1',
     userId: 'u1',
+    type: 'MCQ',
     topicId: 't1',
     order: 0,
     question: 'P1',
@@ -44,6 +48,11 @@ function makeItem(over: Partial<PrismaQuizAttemptItem> = {}): PrismaQuizAttemptI
     correctIndex: 2,
     selectedIndex: null,
     isCorrect: false,
+    confidence: null,
+    studentAnswer: null,
+    grade: null,
+    feedback: null,
+    expectedAnswer: null,
     createdAt: now,
     ...over,
   };
@@ -51,8 +60,9 @@ function makeItem(over: Partial<PrismaQuizAttemptItem> = {}): PrismaQuizAttemptI
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // recordAnswer aplica por defecto (devuelve true = afectó la fila). Los tests de carrera lo overridean.
+  // record* aplican por defecto (true = afectó la fila). Los tests de carrera los overridean.
   vi.mocked(quizRepository.recordAnswer).mockResolvedValue(true);
+  vi.mocked(quizRepository.recordOpenAnswer).mockResolvedValue(true);
 });
 
 describe('generate', () => {
@@ -87,13 +97,19 @@ describe('generate', () => {
           id: `i${i}`,
           attemptId: 'att1',
           userId: it.userId,
+          type: it.type ?? 'MCQ',
           topicId: it.topicId ?? null,
           order: it.order,
           question: it.question,
           options: it.options,
-          correctIndex: it.correctIndex,
+          correctIndex: it.correctIndex ?? null,
           selectedIndex: it.selectedIndex ?? null,
           isCorrect: it.isCorrect ?? false,
+          confidence: null,
+          studentAnswer: it.studentAnswer ?? null,
+          grade: null,
+          feedback: null,
+          expectedAnswer: it.expectedAnswer ?? null,
           createdAt: now,
         })),
       }),
@@ -101,6 +117,7 @@ describe('generate', () => {
 
   const oneQuestion = (topicId: string) => [
     {
+      type: 'MCQ' as const,
       topicId,
       question: '¿Qué es una integral?',
       options: [
@@ -136,7 +153,7 @@ describe('generate', () => {
       totalCount: 1,
       correctCount: 0,
     });
-    expect(items[0]).toMatchObject({ userId: 'u1', topicId: 't1', order: 0, correctIndex: 0 });
+    expect(items[0]).toMatchObject({ userId: 'u1', type: 'MCQ', topicId: 't1', order: 0, correctIndex: 0 });
     expect((items[0]!.options as unknown as { explanation: string }[])[0]!.explanation).toBe(
       'correcta',
     );
@@ -151,7 +168,7 @@ describe('generate', () => {
       topicCount: 1,
       totalCount: 1,
       questions: [
-        { order: 0, topicId: 't1', question: '¿Qué es una integral?', options: [{ text: 'a' }, { text: 'b' }] },
+        { order: 0, type: 'MCQ', topicId: 't1', question: '¿Qué es una integral?', options: [{ text: 'a' }, { text: 'b' }] },
       ],
     });
     const serialized = JSON.stringify(result);
@@ -331,6 +348,119 @@ describe('answer — corrección server-side + lock anti-trampa', () => {
   });
 });
 
+describe('answer — preguntas ABIERTAS (corrección IA server-side, anti-trampa)', () => {
+  // Item OPEN persistido: sin opciones, sin correctIndex, con expectedAnswer server-only + topic.sourceText.
+  const openItem = (over: Partial<PrismaQuizAttemptItem> = {}) => ({
+    ...makeItem({
+      type: 'OPEN',
+      options: [] as unknown as PrismaQuizAttemptItem['options'],
+      correctIndex: null,
+      expectedAnswer: 'El área bajo la curva',
+      ...over,
+    }),
+    topic: { sourceText: 'La integral es el área bajo la curva.' },
+  });
+
+  it('corrige con la IA (anclada a material + expectedAnswer), deriva isCorrect del grade y persiste', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(gradeOpenAnswer).mockResolvedValue({ grade: 'CORRECT', feedback: '¡Bien!' });
+
+    const reveal = await quizService.answer('att1', 'u1', {
+      order: 0,
+      answerText: '  el área debajo de la curva  ',
+    });
+
+    // La IA recibe la pregunta + criterio server-only + material del tema + respuesta TRIMEADA del alumno.
+    expect(gradeOpenAnswer).toHaveBeenCalledWith({
+      question: 'P1',
+      expectedAnswer: 'El área bajo la curva',
+      sourceText: 'La integral es el área bajo la curva.',
+      studentAnswer: 'el área debajo de la curva',
+    });
+    // Reveal: recién acá viajan grade + feedback + expectedAnswer (antes nunca salieron del server).
+    expect(reveal).toEqual({
+      type: 'OPEN',
+      order: 0,
+      isCorrect: true,
+      grade: 'CORRECT',
+      feedback: '¡Bien!',
+      expectedAnswer: 'El área bajo la curva',
+    });
+    const [, , studentAnswer, grade, feedback, isCorrect] = vi.mocked(
+      quizRepository.recordOpenAnswer,
+    ).mock.calls[0]!;
+    expect(studentAnswer).toBe('el área debajo de la curva');
+    expect(grade).toBe('CORRECT');
+    expect(feedback).toBe('¡Bien!');
+    expect(isCorrect).toBe(true); // CORRECT → true
+  });
+
+  it('PARTIAL cuenta como NO correcta (isCorrect=false) pero conserva la nota de 3 estados', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(gradeOpenAnswer).mockResolvedValue({ grade: 'PARTIAL', feedback: 'Te faltó precisión' });
+
+    const reveal = await quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' });
+
+    expect(reveal).toMatchObject({ type: 'OPEN', isCorrect: false, grade: 'PARTIAL' });
+    // isCorrect persistido (índice 5 de recordOpenAnswer) = false.
+    expect(vi.mocked(quizRepository.recordOpenAnswer).mock.calls[0]![5]).toBe(false);
+  });
+
+  it('IA-PRIMERO: si la corrección falla, propaga AI_UNAVAILABLE y NO consume el lock', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(gradeOpenAnswer).mockRejectedValue(new AppError('AI_UNAVAILABLE', 'IA caída'));
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
+    ).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(quizRepository.recordOpenAnswer).not.toHaveBeenCalled();
+  });
+
+  it('falta answerText en una abierta → VALIDATION_ERROR, no llama a la IA', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, selectedIndex: 1 }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(gradeOpenAnswer).not.toHaveBeenCalled();
+  });
+
+  it('abierta ya respondida (studentAnswer no-null) → CONFLICT, no llama a la IA', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem({ studentAnswer: 'ya escribí' }));
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, answerText: 'otra' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(gradeOpenAnswer).not.toHaveBeenCalled();
+  });
+
+  it('carrera: recordOpenAnswer no afectó fila (false) → CONFLICT', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem());
+    vi.mocked(gradeOpenAnswer).mockResolvedValue({ grade: 'CORRECT', feedback: 'ok' });
+    vi.mocked(quizRepository.recordOpenAnswer).mockResolvedValue(false);
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('una abierta sin expectedAnswer (no debería pasar) → VALIDATION_ERROR, no llama a la IA', async () => {
+    vi.mocked(quizRepository.findAttemptOwned).mockResolvedValue({ id: 'att1' });
+    vi.mocked(quizRepository.findItemByOrder).mockResolvedValue(openItem({ expectedAnswer: null }));
+
+    await expect(
+      quizService.answer('att1', 'u1', { order: 0, answerText: 'algo' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(gradeOpenAnswer).not.toHaveBeenCalled();
+  });
+});
+
 describe('getAttempt', () => {
   it('intento ajeno/inexistente → NOT_FOUND', async () => {
     vi.mocked(quizRepository.findByIdAndUserWithItems).mockResolvedValue(null);
@@ -380,5 +510,70 @@ describe('getAttempt', () => {
     const pendingSerialized = JSON.stringify(pending);
     expect(pendingSerialized).not.toContain('explanation');
     expect(pendingSerialized).not.toContain('"correctIndex":3');
+  });
+
+  it('detalle con ABIERTAS: la pendiente NO filtra expectedAnswer/feedback; la contestada los muestra', async () => {
+    vi.mocked(quizRepository.findByIdAndUserWithItems).mockResolvedValue({
+      id: 'att1',
+      userId: 'u1',
+      scope: 'TOPIC',
+      status: 'IN_PROGRESS',
+      subjectId: 's1',
+      topicId: 't1',
+      scopeName: 'Integrales',
+      topicCount: 1,
+      totalCount: 2,
+      correctCount: 0,
+      completedAt: null,
+      createdAt: now,
+      items: [
+        // OPEN contestada (studentAnswer no-null): muestra grade + feedback + expectedAnswer.
+        makeItem({
+          id: 'i0',
+          order: 0,
+          type: 'OPEN',
+          options: [] as unknown as PrismaQuizAttemptItem['options'],
+          correctIndex: null,
+          selectedIndex: null,
+          studentAnswer: 'el área bajo la curva',
+          grade: 'PARTIAL',
+          feedback: 'Casi: te faltó mencionar el límite',
+          expectedAnswer: 'El área bajo la curva entre límites',
+          isCorrect: false,
+        }),
+        // OPEN SIN responder: expectedAnswer/feedback NO viajan (server-only hasta responder).
+        makeItem({
+          id: 'i1',
+          order: 1,
+          type: 'OPEN',
+          options: [] as unknown as PrismaQuizAttemptItem['options'],
+          correctIndex: null,
+          selectedIndex: null,
+          studentAnswer: null,
+          expectedAnswer: 'La derivada es la pendiente',
+        }),
+      ],
+    });
+
+    const detail = await quizService.getAttempt('att1', 'u1');
+
+    const answered = detail.items[0]!;
+    expect(answered.type).toBe('OPEN');
+    expect(answered.studentAnswer).toBe('el área bajo la curva');
+    expect(answered.grade).toBe('PARTIAL');
+    expect(answered.feedback).toBe('Casi: te faltó mencionar el límite');
+    expect(answered.expectedAnswer).toBe('El área bajo la curva entre límites');
+    expect(answered.options).toEqual([]);
+
+    const pending = detail.items[1]!;
+    expect(pending.type).toBe('OPEN');
+    expect(pending.studentAnswer).toBeNull();
+    expect(pending.grade).toBeNull();
+    expect(pending.feedback).toBeNull();
+    expect(pending.expectedAnswer).toBeNull();
+
+    // Defensa extra: el criterio real de la pendiente NUNCA viaja en el payload serializado.
+    const pendingSerialized = JSON.stringify(pending);
+    expect(pendingSerialized).not.toContain('La derivada es la pendiente');
   });
 });

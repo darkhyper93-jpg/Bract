@@ -19,6 +19,7 @@ import {
   generateFlashcards,
   generateQuiz,
   generateStudyPlan,
+  gradeOpenAnswer,
   streamChatReply,
 } from '../ai.service.js';
 
@@ -262,9 +263,57 @@ describe('generateQuiz', () => {
 
     expect(generateContent).toHaveBeenCalledOnce();
     expect(questions).toEqual([
-      { topicId: 't2', question: 'P1', options: opts(4), correctIndex: 2 },
-      { topicId: 't1', question: 'P5', options: opts(3), correctIndex: 1 }, // 'ghost' → fallback al 1er tema
+      { type: 'MCQ', topicId: 't2', question: 'P1', options: opts(4), correctIndex: 2 },
+      { type: 'MCQ', topicId: 't1', question: 'P5', options: opts(3), correctIndex: 1 }, // 'ghost' → fallback al 1er tema
     ]);
+  });
+
+  it('mezcla MCQ + OPEN: valida expectedAnswer no vacío, respeta openCount (tope de abiertas) y pide la cantidad exacta', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'la integral es el área' }, // ok (1ª)
+          { type: 'OPEN', topicId: 't2', question: 'A2', expectedAnswer: '   ' }, // criterio vacío → drop
+          { type: 'OPEN', topicId: 't1', question: 'A3', expectedAnswer: 'criterio 3' }, // ok (2ª)
+          { type: 'OPEN', topicId: 't2', question: 'A4', expectedAnswer: 'criterio 4' }, // excede openCount=2 → drop
+          { type: 'MCQ', topicId: 't2', question: 'M1', options: opts(4), correctIndex: 1 }, // MCQ ok
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz({ ...quizInput, count: 5, openCount: 2 });
+
+    expect(questions).toEqual([
+      { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'la integral es el área' },
+      { type: 'OPEN', topicId: 't1', question: 'A3', expectedAnswer: 'criterio 3' },
+      { type: 'MCQ', topicId: 't2', question: 'M1', options: opts(4), correctIndex: 1 },
+    ]);
+    // El prompt pidió EXACTAMENTE 2 abiertas.
+    const prompt = generateContent.mock.calls[0]![0].contents as string;
+    expect(prompt).toContain('EXACTAMENTE 2');
+  });
+
+  it('openCount default 0: descarta cualquier abierta que devuelva la IA (queda solo MCQ)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'x' }, // sin cupo de abiertas → drop
+          { type: 'MCQ', topicId: 't1', question: 'M1', options: opts(2), correctIndex: 0 },
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz(quizInput); // sin openCount → openCap 0
+
+    expect(questions).toEqual([
+      { type: 'MCQ', topicId: 't1', question: 'M1', options: opts(2), correctIndex: 0 },
+    ]);
+    const prompt = generateContent.mock.calls[0]![0].contents as string;
+    expect(prompt).toContain('EXACTAMENTE 0');
   });
 
   it('capa la cantidad al máximo pedido', async () => {
@@ -293,6 +342,77 @@ describe('generateQuiz', () => {
     vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     await expect(generateQuiz(quizInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+  });
+});
+
+describe('gradeOpenAnswer — corrección de una respuesta abierta', () => {
+  const gradeInput = {
+    question: '¿Qué es una integral?',
+    expectedAnswer: 'El área bajo la curva',
+    sourceText: 'La integral es el área bajo la curva de una función.',
+    studentAnswer: 'Es el área debajo de la curva',
+  };
+
+  it('sin AI_API_KEY lanza AI_UNAVAILABLE (es inherente a IA)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(false);
+    await expect(gradeOpenAnswer(gradeInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+  });
+
+  it('normaliza la nota laxa, trimea el feedback y ancla el prompt al material + expectedAnswer', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({ grade: 'correcta', feedback: '  ¡Bien! Captaste la idea.  ' }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const res = await gradeOpenAnswer(gradeInput);
+
+    expect(res).toEqual({ grade: 'CORRECT', feedback: '¡Bien! Captaste la idea.' });
+    const prompt = generateContent.mock.calls[0]![0].contents as string;
+    expect(prompt).toContain('Respuesta esperada');
+    expect(prompt).toContain('El área bajo la curva');
+    expect(prompt).toContain('Material del tema'); // material re-inyectado para anclar la corrección
+    expect(prompt).toContain('área bajo la curva de una función');
+  });
+
+  it('normaliza los 3 estados (incl. español y valor desconocido → PARTIAL)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const cases: [string, string][] = [
+      ['CORRECT', 'CORRECT'],
+      ['PARTIAL', 'PARTIAL'],
+      ['incorrecto', 'INCORRECT'],
+      ['¯\\_(ツ)_/¯', 'PARTIAL'], // desconocido → PARTIAL (no premia ni castiga al máximo)
+    ];
+    for (const [raw, expected] of cases) {
+      const generateContent = vi
+        .fn()
+        .mockResolvedValue({ text: JSON.stringify({ grade: raw, feedback: 'fb' }) });
+      vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+      const res = await gradeOpenAnswer(gradeInput);
+      expect(res.grade).toBe(expected);
+    }
+  });
+
+  it('sin sourceText: corrige SOLO contra expectedAnswer (no inyecta material)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi
+      .fn()
+      .mockResolvedValue({ text: JSON.stringify({ grade: 'CORRECT', feedback: 'ok' }) });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    await gradeOpenAnswer({ ...gradeInput, sourceText: null });
+
+    const prompt = generateContent.mock.calls[0]![0].contents as string;
+    expect(prompt).not.toContain('Material del tema');
+    expect(prompt).toContain('Respuesta esperada');
+  });
+
+  it('si la IA no devuelve una corrección válida (JSON inválido), lanza AI_UNAVAILABLE', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({ text: 'no es json' });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    await expect(gradeOpenAnswer(gradeInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
   });
 });
 

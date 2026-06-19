@@ -124,20 +124,24 @@ export const topicsResponseSchema: Schema = {
   required: ['topics'],
 };
 
-// QUIZ — evaluación (Agente I): preguntas de opción múltiple con explicación POR OPCIÓN generada en la
-// MISMA llamada (por qué la correcta lo es / por qué la distractora no) → corrección local, sin 2da
-// llamada a la IA. La salida cruda se valida con el Zod de abajo + invariantes en código (correctIndex
-// en rango, topicId ∈ entrada, dedup, cap). El `responseSchema` de Gemini va sin `additionalProperties`.
+// QUIZ — evaluación (Agente I): preguntas MCQ (opción múltiple) y OPEN (respuesta corta) en la MISMA
+// llamada. MCQ trae explicación POR OPCIÓN → corrección local. OPEN trae `expectedAnswer` (criterio/
+// respuesta esperada, generado desde el material) → la corrección es una 2da llamada a la IA (gradeOpen)
+// recién al responder. La salida cruda se valida con el Zod de abajo + invariantes en código que RAMIFICAN
+// por `type` (ver validateAndCapQuiz). `type`/`options`/`correctIndex`/`expectedAnswer` son opcionales en el
+// schema crudo (no todos aplican a ambos tipos); el código exige lo que corresponde a cada tipo.
 const quizOptionSchema = z.object({
   text: z.string().min(1),
   explanation: z.string().min(1),
 });
 
 const quizQuestionSchema = z.object({
+  type: z.string().optional(), // 'MCQ' | 'OPEN' (laxo; ausente/desconocido ⇒ MCQ, ver normalizeQuestionType)
   topicId: z.string().min(1),
   question: z.string().min(1),
-  options: z.array(quizOptionSchema),
-  correctIndex: z.number().int(),
+  options: z.array(quizOptionSchema).optional(), // solo MCQ
+  correctIndex: z.number().int().optional(), // solo MCQ
+  expectedAnswer: z.string().optional(), // solo OPEN
 });
 
 export const quizOutputSchema = z.object({
@@ -154,8 +158,10 @@ export const quizResponseSchema: Schema = {
       items: {
         type: Type.OBJECT,
         properties: {
+          type: { type: Type.STRING }, // 'MCQ' | 'OPEN'
           topicId: { type: Type.STRING },
           question: { type: Type.STRING },
+          // MCQ: opciones con explicación. OPEN no las usa (la IA las omite).
           options: {
             type: Type.ARRAY,
             items: {
@@ -167,11 +173,32 @@ export const quizResponseSchema: Schema = {
               required: ['text', 'explanation'],
             },
           },
-          correctIndex: { type: Type.INTEGER },
+          correctIndex: { type: Type.INTEGER }, // MCQ
+          expectedAnswer: { type: Type.STRING }, // OPEN: criterio/respuesta esperada (desde el material)
         },
-        required: ['topicId', 'question', 'options', 'correctIndex'],
+        required: ['type', 'topicId', 'question'],
       },
     },
   },
   required: ['questions'],
+};
+
+// GRADE OPEN — corrección de una respuesta abierta (2da llamada a la IA, al responder). La IA evalúa el
+// texto del alumno contra el material (sourceText) + la respuesta esperada, y devuelve una nota de 3
+// estados + feedback. La nota cruda se valida laxa y se normaliza en código (normalizeOpenGrade): la IA
+// podría devolver "correcto"/minúsculas → no queremos que falle todo el parse.
+export const gradeOpenOutputSchema = z.object({
+  grade: z.string().min(1),
+  feedback: z.string().min(1),
+});
+
+export type GradeOpenOutput = z.infer<typeof gradeOpenOutputSchema>;
+
+export const gradeOpenResponseSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    grade: { type: Type.STRING }, // CORRECT | PARTIAL | INCORRECT (se normaliza en código)
+    feedback: { type: Type.STRING },
+  },
+  required: ['grade', 'feedback'],
 };
