@@ -167,6 +167,11 @@ const MAX_FLASHCARD_COUNT = 10;
 const MAX_EXTRACT_TOPICS = 50; // tope duro de temas por importación (Agente K)
 const DEFAULT_QUIZ_COUNT = 5;
 const MAX_QUIZ_COUNT = 10; // tope duro de preguntas por quiz (Agente I)
+// FIX prompt acotado (materia entera): NO enviamos a la IA los hasta ~100 temas de una materia —
+// el prompt se volvería enorme y, en el free tier, frágil. Mandamos una MUESTRA de a lo sumo esta
+// cantidad (siempre ≥ la cantidad de preguntas pedidas). El scope/scopeName/topicCount persistidos los
+// deriva el service desde el set COMPLETO de temas; esto solo acota lo que ve la IA al generar.
+const QUIZ_PROMPT_MAX_TOPICS = 20;
 const MIN_QUIZ_OPTIONS = 2;
 const MAX_QUIZ_OPTIONS = 6;
 const GRADE_OPEN_MAX_TOKENS = 512; // corrección de 1 abierta: nota + feedback breve (salida chica)
@@ -515,6 +520,97 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// ---- Reintento del proveedor (FIX fiabilidad) -----------------------------
+// Los cortes del free tier de Gemini (rate limit / 503 overload / red) son TRANSITORIOS, no bugs.
+// Reintentamos las llamadas NO-stream con backoff exponencial antes de degradar a AI_UNAVAILABLE.
+// NO se reintenta lo DETERMINISTA: la falta de key se chequea antes de la llamada, y la salida
+// inválida/no parseable se valida DESPUÉS del reintento (parseStructured), así que nunca pasa por acá.
+
+// Backoff por reintento: ~0.5s, 1.5s, 3s → hasta 3 reintentos (4 intentos totales).
+const AI_RETRY_BACKOFF_MS = [500, 1500, 3000] as const;
+// HTTP del proveedor que vale reintentar: 429 (rate limit) + familia 5xx (overload/gateway/timeout) +
+// 408/425. El 400/401/403/404 es DETERMINISTA (request mal armado, key inválida/ausente) → no se reintenta.
+const TRANSIENT_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+// Códigos de error de red de Node (fetch del SDK) que son transitorios.
+const TRANSIENT_NETWORK_CODES = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Extrae un status HTTP numérico del error del SDK (ApiError expone `.status`), si lo hay.
+function httpStatusOf(err: unknown): number | null {
+  if (err !== null && typeof err === 'object' && 'status' in err) {
+    const s = (err as { status: unknown }).status;
+    if (typeof s === 'number') return s;
+  }
+  return null;
+}
+
+// Error de red (fetch del SDK): TypeError "fetch failed" o un `cause.code` de la lista transitoria.
+function isNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause !== null && typeof cause === 'object' && 'code' in cause) {
+    const code = (cause as { code: unknown }).code;
+    if (typeof code === 'string' && TRANSIENT_NETWORK_CODES.has(code)) return true;
+  }
+  const msg = err.message.toLowerCase();
+  return msg.includes('fetch failed') || msg.includes('network') || msg.includes('socket hang up');
+}
+
+/** true si el fallo del proveedor es TRANSITORIO (vale reintentar); false si es determinista. */
+function isTransientAIError(err: unknown): boolean {
+  if (err instanceof AppError) return false; // lo lanzamos nosotros (sin key / salida inválida) → determinista
+  const status = httpStatusOf(err);
+  if (status !== null) return TRANSIENT_HTTP_STATUS.has(status);
+  if (isNetworkError(err)) return true;
+  // Sin status numérico: heurística por mensaje (el SDK suele embeber el motivo en el texto).
+  const msg = errorMessage(err).toLowerCase();
+  return (
+    msg.includes('overload') ||
+    msg.includes('rate limit') ||
+    msg.includes('quota') ||
+    msg.includes('unavailable') ||
+    msg.includes('temporarily') ||
+    msg.includes('try again') ||
+    msg.includes('too many requests')
+  );
+}
+
+/**
+ * Ejecuta una llamada NO-stream al proveedor reintentándola ante errores TRANSITORIOS con backoff
+ * exponencial. Reintenta solo lo transitorio; un error determinista corta de inmediato (se re-lanza y
+ * lo mapea el caller). NO usar para streaming (el chat por SSE queda intacto).
+ */
+async function withAIRetry<T>(label: string, call: () => Promise<T>): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= AI_RETRY_BACKOFF_MS.length; attempt++) {
+    try {
+      return await call();
+    } catch (err) {
+      lastErr = err;
+      const delay = AI_RETRY_BACKOFF_MS[attempt];
+      if (delay === undefined || !isTransientAIError(err)) break; // sin reintentos restantes o determinista
+      logger.warn('ai.transient_retry', {
+        label,
+        attempt: attempt + 1,
+        delayMs: delay,
+        error: errorMessage(err),
+      });
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
 /** Mapea cualquier fallo del proveedor a un error manejado (503), preservando AppError. */
 function mapAIError(err: unknown): AppError {
   if (err instanceof AppError) return err;
@@ -587,16 +683,18 @@ export async function generateFlashcards(
   const cap = Math.min(input.count ?? DEFAULT_FLASHCARD_COUNT, MAX_FLASHCARD_COUNT);
   try {
     const client = getAIClient();
-    const res = await client.models.generateContent({
-      model: AI_MODELS.generation,
-      contents: buildFlashcardsUserPrompt(input, cap),
-      config: {
-        systemInstruction: FLASHCARDS_SYSTEM,
-        maxOutputTokens: FLASHCARDS_MAX_TOKENS,
-        responseMimeType: 'application/json',
-        responseSchema: flashcardsResponseSchema,
-      },
-    });
+    const res = await withAIRetry('generateFlashcards', () =>
+      client.models.generateContent({
+        model: AI_MODELS.generation,
+        contents: buildFlashcardsUserPrompt(input, cap),
+        config: {
+          systemInstruction: FLASHCARDS_SYSTEM,
+          maxOutputTokens: FLASHCARDS_MAX_TOKENS,
+          responseMimeType: 'application/json',
+          responseSchema: flashcardsResponseSchema,
+        },
+      }),
+    );
     const parsed = parseStructured(res.text ?? '', flashcardsOutputSchema);
     if (!parsed) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió flashcards válidas');
@@ -657,23 +755,33 @@ export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQ
   const cap = Math.min(input.count ?? DEFAULT_QUIZ_COUNT, MAX_QUIZ_COUNT);
   // openCap ≤ MAX_OPEN_QUESTIONS y ≤ cap: garantiza como mucho esa cantidad de futuras correcciones IA.
   const openCap = Math.min(Math.max(input.openCount ?? 0, 0), MAX_OPEN_QUESTIONS, cap);
+  // FIX prompt acotado: en materia entera capeamos los temas ENVIADOS a la IA a una muestra (≥ cap),
+  // sin tocar lo que persiste el service (scope/scopeName/topicCount se derivan del set COMPLETO afuera).
+  // El mismo `scopedInput` alimenta el prompt y la validación (la IA solo conoce estos topicId).
+  const sampleSize = Math.max(QUIZ_PROMPT_MAX_TOPICS, cap);
+  const scopedInput: GenerateQuizInput =
+    input.topics.length > sampleSize
+      ? { ...input, topics: input.topics.slice(0, sampleSize) }
+      : input;
   try {
     const client = getAIClient();
-    const res = await client.models.generateContent({
-      model: AI_MODELS.generation,
-      contents: buildQuizUserPrompt(input, cap, openCap),
-      config: {
-        systemInstruction: QUIZ_SYSTEM,
-        maxOutputTokens: QUIZ_MAX_TOKENS,
-        responseMimeType: 'application/json',
-        responseSchema: quizResponseSchema,
-      },
-    });
+    const res = await withAIRetry('generateQuiz', () =>
+      client.models.generateContent({
+        model: AI_MODELS.generation,
+        contents: buildQuizUserPrompt(scopedInput, cap, openCap),
+        config: {
+          systemInstruction: QUIZ_SYSTEM,
+          maxOutputTokens: QUIZ_MAX_TOKENS,
+          responseMimeType: 'application/json',
+          responseSchema: quizResponseSchema,
+        },
+      }),
+    );
     const parsed = parseStructured(res.text ?? '', quizOutputSchema);
     if (!parsed) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió un quiz válido');
     }
-    const questions = validateAndCapQuiz(parsed.questions, input, cap, openCap);
+    const questions = validateAndCapQuiz(parsed.questions, scopedInput, cap, openCap);
     if (questions.length === 0) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió preguntas válidas');
     }
@@ -696,21 +804,23 @@ export async function gradeOpenAnswer(input: GradeOpenInput): Promise<GradeOpenR
   }
   try {
     const client = getAIClient();
-    const res = await client.models.generateContent({
-      model: AI_MODELS.generation,
-      contents: buildGradeOpenUserPrompt({
-        question: input.question,
-        expectedAnswer: input.expectedAnswer,
-        sourceText: input.sourceText ?? null,
-        studentAnswer: input.studentAnswer,
+    const res = await withAIRetry('gradeOpenAnswer', () =>
+      client.models.generateContent({
+        model: AI_MODELS.generation,
+        contents: buildGradeOpenUserPrompt({
+          question: input.question,
+          expectedAnswer: input.expectedAnswer,
+          sourceText: input.sourceText ?? null,
+          studentAnswer: input.studentAnswer,
+        }),
+        config: {
+          systemInstruction: GRADE_OPEN_SYSTEM,
+          maxOutputTokens: GRADE_OPEN_MAX_TOKENS,
+          responseMimeType: 'application/json',
+          responseSchema: gradeOpenResponseSchema,
+        },
       }),
-      config: {
-        systemInstruction: GRADE_OPEN_SYSTEM,
-        maxOutputTokens: GRADE_OPEN_MAX_TOKENS,
-        responseMimeType: 'application/json',
-        responseSchema: gradeOpenResponseSchema,
-      },
-    });
+    );
     const parsed = parseStructured(res.text ?? '', gradeOpenOutputSchema);
     if (!parsed) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió una corrección válida');

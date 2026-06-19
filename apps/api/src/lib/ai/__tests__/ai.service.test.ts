@@ -343,6 +343,26 @@ describe('generateQuiz', () => {
 
     await expect(generateQuiz(quizInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
   });
+
+  it('FIX prompt acotado: en materia entera capa los temas enviados a la IA a una muestra (no manda los 100)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [{ topicId: 't0', question: 'P', options: opts(2), correctIndex: 0 }],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    // 100 temas (materia entera). El prompt debe llevar solo la muestra (QUIZ_PROMPT_MAX_TOPICS = 20).
+    const topics = Array.from({ length: 100 }, (_, i) => ({ id: `t${i}`, name: `Tema ${i}` }));
+    await generateQuiz({ scope: 'SUBJECT', subjectName: 'Mate', topics });
+
+    const prompt = generateContent.mock.calls[0]![0].contents as string;
+    expect(prompt).toContain('"t0"'); // primeros 20 ids presentes
+    expect(prompt).toContain('"t19"');
+    expect(prompt).not.toContain('"t20"'); // el resto NO se envía (prompt acotado)
+    expect(prompt).not.toContain('"t99"');
+  });
 });
 
 describe('gradeOpenAnswer — corrección de una respuesta abierta', () => {
@@ -413,6 +433,143 @@ describe('gradeOpenAnswer — corrección de una respuesta abierta', () => {
     vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     await expect(gradeOpenAnswer(gradeInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+  });
+});
+
+describe('FIX fiabilidad: reintento ante errores transitorios del proveedor', () => {
+  const quizInput = {
+    scope: 'TOPIC' as const,
+    subjectName: 'Mate',
+    topics: [{ id: 't1', name: 'Integrales' }],
+  };
+  const okQuiz = {
+    text: JSON.stringify({
+      questions: [
+        {
+          topicId: 't1',
+          question: 'P',
+          options: [
+            { text: 'a', explanation: 'x' },
+            { text: 'b', explanation: 'y' },
+          ],
+          correctIndex: 0,
+        },
+      ],
+    }),
+  };
+  // Error con status HTTP — ApiError del SDK expone `.status`.
+  const httpError = (status: number) => Object.assign(new Error(`provider ${status}`), { status });
+
+  it('generateQuiz: reintenta un 503 (overload) y luego tiene éxito', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(isAIConfigured).mockReturnValue(true);
+      const generateContent = vi
+        .fn()
+        .mockRejectedValueOnce(httpError(503))
+        .mockResolvedValueOnce(okQuiz);
+      vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+      const promise = generateQuiz(quizInput);
+      await vi.runAllTimersAsync(); // dispara el backoff del reintento
+      const questions = await promise;
+
+      expect(generateContent).toHaveBeenCalledTimes(2);
+      expect(questions).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('generateQuiz: un rate limit (429) persistente agota los reintentos y degrada a AI_UNAVAILABLE', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(isAIConfigured).mockReturnValue(true);
+      const generateContent = vi.fn().mockRejectedValue(httpError(429));
+      vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+      const promise = generateQuiz(quizInput);
+      const assertion = expect(promise).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+      await vi.runAllTimersAsync();
+      await assertion;
+
+      expect(generateContent).toHaveBeenCalledTimes(4); // 1 intento + 3 reintentos
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('generateQuiz: un error DETERMINISTA (400) NO se reintenta', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockRejectedValue(httpError(400));
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    await expect(generateQuiz(quizInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(generateContent).toHaveBeenCalledOnce(); // sin reintentos
+  });
+
+  it('generateQuiz: salida inválida NO se reintenta (se valida después del reintento)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({ text: 'no es json' });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    await expect(generateQuiz(quizInput)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(generateContent).toHaveBeenCalledOnce();
+  });
+
+  it('gradeOpenAnswer: reintenta un error de red transitorio y luego tiene éxito', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(isAIConfigured).mockReturnValue(true);
+      const netError = Object.assign(new Error('fetch failed'), {
+        cause: { code: 'ECONNRESET' },
+      });
+      const generateContent = vi
+        .fn()
+        .mockRejectedValueOnce(netError)
+        .mockResolvedValueOnce({ text: JSON.stringify({ grade: 'CORRECT', feedback: 'ok' }) });
+      vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+      const promise = gradeOpenAnswer({
+        question: 'Q',
+        expectedAnswer: 'A',
+        sourceText: null,
+        studentAnswer: 'a',
+      });
+      await vi.runAllTimersAsync();
+      const res = await promise;
+
+      expect(generateContent).toHaveBeenCalledTimes(2);
+      expect(res.grade).toBe('CORRECT');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('generateFlashcards: reintenta un 503 y luego tiene éxito', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(isAIConfigured).mockReturnValue(true);
+      const generateContent = vi
+        .fn()
+        .mockRejectedValueOnce(httpError(503))
+        .mockResolvedValueOnce({
+          text: JSON.stringify({ cards: [{ question: 'Q', answer: 'A' }] }),
+        });
+      vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+      const promise = generateFlashcards({
+        topic: { id: 't1', name: 'Integrales' },
+        subjectName: 'Mate',
+      });
+      await vi.runAllTimersAsync();
+      const cards = await promise;
+
+      expect(generateContent).toHaveBeenCalledTimes(2);
+      expect(cards).toEqual([{ question: 'Q', answer: 'A' }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
