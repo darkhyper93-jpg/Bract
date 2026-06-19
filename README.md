@@ -685,6 +685,11 @@ enum QuizAttemptStatus {
   y, al responder la última, marca `status=COMPLETED` + `completedAt`. La reveal (correcta + explicaciones)
   se devuelve **solo de esa pregunta**. Un `selectedIndex` tramposo no infla el puntaje (se compara contra
   el valor guardado, no contra lo que diga el cliente).
+- **Crédito parcial (Calidad de aprendizaje):** una abierta `PARTIAL` vale **0.5** (entre acierto y fallo),
+  no un fallo total. El puntaje del resultado/historial es **fraccionario** (`correctCount + 0.5×partialCount`,
+  p. ej. `8.5/N`), **derivado de los `grade` ya guardados**. `partialCount` es un campo **derivado en lectura**
+  del contrato `QuizAttempt` (no es columna → sin `db push`): se calcula con un `groupBy` por intento en el
+  listado y contando en memoria en el detalle. El `isCorrect` booleano queda intacto para el lock/anti-trampa.
 - **Anti-trampa al REANUDAR (`GET /quiz/attempts/:id`):** el detalle es la fuente de verdad para retomar
   un intento, así que devuelve cada item **según esté contestado**: contestado (`selectedIndex !== null`)
   → completo (`options` con `explanation`, `correctIndex`, `selectedIndex`, `isCorrect`); SIN contestar
@@ -761,8 +766,8 @@ la preferencia de prioridad NO la altera (se documenta aparte, en el blend del p
 
 ```
 // Señal QUIZ — solo ítems contestados (selectedIndex != null); saltar ≠ fallar.
-answered      = count(QuizAttemptItem WHERE userId, topicId, selectedIndex != null)
-correct       = count(... AND isCorrect = true)
+answered      = count(QuizAttemptItem WHERE userId, topicId, contestado)   // MCQ con selectedIndex U OPEN con studentAnswer
+correct       = count(... AND isCorrect = true) + 0.5 × count(... AND grade = PARTIAL)   // crédito parcial: una abierta PARTIAL vale medio acierto (no fallo total)
 quizWeak      = answered > 0 ? 1 - correct/answered : AUSENTE
 lowConfidence = answered < MIN_ANSWERS            // p.ej. 3 → el dashboard lo marca tenue
 
