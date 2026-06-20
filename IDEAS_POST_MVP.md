@@ -37,7 +37,14 @@ estudiante**, integradas al track de progreso adaptativo (se conecta con planner
 metas + horarios (reusa la disponibilidad y el planner) y al progreso real (reusa SRS + evaluación
 del Agente I). Post-MVP, feature/agente nuevo, spec-first. Revisar codex.io en detalle al diseñar.
 
-**Estado:** PENDIENTE.
+**Estado:** EN CURSO — spec-first aprobada (ver README §3.7 · §5.5 · §8.11 · §9.2 · Fase 19 y
+`docs/plans/gamificacion.md`). **v1 ACOTADO:** XP + niveles + misiones diarias + racha PERDONADORA +
+jefe del día (= tema más flojo de I-2) + **home gamificada** (rediseño de §8.10, no sección nueva),
+100% determinista (sin IA). XP atado a aprender (completar quiz, repasar flashcards vencidas, cumplir
+items del plan, bonus por dominio); CERO XP por actividad vacía; topes diarios anti-farmeo. Identidad:
+tokens oscuros de Bract + codex.io. **Diferido a fases posteriores:** logros/insignias, ligas, avatar
+evolutivo, misiones adaptadas a metas/horarios, sección `/arena`, ledger/historial de XP. Branch
+`agente-j-gamificacion` (no mergeada).
 
 ## Agente K — Importación masiva de temas (alta prioridad post-MVP)
 

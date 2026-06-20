@@ -872,6 +872,153 @@ Invariantes del blend (los que vas a revisar con lupa):
 
 ---
 
+### 3.7 Gamificación — XP, niveles, misiones, racha y jefe del día (Agente J)
+
+> **Estado:** feature de `IDEAS_POST_MVP.md` ("Agente J — Progresión gamificada"), encargada
+> **spec-first**, post-MVP. Convierte el estudio en una experiencia tipo juego que **se siente y se ve**
+> como un juego (estética vibrante sobre los tokens oscuros de `§9.2` + identidad codex.io), **premiando
+> aprender de verdad (dominio/retención), NUNCA actividad vacía ni métricas de vanidad**.
+>
+> **Principio rector:** la gamificación es una **capa de lectura + efectos de dominio cruzado** sobre los
+> eventos que YA existen (quiz, flashcards/SRS, planner, progreso I-2). No reinventa nada: se engancha
+> detrás del service dueño de cada dato (patrón Agente F: `plannerService` delega en
+> `flashcardService.onTopicStatusChanged`), **siempre detrás de `try/catch`** → si la gamificación falla,
+> la feature deployada se comporta **idéntico a hoy** (nunca tumba quiz/flashcards/planner).
+>
+> **v1 ACOTADO:** XP + niveles + misiones diarias + racha perdonadora + jefe del día + **home gamificada**
+> (se rediseña la Home de `§8.10`, no una sección nueva). **100% determinista (sin IA)** → barato y
+> free-tier-safe. **Fuera del v1:** logros/insignias, ligas, avatar evolutivo, misiones adaptadas a
+> metas/horarios, sección `/arena` dedicada, ledger/historial de XP.
+>
+> **Anti-trampa:** el cliente NUNCA puede "darse" XP. El único endpoint de gamificación es de **lectura**
+> (`GET /gamification/summary`); el XP/quests/jefe/racha se mutan **server-side por efecto** de acciones
+> reales (responder quiz, repasar carta due, completar item del plan), no por un POST del cliente.
+
+```prisma
+// ==========================================
+// GAMIFICACIÓN (Agente J)
+// El `level` NO es columna: es función pura de totalXp (levelForXp, patrón srs.ts/progress.formula.ts).
+// Sin tabla-ledger de XP en v1: el tope diario se enforce con xpEarnedToday/xpTodayDate en el perfil.
+// ==========================================
+
+model GamificationProfile {            // 1:1 con User — el "jugador"
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalXp       Int       @default(0)   // autoritativo (agregado); level = levelForXp(totalXp)
+  currentStreak Int       @default(0)
+  longestStreak Int       @default(0)
+  lastStudyDate DateTime?               // día (UTC) de la última acción que cuenta para la racha
+  freezeTokens  Int       @default(0)   // escudos de gracia (racha perdonadora)
+  xpEarnedToday Int       @default(0)   // tope diario anti-farmeo de XP "por acción"
+  xpTodayDate   DateTime?               // día al que corresponde xpEarnedToday (se resetea al cambiar)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("gamification_profiles")
+}
+
+model DailyQuest {                      // misiones diarias generadas desde acciones reales
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime    @db.Date      // día de la misión (sin hora)
+  type        QuestType
+  target      Int
+  progress    Int         @default(0)
+  status      QuestStatus @default(ACTIVE)
+  xpReward    Int
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@unique([userId, date, type])        // un set por día, idempotente (regenerar no duplica)
+  @@index([userId, date])
+  @@map("daily_quests")
+}
+
+model DailyBoss {                       // jefe del día = tema más flojo (I-2)
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime   @db.Date
+  // FK de agrupación, NO ownership (patrón QuizAttempt §3.5) → SetNull preserva el historial del jefe.
+  topicId     String?
+  topic       Topic?     @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  topicName   String                    // snapshot legible (sobrevive al borrado del tema)
+  subjectName String                    // snapshot legible
+  maxHp       Int                       // "vida" = nº de interacciones de dominio sobre el tema-jefe
+  hp          Int                       // restante (llega a 0 = vencido)
+  status      BossStatus @default(ACTIVE)
+  xpReward    Int
+  defeatedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("daily_bosses")
+}
+
+enum QuestType {
+  COMPLETE_QUIZ
+  REVIEW_DUE_CARDS
+  COMPLETE_PLAN_ITEMS
+  DEFEAT_BOSS
+}
+
+enum QuestStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum BossStatus {
+  ACTIVE
+  DEFEATED
+}
+```
+
+**Back-relations** (solo relaciones, sin columnas nuevas):
+- `User`: `gamificationProfile GamificationProfile?` · `dailyQuests DailyQuest[]` · `dailyBosses DailyBoss[]`
+- `Topic`: `dailyBosses DailyBoss[]`
+
+**Economía de XP (solo aprendizaje; valores iniciales, tuneables — viven en `gamification.rules.ts` puro):**
+
+```
+Repasar flashcard VENCIDA (due):        +2 XP   · bonus recuerdo OK (q≥4): +3
+Responder pregunta de quiz:             +2 XP   · bonus si CORRECTA:       +5
+Abierta corregida CORRECT:              +12 XP  · PARTIAL: +6  · INCORRECT: +0 bonus
+Completar un quiz (attempt COMPLETED):  +15 XP
+Completar item del plan del día:        +10 XP
+Completar/dominar un tema:              +30 XP
+Vencer al jefe del día:                 +50 XP
+Abrir la app / actividad sin acierto:    0 XP   (regla dura — nada de XP por vanidad)
+```
+
+**Reglas (además de §3.4):**
+- **Ownership por `userId`** en los 3 modelos (denormalizado, §3.4). El `DailyBoss.topicId` es FK de
+  agrupación/label (no ownership) → `onDelete: SetNull` con snapshots `topicName`/`subjectName`.
+- **`level` derivado, no persistido:** `levelForXp(totalXp)` es una función **pura compartida** en
+  `@bract/shared` (`lib/gamification.xp.ts`) → front y back calculan el mismo nivel/curva sin drift.
+  Curva por defecto: XP acumulado para nivel `n` = `round(50 · n^1.6)`.
+- **Anti-farmeo:** las flashcards solo dan XP si estaban **due** (el SRS empuja la carta al futuro → no se
+  repite); tope diario `DAILY_ACTION_XP_CAP` sobre el XP "por acción" (`xpEarnedToday`/`xpTodayDate`); el
+  lock anti-trampa del quiz impide re-responder → no se recompensa dos veces el mismo intento.
+- **Misiones diarias (3/día), generadas LAZY al leer el summary** (sin cron), idempotentes por
+  `(userId, date)` (`@@unique`). v1 = targets fijos sensatos (`COMPLETE_QUIZ`=1, `REVIEW_DUE_CARDS`=10,
+  `COMPLETE_PLAN_ITEMS`=2; si hay jefe, una puede ser `DEFEAT_BOSS`). Completar misión = XP inmediato.
+- **Racha PERDONADORA (`applyStreakOnActivity`, pura):** cuenta días con ≥1 acción que cuenta;
+  `lastStudyDate==hoy` no cambia, `==ayer` suma. Día perdido con `freezeTokens>0` → consume 1 escudo y la
+  racha **continúa**. Sin escudos → la racha arranca de nuevo en 1 **sin penalizar XP/nivel**, framing
+  amable, `longestStreak` preservado. Escudos: +1 cada `FREEZE_EARN_EVERY`=5 días activos, cap
+  `FREEZE_CAP`=2.
+- **Jefe del día (`DailyBoss`):** al leer el summary se crea (si falta) desde `getWeakTopics(userId, 1)`
+  (el tema más flojo de I-2). `maxHp = BOSS_HP` (5). Cada interacción de **dominio** sobre el tema-jefe
+  (respuesta de quiz correcta **o** repaso SRS `q≥4` de una carta de ese tema) hace 1 de daño; `hp→0` ⇒
+  `DEFEATED` + `xpReward`. **Sin datos de debilidad ⇒ no hay jefe** (la Home muestra `EmptyState`).
+- **Sin tabla-ledger de XP en v1** (feed/historial diferido): el tope diario vive en el perfil. Si en v2
+  se quiere historial de "+X XP", se agrega un `XpEvent` (documentar en `error.md`).
+
+---
+
 ## 4. AUTH SYSTEM
 
 ### 4.1 Modo de auth (MODO A — Custom JWT, RECOMENDADO)
@@ -1123,6 +1270,9 @@ GET    /api/v1/progress/overview                      [self]   // % de acierto +
 GET    /api/v1/progress/weak-topics?limit=            [self]   // temas más flojos del usuario, ordenados por debilidad desc (omite temas sin datos).
 GET    /api/v1/preferences                            [self]   // preferencias de estudio del usuario (defaults si no existen).
 PUT    /api/v1/preferences                            [self]   // upsert de preferencias (Zod): remediationIntensity, prioritySubjectIds, weightQuiz/Srs?, dailyGoalMinutes?.
+
+GAMIFICACIÓN (Agente J)
+GET    /api/v1/gamification/summary                   [self]   // perfil (totalXp, level DERIVADO, racha, escudos) + misiones de hoy + jefe de hoy. Genera lazy (idempotente) las misiones/jefe que falten. SOLO lectura: el XP/quests/jefe/racha se mutan server-side POR EFECTO de acciones reales (§3.7), nunca por un POST del cliente (anti-trampa).
 ```
 
 > **Evaluación / Quiz (Agente I) — IDEAS_POST_MVP §"Agente I".** Quiz de opción múltiple por tema o materia,
@@ -1473,6 +1623,41 @@ solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (
 - **Decisión documentada (`error.md` si aplica):** el `DashboardPage` admin conserva su propio saludo; si
   el `greetingKey()` se extrae a helper compartido, es refactor mínimo sin cambio de comportamiento.
 
+### 8.11 Home gamificada (Agente J, §3.7) — rediseño de la Home sobre eventos existentes
+
+> Gamifica la **Home del estudiante (§8.10)**: la misma `/home` pasa a ser el **tablero de juego**
+> (nivel + barra de XP, racha perdonadora, misiones diarias, jefe del día) **arriba**, y las secciones
+> informativas actuales (progreso/materias/plan de hoy) **debajo**. NO es una sección nueva: una sección
+> dedicada `/arena` queda para fases posteriores. Origen: `IDEAS_POST_MVP.md` §"Agente J". Frontend nuevo
+> en `features/gamification/`, consumido por `features/home/`. **Backend = solo `GET /gamification/summary`**
+> (§5.5); el resto se mueve por efecto (§3.7).
+
+| Feature | Carpeta | Contenido |
+|---------|---------|-----------|
+| Gamificación | `features/gamification/` | api + `useGamificationSummary` + widgets `LevelXpBar` · `StreakBadge` · `DailyMissions` · `BossOfDay` + momentos animados |
+
+- **Tablero (arriba en `/home`):**
+  - `LevelXpBar` — nivel + barra de XP animada (`transform/opacity`, framer-motion). El nivel y el corte
+    de la barra los calcula `levelForXp` de `@bract/shared` (misma fuente que el server → sin desfase).
+  - `StreakBadge` — racha actual + escudos de gracia, con framing amable (nunca culposo) + tooltip.
+  - `DailyMissions` — las 3 misiones de hoy con barra de progreso; check animado + toast "+X XP" al completar.
+  - `BossOfDay` — card con HP bar que se vacía; nombre del tema-jefe + materia; CTA **"Enfrentar"** que
+    deep-linkea a `/quiz` con el set de temas = `[tema-jefe]` (reusa el setup del quiz, sin endpoint nuevo).
+    Sin datos de debilidad (I-2) ⇒ `EmptyState` ("seguí estudiando para que aparezca un jefe").
+- **Debajo:** las secciones actuales de la Home (progreso I-2, materias, plan de hoy / próximo examen) sin cambios.
+- **Momentos animados (de primera clase, máx 1–2 elementos por vista):** subir de nivel (overlay con glow
+  + pop), completar misión (check + toast XP), vencer al jefe (HP a 0 + flash). **Sin libs nuevas**
+  (framer-motion ya está). El front **diffea** el summary previo vs el nuevo para saber qué celebrar.
+- **Cómo se refresca:** los endpoints de acción (quiz/flashcards/planner) **NO cambian su contrato**; tras
+  una acción que cuenta, los hooks de mutación invalidan `gamification.summary` (helper central
+  `invalidateAfterStudyAction(qc)` en `apps/web/src/lib/`, patrón `invalidateStudyContext.ts`).
+- **Reglas de animación (NO negociables):** `prefers-reduced-motion` ⇒ fallback estático (sin movimiento);
+  ease-out al entrar / ease-in al salir; 150–300ms en micro; sin loops decorativos infinitos.
+- **Iconos = SVG** (flama/escudo/espada/nivel), **nunca emojis**. Solo color tokens del §9.2 (incluidos los
+  acentos de juego). 4 estados por sección (`loading · empty · error · success`), i18n es/en sin hardcodear
+  (`gamification.*` + extensiones de `home.*`). **Modelos nuevos (§3.7) → requiere `db push`.** Sin env
+  vars ni deps nuevas.
+
 ---
 
 ## 9. UI DESIGN SYSTEM
@@ -1515,6 +1700,12 @@ solo sobre temas del planner. Fuente de verdad única: materias/temas/progreso (
   --border-subtle:  rgba(255,255,255,0.06);
   --border-default: rgba(255,255,255,0.10);
   --border-strong:  rgba(255,255,255,0.20);
+
+  /* Acentos de juego (Gamificación — Agente J §3.7/§8.11). Vibrantes pero dark-first; contraste 4.5:1. */
+  --xp-gold:      #fbbf24;   /* barra de XP / "+X XP" */
+  --streak-flame: #fb923c;   /* racha (flama) */
+  --boss-crimson: #f43f5e;   /* jefe del día (HP bar) */
+  --level-glow:   #a78bfa;   /* subir de nivel (glow/celebración) */
 }
 ```
 
@@ -1931,6 +2122,16 @@ Este archivo en la raíz del repo es el log manual de decisiones y errores de ar
 - [x] **F4 — Backend flashcards:** nuevo `POST /flashcards/generate` (`generateMulti`): valida ownership de todos los temas, genera **secuencial con éxito parcial** (`meta.topics` con generated/failed; `AI_UNAVAILABLE` solo si todos fallan); per-tema intacto. Sin `db push`
 - [x] **F5 — Frontend:** primitivo `MultiSelect` (atajo "toda la materia" sin perder el individual) en `QuizSetup` y `TopicFlashcards`; `scopeLabel`/`scopeBadgeLabel` componen `"N temas de X"` bilingüe; muestra el `meta` de éxito parcial de flashcards; 4 estados, i18n es/en, tokens
 - [ ] **F6 — Verificación:** `pnpm -r typecheck`/`lint`/`test` verdes (99 tests), `git diff --stat`, README actualizado, checklist CLAUDE.md. No mergear
+
+### Fase 19 — Gamificación: XP, niveles, misiones, racha y jefe del día (Agente J, §3.7 · §5.5 · §8.11 · §9.2)
+> Capa de lectura + efectos de dominio cruzado sobre los eventos que YA existen (quiz, flashcards/SRS, planner, progreso I-2). 100% determinista (sin IA). Premia aprender (dominio/retención), nunca actividad vacía. Cada hook detrás de `try/catch` ⇒ sin datos/error = features deployadas idénticas a hoy. Branch `agente-j-gamificacion`, no mergear. **Bordes de revisión: `db push` (F2) y verificación final (F6).**
+- [ ] **F0 — Spec:** §3.7 (3 modelos + 3 enums + back-relations + reglas), §5.5 (`GET /gamification/summary`), §8.11 (Home gamificada), §9.2 (tokens de acento de juego), esta fase. Marcar J en `IDEAS_POST_MVP.md`. Sin código de app
+- [ ] **F1 — Shared:** `types/gamification.types.ts` + `schemas/gamification.schema.ts` (`GamificationSummary`, `DailyQuest`, `DailyBoss`, enums, DTO de respuesta) + `lib/gamification.xp.ts` puro (`levelForXp` + constantes de XP/curva) reexportado; `typecheck` verde + rebuild de `dist`
+- [ ] **F2 — Prisma + `db push` (BORDE):** 3 modelos + 3 enums + back-relations en `User`/`Topic`; el usuario corre `db push` (Session pooler 5432); verificar tablas vía MCP Supabase
+- [ ] **F3 — Backend motor + lectura:** `modules/gamification/` → `gamification.rules.ts` (puro) + repo (sin N+1) + service (`getSummary`: quests/jefe lazy idempotentes, jefe desde `getWeakTopics`) + controller + routes `[self]`; tests de las reglas
+- [ ] **F4 — Backend hooks (escritura, delegación limpia):** `gamificationService.onQuizAnswered`/`onQuizCompleted`/`onFlashcardReviewed`/`onPlanItemCompleted`/`onTopicCompleted`; quiz/flashcard/planner delegan detrás de `try/catch` (loguea, nunca relanza); import unidireccional (sin ciclos); tests de efectos + golden de degradación
+- [ ] **F5 — Frontend Home gamificada:** `features/gamification/` (api + `useGamificationSummary` + widgets `LevelXpBar`/`StreakBadge`/`DailyMissions`/`BossOfDay`) + rediseño `features/home/`; momentos animados (framer-motion, fallback `prefers-reduced-motion`); `invalidateAfterStudyAction` cableado; 4 estados, i18n es/en, solo tokens
+- [ ] **F6 — Verificación (BORDE):** `pnpm -r typecheck`/`lint`/`test` verdes, `git diff --stat` total + log, actualizar `fid.md`. No mergear
 
 ---
 
