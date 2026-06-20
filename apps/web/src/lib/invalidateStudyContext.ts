@@ -21,6 +21,15 @@ export function invalidateAfterTopicStatusChange(qc: QueryClient, topicId: strin
   qc.invalidateQueries({ queryKey: queryKeys.flashcards.due() });
 }
 
+// Acción de estudio que cuenta para el juego (Agente J): responder/corregir quiz, repasar una carta,
+// completar un item del plan o un tema. El backend muta XP/misiones/jefe/racha POR EFECTO (anti-trampa,
+// el cliente nunca se "da" XP); acá solo invalidamos el summary para que la Home refetchee y dispare los
+// momentos animados (diff del estado previo vs el nuevo). Best-effort: si el summary aún no existe, la
+// invalidación es inocua. Centralizado acá para no esparcir la key de gamificación por cada hook.
+export function invalidateAfterStudyAction(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: queryKeys.gamification.summary() });
+}
+
 // Cambio ESTRUCTURAL del árbol (crear/editar/borrar materia o tema). Borrar cascadea a flashcards
 // (Subject/Topic `onDelete: Cascade`), así que se invalida toda la rama flashcards para no dejar
 // cartas fantasma en `due` ni en las vistas por tema. Editar refresca labels (tema/materia).

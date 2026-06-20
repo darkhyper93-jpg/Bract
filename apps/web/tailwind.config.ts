@@ -35,6 +35,13 @@ const config: Config = {
         warning: '#f59e0b',
         error: '#ef4444',
         info: '#3b82f6',
+        // Acentos de juego (Agente J, §9.2) — sincronizados con globals.css.
+        game: {
+          xp: '#fbbf24',
+          flame: '#fb923c',
+          boss: '#f43f5e',
+          glow: '#a78bfa',
+        },
       },
       fontFamily: {
         sans: ['Geist', 'system-ui', 'sans-serif'],

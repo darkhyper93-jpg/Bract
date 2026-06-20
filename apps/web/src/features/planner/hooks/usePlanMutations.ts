@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SetAvailabilityInput, StudyPlanItemStatus } from '@bract/shared';
 import { queryKeys } from '../../../lib/queryKeys';
+import { invalidateAfterStudyAction } from '../../../lib/invalidateStudyContext';
 import { plannerApi } from '../api/planner.api';
 
 // Mutaciones del plan y la disponibilidad. Generar/marcar bloques invalida el plan;
@@ -15,11 +16,14 @@ export function usePlanMutations() {
     },
   });
 
+  // Completar un bloque del plan cuenta para el juego (Agente J); refrescamos el summary para los
+  // momentos animados (el backend solo otorga XP en la transición a COMPLETED).
   const updateItem = useMutation({
     mutationFn: ({ id, status }: { id: string; status: StudyPlanItemStatus }) =>
       plannerApi.updatePlanItem(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.planner.plan() });
+      invalidateAfterStudyAction(queryClient);
     },
   });
 

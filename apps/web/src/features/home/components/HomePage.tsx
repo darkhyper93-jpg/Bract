@@ -6,10 +6,12 @@ import { TodayPlan } from './TodayPlan';
 import { FocusSection } from './FocusSection';
 import { ProgressSummary } from './ProgressSummary';
 import { SubjectsOverview } from './SubjectsOverview';
+import { GameBoard } from '../../gamification';
 
-// Home del estudiante (§8.10): landing único para todos los roles. Bienvenida + plan de hoy /
-// próximo examen + en qué enfocarte + progreso + materias. 100% reuso de endpoints existentes;
-// cada sección maneja sus 4 estados y degrada de forma independiente.
+// Home del estudiante (§8.10/§8.11): landing único para todos los roles, ahora como TABLERO DE JUEGO
+// (Agente J) arriba — nivel/XP/racha, misiones y jefe del día — seguido del plan de hoy / en qué
+// enfocarte / progreso / materias. 100% reuso de endpoints existentes; cada sección maneja sus 4 estados
+// y degrada de forma independiente (si la gamificación falla, el resto de la Home sigue funcionando).
 export default function HomePage() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
@@ -18,6 +20,7 @@ export default function HomePage() {
 
   return (
     <PageWrapper title={title} description={t('home.subtitle')}>
+      <GameBoard />
       <div className="grid gap-6 lg:grid-cols-2">
         <TodayPlan />
         <FocusSection />

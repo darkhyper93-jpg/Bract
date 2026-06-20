@@ -66,4 +66,10 @@ export const queryKeys = {
     attempts: (params?: Record<string, unknown>) => ['quiz', 'attempts', params] as const,
     attempt:  (id: string) => ['quiz', 'attempt', id] as const,
   },
+
+  // Gamificación (Agente J) — resumen del jugador (XP/nivel/racha + misiones + jefe) del día (§8.11).
+  gamification: {
+    all:     () => ['gamification'] as const,
+    summary: () => ['gamification', 'summary'] as const,
+  },
 } as const;

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CreateFlashcardInput, UpdateFlashcardInput, ReviewQuality } from '@bract/shared';
 import { queryKeys } from '../../../lib/queryKeys';
+import { invalidateAfterStudyAction } from '../../../lib/invalidateStudyContext';
 import { flashcardsApi } from '../api/flashcards.api';
 
 // Mutaciones de flashcards. CRUD/generación invalidan las cartas del tema afectado + la cola due
@@ -45,11 +46,15 @@ export function useFlashcardMutations() {
     },
   });
 
-  // Calificar (SM-2). Invalida la cola due y las cartas del tema de la carta calificada.
+  // Calificar (SM-2). Invalida la cola due y las cartas del tema de la carta calificada. Repasar una
+  // carta vencida cuenta para el juego (Agente J) → refrescamos el summary para los momentos animados.
   const review = useMutation({
     mutationFn: ({ id, quality }: { id: string; quality: ReviewQuality }) =>
       flashcardsApi.review(id, quality),
-    onSuccess: (card) => invalidateTopic(card.topicId),
+    onSuccess: (card) => {
+      invalidateTopic(card.topicId);
+      invalidateAfterStudyAction(queryClient);
+    },
   });
 
   return { create, update, remove, generate, generateMulti, review };

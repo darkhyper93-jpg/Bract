@@ -31,6 +31,13 @@
     --border-subtle:  rgba(255,255,255,0.06);
     --border-default: rgba(255,255,255,0.10);
     --border-strong:  rgba(255,255,255,0.20);
+
+    /* Acentos de juego (Agente J, §9.2) — energía vibrante sobre el dark de Bract, sin paleta infantil.
+       Contraste >= 4.5:1 sobre bg-surface para texto/iconos. */
+    --xp-gold:      #fbbf24;
+    --streak-flame: #fb923c;
+    --boss-crimson: #f43f5e;
+    --level-glow:   #a78bfa;
   }
 
   * {

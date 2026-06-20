@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CreateTopicInput, UpdateTopicInput, TopicStatus } from '@bract/shared';
 import {
+  invalidateAfterStudyAction,
   invalidateAfterTopicStatusChange,
   invalidateAfterTreeChange,
 } from '../../../lib/invalidateStudyContext';
@@ -31,10 +32,14 @@ export function useTopicMutations() {
   });
 
   // Completar/cambiar estado → recálculo reactivo del plan + activar/pausar las flashcards del tema.
+  // Completar un tema cuenta para el juego (Agente J) → refrescamos el summary (momentos animados).
   const setStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TopicStatus }) =>
       plannerApi.updateTopicStatus(id, status),
-    onSuccess: (_data, { id }) => invalidateAfterTopicStatusChange(queryClient, id),
+    onSuccess: (_data, { id }) => {
+      invalidateAfterTopicStatusChange(queryClient, id);
+      invalidateAfterStudyAction(queryClient);
+    },
   });
 
   return { create, update, remove, setStatus };

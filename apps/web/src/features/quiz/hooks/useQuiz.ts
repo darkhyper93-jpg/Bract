@@ -4,6 +4,7 @@ import { QuestionType } from '@bract/shared';
 import type { AnswerQuestionInput, AnswerReveal, QuizAttemptWithItems } from '@bract/shared';
 import type { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../lib/queryKeys';
+import { invalidateAfterStudyAction } from '../../../lib/invalidateStudyContext';
 import { quizApi } from '../api/quiz.api';
 
 // Evaluación / Quiz (Agente I) — hooks React Query.
@@ -64,6 +65,8 @@ export function useAnswerQuestion(attemptId: string) {
     // completa; OPEN pendiente con el texto del alumno y grade=null).
     onSuccess: (reveal: AnswerReveal, input: AnswerQuestionInput) => {
       applyRevealToDetail(queryClient, attemptId, reveal, input.answerText);
+      // Responder cuenta para el juego (Agente J): refrescamos el summary (XP/misión/jefe + animaciones).
+      invalidateAfterStudyAction(queryClient);
     },
   });
 }
@@ -109,6 +112,8 @@ export function useGradeOpenAnswer(attemptId: string) {
 
         if (reveal && reveal.type === QuestionType.OPEN && reveal.grade !== null) {
           applyRevealToDetail(queryClient, attemptId, reveal);
+          // La corrección de una abierta otorga XP de dominio (Agente J) → refrescamos el summary.
+          invalidateAfterStudyAction(queryClient);
           active.current.delete(order);
           timers.current.delete(order);
           onGraded?.(reveal);
