@@ -32,6 +32,8 @@ export * from './types/chat.types';
 export * from './types/import.types';
 export * from './types/quiz.types';
 export * from './types/progress.types';
+export * from './types/gamification.types';
 
 // Helpers de dominio (puros, sin deps de runtime)
 export * from './lib/quiz.score';
+export * from './lib/gamification.xp';
