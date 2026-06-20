@@ -1,7 +1,22 @@
 # FID — Snapshot de handoff (Bract)
-> Calidad de aprendizaje: v1 calibración de confianza + Fase 2 grounding del material importado — AMBAS mergeadas y deployadas · Próximo posible: (b) preguntas abiertas o (c) modo Feynman (o lo que elija el usuario) · Retomar en: repo Bract (darkhyper93-jpg/Bract)
+> Agente J (Gamificación v1) — COMPLETO en branch `agente-j-gamificacion`, NO mergeada (pendiente revisión + ff-only a main) · Retomar en: repo Bract (darkhyper93-jpg/Bract)
 
 ## ESTADO REAL (jun 2026) — leer esto primero, lo de abajo quedó viejo
+
+**Agente J — Gamificación v1 (branch `agente-j-gamificacion`, NO mergeada — pendiente ff-only a main).**
+La Home (§8.11) pasa a ser TABLERO DE JUEGO: nivel + barra de XP, racha perdonadora, misiones diarias y "jefe del día" (el tema más flojo de I-2), 100% determinista (sin IA → free-tier-safe). Premia aprender de verdad (dominio/retención), NUNCA actividad vacía. Plan en `docs/plans/gamificacion.md`. Seis fases supervisadas, todas commiteadas:
+- **F0** spec-first: README §3.7 (3 modelos + 3 enums), §5.5 (`GET /gamification/summary`), §8.11 (Home gamificada), §9.2 (tokens de acento de juego), Fase 19 + marca J en IDEAS_POST_MVP.
+- **F1** `@bract/shared`: `types/gamification.types.ts` + lib pura compartida `lib/gamification.xp.ts` (`levelForXp` curva `round(50·n^1.6)`; el `level` NO es columna, deriva de `totalXp` → sin drift). front y back coinciden.
+- **F2** Prisma (Prisma se mantiene en **5.22.0**): `GamificationProfile` (1:1 User, totalXp/streak/freezeTokens/xpEarnedToday) + `DailyQuest` (`@@unique[userId,date,type]`) + `DailyBoss` (`@@unique[userId,date]`, FK SetNull al Topic) + enums QuestType/QuestStatus/BossStatus + back-relations. **`db push` YA aplicado y verificado** (Session pooler 5432) — NO re-correr.
+- **F3** motor backend `apps/api/src/modules/gamification/`: `gamification.rules.ts` (puro: XP, racha/escudos, templates de misión, params del jefe) + repository (sin N+1) + service (`getSummary` + `ensureDailyState` lazy idempotente, lee `getWeakTopics` para el jefe) + controller + routes `[self]`. SOLO lectura desde el cliente.
+- **F4** hooks de evento (write path) BEST-EFFORT: `gamification.effects.ts` (safeGamify = try/catch + Winston, NUNCA relanza) cableado en quiz/flashcards/planner. XP solo por aprender con tope diario (DAILY_ACTION_XP_CAP=300; flashcards solo si estaban `due`; bonus por acierto/recuerdo q≥4). Daño al jefe 1 por interacción de dominio del tema-jefe. Racha perdonadora (escudos). El cliente NUNCA otorga XP (anti-trampa).
+- **F5** Home gamificada: `features/gamification/` (api + `useGamificationSummary` + LevelXpBar/StreakBadge/DailyMissions/BossOfDay/CelebrationOverlay/GameBoard), framer-motion con fallback `prefers-reduced-motion`, tokens nuevos, i18n es/en, 4 estados por sección. Tras cada acción que cuenta los hooks de mutación invalidan `gamification.summary` (`invalidateAfterStudyAction`); el front diffea prev vs new para disparar momentos animados (level up / jefe vencido). Contratos de quiz/flashcards/planner SIN cambios.
+- **F6** verificación: `pnpm -r typecheck` · `lint` verdes (3/3); `test` API 174/174 verdes (web sin suite: typecheck+lint+build verdes). `git diff --stat main...HEAD`: 44 archivos, +2618/-9. Degradación garantizada: si la gamificación lanza, quiz/flashcards/planner responden idéntico a hoy.
+
+**Próximo paso:** el usuario revisa el diff y, si OK, hace ff-only a main (el agente NO mergea). Sin más db push pendiente. NO actualizar Prisma (5.22.0).
+
+---
+## (Histórico — calidad de aprendizaje + agentes previos)
 
 **Calidad de aprendizaje — v1 (calibración de confianza) + Fase 2 (grounding) AMBAS mergeadas y deployadas.**
 - **v1 calibración de confianza** (commit `f828384`): al responder el quiz el alumno declara confianza; se mide calibración. Ya en main/producción.
