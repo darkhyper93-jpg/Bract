@@ -26,6 +26,7 @@ import { importRouter } from './modules/import/import.routes.js';
 import { quizRouter } from './modules/quiz/quiz.routes.js';
 import { progressRouter } from './modules/progress/progress.routes.js';
 import { preferencesRouter } from './modules/preferences/preferences.routes.js';
+import { gamificationRouter } from './modules/gamification/gamification.routes.js';
 import { docsRouter } from './routes/docs.routes.js';
 
 export const app: Express = express();
@@ -85,6 +86,8 @@ app.use('/api/v1', progressRouter);
 
 // Fase 15 — Preferencias de estudio (Agente I-2): personalización de la fórmula y el plan
 app.use('/api/v1', preferencesRouter);
+
+app.use('/api/v1', gamificationRouter);
 
 // Fase 8 — API Documentation
 app.use('/api/v1/docs', docsRouter);
