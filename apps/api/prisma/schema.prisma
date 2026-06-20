@@ -40,6 +40,11 @@ model User {
   quizAttemptItems  QuizAttemptItem[]
   studyPreferences  UserStudyPreferences?
 
+  // Gamificación (ver §3.7)
+  gamificationProfile GamificationProfile?
+  dailyQuests         DailyQuest[]
+  dailyBosses         DailyBoss[]
+
   @@index([email])
   @@map("users")
 }
@@ -222,6 +227,7 @@ model Topic {
   planItems        StudyPlanItem[]
   quizAttempts     QuizAttempt[]
   quizAttemptItems QuizAttemptItem[]
+  dailyBosses      DailyBoss[]
 
   @@index([subjectId])
   @@index([userId, status])
@@ -497,4 +503,86 @@ enum RemediationIntensity {
   LOW
   MEDIUM
   HIGH
+}
+
+// ==========================================
+// GAMIFICACIÓN (Agente J) — ver §3.7
+// Capa de lectura + efectos de dominio cruzado sobre los eventos existentes. El `level` NO es columna:
+// se deriva de totalXp con levelForXp (lib/gamification.xp en @bract/shared). Sin tabla-ledger de XP en
+// v1: el tope diario se enforce con xpEarnedToday/xpTodayDate en el perfil.
+// ==========================================
+
+model GamificationProfile {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalXp       Int       @default(0) // autoritativo (agregado); level = levelForXp(totalXp)
+  currentStreak Int       @default(0)
+  longestStreak Int       @default(0)
+  lastStudyDate DateTime? // día (UTC) de la última acción que cuenta para la racha
+  freezeTokens  Int       @default(0) // escudos de gracia (racha perdonadora)
+  xpEarnedToday Int       @default(0) // tope diario anti-farmeo de XP "por acción"
+  xpTodayDate   DateTime? // día al que corresponde xpEarnedToday (se resetea al cambiar)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("gamification_profiles")
+}
+
+model DailyQuest {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime    @db.Date // día de la misión (sin hora)
+  type        QuestType
+  target      Int
+  progress    Int         @default(0)
+  status      QuestStatus @default(ACTIVE)
+  xpReward    Int
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@unique([userId, date, type]) // un set por día, idempotente (regenerar no duplica)
+  @@index([userId, date])
+  @@map("daily_quests")
+}
+
+model DailyBoss {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime   @db.Date
+  // DECISIÓN: FK de agrupación, NO ownership (patrón QuizAttempt §3.5) → SetNull preserva el historial del
+  // jefe; los snapshots topicName/subjectName lo mantienen legible si se borra el tema.
+  topicId     String?
+  topic       Topic?     @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  topicName   String
+  subjectName String
+  maxHp       Int // "vida" = nº de interacciones de dominio sobre el tema-jefe
+  hp          Int // restante (llega a 0 = vencido)
+  status      BossStatus @default(ACTIVE)
+  xpReward    Int
+  defeatedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("daily_bosses")
+}
+
+enum QuestType {
+  COMPLETE_QUIZ
+  REVIEW_DUE_CARDS
+  COMPLETE_PLAN_ITEMS
+  DEFEAT_BOSS
+}
+
+enum QuestStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum BossStatus {
+  ACTIVE
+  DEFEATED
 }
