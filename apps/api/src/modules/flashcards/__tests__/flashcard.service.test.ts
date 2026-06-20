@@ -6,6 +6,19 @@ import { AppError } from '../../../lib/errors.js';
 // Mockeamos el repo (Prisma) y la capa de IA: el service corre real, sin DB ni red. Acá se prueba
 // la REGLA DELIBERADA de integración del Agente F: cómo Topic.status mueve la rotación SRS, y la
 // generación multi-tema (éxito parcial).
+// Gamificación aislada: safeGamify no ejecuta el efecto (sin Prisma de gamificación). Los efectos tienen
+// su propia suite (gamification.effects.test.ts).
+vi.mock('../../gamification/gamification.effects.js', () => ({
+  safeGamify: vi.fn().mockResolvedValue(undefined),
+  gamificationEffects: {
+    onQuizAnswered: vi.fn(),
+    onOpenGraded: vi.fn(),
+    onFlashcardReviewed: vi.fn(),
+    onPlanItemCompleted: vi.fn(),
+    onTopicCompleted: vi.fn(),
+  },
+}));
+
 vi.mock('../flashcard.repository.js', () => ({
   flashcardRepository: {
     pauseSrsByTopic: vi.fn(),

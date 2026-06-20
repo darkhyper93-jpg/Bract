@@ -3,6 +3,19 @@ import type { QuizAttemptItem as PrismaQuizAttemptItem } from '@prisma/client';
 import { QuizScope } from '@bract/shared';
 import { AppError } from '../../../lib/errors.js';
 
+// Gamificación aislada: safeGamify no ejecuta el efecto (no toca Prisma de gamificación). Los efectos
+// tienen su propia suite (gamification.effects.test.ts). Acá solo verificamos el comportamiento del quiz.
+vi.mock('../../gamification/gamification.effects.js', () => ({
+  safeGamify: vi.fn().mockResolvedValue(undefined),
+  gamificationEffects: {
+    onQuizAnswered: vi.fn(),
+    onOpenGraded: vi.fn(),
+    onFlashcardReviewed: vi.fn(),
+    onPlanItemCompleted: vi.fn(),
+    onTopicCompleted: vi.fn(),
+  },
+}));
+
 // Mockeamos el repo (Prisma) y la capa de IA: el service corre real, sin DB ni red.
 vi.mock('../quiz.repository.js', () => ({
   quizRepository: {

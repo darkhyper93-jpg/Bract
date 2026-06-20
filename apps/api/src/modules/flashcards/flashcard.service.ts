@@ -15,6 +15,7 @@ import { AppError } from '../../lib/errors.js';
 import { flashcardRepository } from './flashcard.repository.js';
 import type { FlashcardWithTopicRow, TopicContextRow } from './flashcard.repository.js';
 import { initialEaseForDifficulty, reviewSrs } from './srs.js';
+import { gamificationEffects, safeGamify } from '../gamification/gamification.effects.js';
 
 // ============================================================================
 // Flashcards + SRS (Agente D) — lógica de negocio. Recibe DTOs (nunca req), mapea
@@ -193,10 +194,14 @@ export const flashcardService = {
   async review(id: string, userId: string, quality: ReviewQuality): Promise<Flashcard> {
     const existing = await flashcardRepository.findByIdAndUser(id, userId);
     if (!existing) throw new AppError('NOT_FOUND', CARD_NOT_FOUND);
+    const now = new Date();
+    // wasDue se evalúa ANTES de actualizar: solo las cartas VENCIDAS dan XP (anti-farmeo; el SRS empuja
+    // la carta al futuro, así que no se puede repetir la misma carta para farmear).
+    const wasDue = existing.dueDate <= now;
     const result = reviewSrs(
       { ease: existing.ease, intervalDays: existing.intervalDays, reps: existing.reps },
       quality,
-      new Date(),
+      now,
     );
     const updated = await flashcardRepository.update(id, {
       ease: result.ease,
@@ -205,6 +210,17 @@ export const flashcardService = {
       dueDate: result.dueDate,
       lastReviewedAt: result.lastReviewedAt,
     });
+
+    // Gamificación (best-effort): XP por repasar una carta vencida + bonus/daño al jefe si el recuerdo
+    // fue bueno (q≥4). El efecto NUNCA rompe el repaso (delegación detrás de safeGamify).
+    await safeGamify(() =>
+      gamificationEffects.onFlashcardReviewed(
+        userId,
+        { wasDue, quality, topicId: existing.topicId },
+        now,
+      ),
+    );
+
     return toFlashcard(updated);
   },
 

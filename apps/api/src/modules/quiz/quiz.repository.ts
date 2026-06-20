@@ -202,6 +202,12 @@ export const quizRepository = {
     return new Map(rows.map((r) => [r.attemptId, r._count as number]));
   },
 
+  // Estado del intento (para que la gamificación sepa si la respuesta recién aplicada COMPLETÓ el quiz).
+  // Solo el status (el grading/aggregates ya los mantiene recordAnswer/recordOpenAnswerPending).
+  getAttemptStatus(id: string): Promise<{ status: QuizAttemptStatus } | null> {
+    return prisma.quizAttempt.findUnique({ where: { id }, select: { status: true } });
+  },
+
   // Intento + items (sin N+1: un include). Ownership por userId.
   findByIdAndUserWithItems(id: string, userId: string): Promise<QuizAttemptWithItemsRow | null> {
     return prisma.quizAttempt.findFirst({

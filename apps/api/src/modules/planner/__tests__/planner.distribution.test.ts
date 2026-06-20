@@ -11,6 +11,18 @@ import { StudyPlanItemStatus, TopicStatus } from '@bract/shared';
 // A diferencia de planner.service.test.ts, acá NO mockeamos lib/ai: la distribución
 // determinista (buildBaselinePlan vía generateStudyPlanBaseline) corre REAL. Solo mockeamos
 // ai.client para controlar isAIConfigured y no tocar la red, y los repos (Prisma).
+// Gamificación aislada (no se dispara en la distribución, pero el service la importa).
+vi.mock('../../gamification/gamification.effects.js', () => ({
+  safeGamify: vi.fn().mockResolvedValue(undefined),
+  gamificationEffects: {
+    onQuizAnswered: vi.fn(),
+    onOpenGraded: vi.fn(),
+    onFlashcardReviewed: vi.fn(),
+    onPlanItemCompleted: vi.fn(),
+    onTopicCompleted: vi.fn(),
+  },
+}));
+
 vi.mock('../subject.repository.js', () => ({
   subjectRepository: {
     findManyByUserWithTopics: vi.fn(),

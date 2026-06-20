@@ -88,20 +88,29 @@ async function resolveBoss(userId: string, today: Date): Promise<PrismaDailyBoss
   }
 }
 
+// Asegura el estado del día (idempotente): resuelve el jefe (lazy desde I-2) y crea el set de misiones
+// si falta. Se llama tanto al LEER el summary como al aplicar el PRIMER efecto del día (gamification.
+// effects) — así una acción previa a abrir la Home igual cuenta. El jefe se resuelve PRIMERO porque
+// define si la 3ra misión es DEFEAT_BOSS o COMPLETE_PLAN_ITEMS.
+export async function ensureDailyState(userId: string, now: Date = new Date()): Promise<void> {
+  const today = utcDateOnly(now);
+  const boss = await resolveBoss(userId, today);
+  const quests = await gamificationRepository.findQuestsByDate(userId, today);
+  if (quests.length === 0) {
+    await gamificationRepository.createQuests(userId, today, buildQuestTemplates(boss !== null));
+  }
+}
+
 export const gamificationService = {
   // GET /gamification/summary: perfil + misiones de hoy + jefe de hoy (genera lazy lo que falte).
   async getSummary(userId: string): Promise<GamificationSummary> {
-    const today = utcDateOnly(new Date());
+    const now = new Date();
+    const today = utcDateOnly(now);
     const profile = await gamificationRepository.ensureProfile(userId);
 
-    // El jefe se resuelve PRIMERO: define si la 3ra misión es DEFEAT_BOSS o COMPLETE_PLAN_ITEMS.
-    const boss = await resolveBoss(userId, today);
-
-    let quests = await gamificationRepository.findQuestsByDate(userId, today);
-    if (quests.length === 0) {
-      await gamificationRepository.createQuests(userId, today, buildQuestTemplates(boss !== null));
-      quests = await gamificationRepository.findQuestsByDate(userId, today);
-    }
+    await ensureDailyState(userId, now);
+    const quests = await gamificationRepository.findQuestsByDate(userId, today);
+    const boss = await gamificationRepository.findBossByDate(userId, today);
 
     return {
       profile: toProfile(profile),

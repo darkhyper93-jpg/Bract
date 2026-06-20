@@ -25,6 +25,7 @@ import { AppError } from '../../lib/errors.js';
 import { GENERATION_ERRORS } from '../../config/constants.js';
 import { quizRepository } from './quiz.repository.js';
 import type { QuizAttemptWithItemsRow } from './quiz.repository.js';
+import { gamificationEffects, safeGamify } from '../gamification/gamification.effects.js';
 
 // ============================================================================
 // Evaluación / Quiz (Agente I) — lógica de negocio. Recibe DTOs (nunca req), mapea Prisma→shared
@@ -322,6 +323,17 @@ export const quizService = {
       );
       if (!applied) throw new AppError('CONFLICT', QUESTION_ALREADY_ANSWERED);
 
+      // Gamificación (best-effort): registrar una abierta es PARTICIPACIÓN (la maestría llega al CORREGIR
+      // → onOpenGraded). Si esta respuesta completó el intento, suma el bonus de "quiz completado".
+      await safeGamify(async () => {
+        const st = await quizRepository.getAttemptStatus(attemptId);
+        await gamificationEffects.onQuizAnswered(userId, {
+          isCorrect: false,
+          topicId: item.topicId,
+          attemptCompleted: st?.status === QuizAttemptStatus.COMPLETED,
+        });
+      });
+
       // Reveal PENDIENTE: solo confirma el registro. El criterio (expectedAnswer) y la devolución de la
       // IA siguen server-only hasta que llegue la nota (se exponen juntos al corregir, como en MCQ).
       return {
@@ -364,6 +376,17 @@ export const quizService = {
       confidence,
     );
     if (!applied) throw new AppError('CONFLICT', QUESTION_ALREADY_ANSWERED);
+
+    // Gamificación (best-effort): XP por responder + bonus si CORRECTA (daño al jefe si el tema coincide);
+    // bonus de "quiz completado" si esta respuesta cerró el intento.
+    await safeGamify(async () => {
+      const st = await quizRepository.getAttemptStatus(attemptId);
+      await gamificationEffects.onQuizAnswered(userId, {
+        isCorrect,
+        topicId: item.topicId,
+        attemptCompleted: st?.status === QuizAttemptStatus.COMPLETED,
+      });
+    });
 
     // Reveal SOLO de esta pregunta (recién acá viajan correctIndex + explicaciones).
     return { type: QuestionType.MCQ, order: item.order, isCorrect, correctIndex: item.correctIndex, options };
@@ -432,7 +455,7 @@ export const quizService = {
     // isCorrect deriva del grade: true SOLO si CORRECT (PARTIAL/INCORRECT ⇒ false → cuenta como débil en I-2).
     const isCorrect = graded.grade === OpenGrade.CORRECT;
     // Update condicional (WHERE grade: null): si otra corrección ganó la carrera, no re-aplica.
-    await quizRepository.recordOpenGrade(
+    const graded2 = await quizRepository.recordOpenGrade(
       attemptId,
       item.id,
       graded.grade as PrismaOpenGrade,
@@ -440,6 +463,14 @@ export const quizService = {
       isCorrect,
       new Date(),
     );
+
+    // Gamificación (best-effort): SOLO si esta corrección aplicó la nota (graded2) → bonus por DOMINIO
+    // (CORRECT/PARTIAL) + daño al jefe si CORRECT. La racha NO se toca acá (ya contó al RESPONDER).
+    if (graded2) {
+      await safeGamify(() =>
+        gamificationEffects.onOpenGraded(userId, { grade: graded.grade, topicId: item.topicId }),
+      );
+    }
 
     // Reveal completo: recién acá viajan grade + feedback + expectedAnswer.
     return {

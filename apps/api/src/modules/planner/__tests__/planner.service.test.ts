@@ -9,6 +9,19 @@ import type {
 import { StudyPlanItemStatus, TopicStatus } from '@bract/shared';
 import { AppError } from '../../../lib/errors.js';
 
+// Gamificación aislada: safeGamify no ejecuta el efecto (sin Prisma de gamificación). Los efectos tienen
+// su propia suite (gamification.effects.test.ts).
+vi.mock('../../gamification/gamification.effects.js', () => ({
+  safeGamify: vi.fn().mockResolvedValue(undefined),
+  gamificationEffects: {
+    onQuizAnswered: vi.fn(),
+    onOpenGraded: vi.fn(),
+    onFlashcardReviewed: vi.fn(),
+    onPlanItemCompleted: vi.fn(),
+    onTopicCompleted: vi.fn(),
+  },
+}));
+
 // Mockeamos repos (Prisma) y la capa de IA: el service corre real, sin DB ni red.
 vi.mock('../subject.repository.js', () => ({
   subjectRepository: {

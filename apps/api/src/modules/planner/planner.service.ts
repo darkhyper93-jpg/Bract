@@ -33,6 +33,7 @@ import { progressService } from '../progress/progress.service.js';
 import { preferencesService } from '../preferences/preferences.service.js';
 import { INTENSITY_ALPHA } from '../progress/progress.formula.js';
 import { flashcardService } from '../flashcards/flashcard.service.js';
+import { gamificationEffects, safeGamify } from '../gamification/gamification.effects.js';
 import { subjectRepository } from './subject.repository.js';
 import type { SubjectWithTopicsRow } from './subject.repository.js';
 import { topicRepository } from './topic.repository.js';
@@ -313,6 +314,13 @@ export const plannerService = {
     // (COMPLETED/IN_PROGRESS → activar; PENDING → pausar). Coupling limpio: el flashcardService es
     // dueño de esa data — el planner delega, nunca toca las tablas de flashcards. Ver error.md.
     await flashcardService.onTopicStatusChanged(userId, id, status);
+
+    // Gamificación (best-effort): XP de dominio SOLO en la TRANSICIÓN a COMPLETED (re-marcar COMPLETED no
+    // re-suma). Delegación detrás de safeGamify → nunca rompe el cambio de estado.
+    if (status === TopicStatus.COMPLETED && (existing.status as TopicStatus) !== TopicStatus.COMPLETED) {
+      await safeGamify(() => gamificationEffects.onTopicCompleted(userId));
+    }
+
     const plan = await recalcActivePlan(userId);
     return { topic: toTopic(updated), plan };
   },
@@ -360,6 +368,16 @@ export const plannerService = {
       status as PrismaStudyPlanItem['status'],
       completedAt,
     );
+
+    // Gamificación (best-effort): XP por cumplir el plan SOLO en la TRANSICIÓN a COMPLETED (re-marcar no
+    // re-suma). Delegación detrás de safeGamify → nunca rompe el marcado del bloque.
+    if (
+      status === StudyPlanItemStatus.COMPLETED &&
+      (row.status as StudyPlanItemStatus) !== StudyPlanItemStatus.COMPLETED
+    ) {
+      await safeGamify(() => gamificationEffects.onPlanItemCompleted(userId));
+    }
+
     const plan =
       status === StudyPlanItemStatus.SKIPPED
         ? await recalcActivePlan(userId)
