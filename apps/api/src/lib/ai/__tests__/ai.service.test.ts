@@ -245,12 +245,6 @@ describe('generateQuiz', () => {
         questions: [
           { topicId: 't2', question: 'P1', options: opts(4), correctIndex: 2 }, // válida
           { topicId: 't1', question: 'P2', options: opts(4), correctIndex: 9 }, // correctIndex OOR → drop
-          {
-            topicId: 't1',
-            question: 'P3',
-            options: [{ text: 'a', explanation: '  ' }, ...opts(3)],
-            correctIndex: 0,
-          }, // explicación vacía → drop
           { topicId: 't1', question: 'P4', options: opts(1), correctIndex: 0 }, // pocas opciones → drop
           { topicId: 'ghost', question: 'P5', options: opts(3), correctIndex: 1 }, // topic desconocido → fallback t1
           { topicId: 't2', question: 'p1', options: opts(4), correctIndex: 0 }, // dup de P1 → drop
@@ -265,6 +259,43 @@ describe('generateQuiz', () => {
     expect(questions).toEqual([
       { type: 'MCQ', topicId: 't2', question: 'P1', options: opts(4), correctIndex: 2 },
       { type: 'MCQ', topicId: 't1', question: 'P5', options: opts(3), correctIndex: 1 }, // 'ghost' → fallback al 1er tema
+    ]);
+  });
+
+  it('MCQ con explicación faltante: conserva la pregunta y la opción con explanation = "" (no descarta)', async () => {
+    // FIX bug quiz mixto: antes una sola opción con explicación vacía tiraba la MCQ ENTERA → en modo
+    // mixto se caían todas las MCQ y quedaban solo las abiertas. Ahora la opción requiere SOLO el `text`.
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          {
+            topicId: 't1',
+            question: 'P1',
+            options: [{ text: 'a', explanation: '  ' }, ...opts(3)], // 1ª opción sin explicación → se conserva con ''
+            correctIndex: 0,
+          },
+          {
+            topicId: 't1',
+            question: 'P2',
+            options: [{ text: '  ', explanation: 'e' }, ...opts(3)], // opción SIN texto → sigue descartando la pregunta
+            correctIndex: 1,
+          },
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz(quizInput);
+
+    expect(questions).toEqual([
+      {
+        type: 'MCQ',
+        topicId: 't1',
+        question: 'P1',
+        options: [{ text: 'a', explanation: '' }, ...opts(3)],
+        correctIndex: 0,
+      },
     ]);
   });
 

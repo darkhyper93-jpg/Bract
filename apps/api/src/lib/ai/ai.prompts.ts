@@ -139,7 +139,7 @@ export const QUIZ_SYSTEM = [
   'PREGUNTAS MCQ:',
   '- "type": "MCQ", EXACTAMENTE 4 opciones en "options": 1 correcta y 3 distractoras plausibles.',
   '- "correctIndex" es el índice (0-based) de la opción correcta dentro de "options".',
-  '- TODA opción lleva una "explanation": en la correcta, por qué es correcta; en cada distractora, por qué está mal.',
+  '- OBLIGATORIO: TODA opción de TODA pregunta MCQ lleva su "explanation", SIN EXCEPCIÓN — en la correcta, por qué es correcta; en cada distractora, por qué está mal. Esto rige también en quizzes MIXTOS (con preguntas OPEN): no omitas la "explanation" de ninguna opción aunque el quiz incluya preguntas abiertas.',
   '- NO incluyas "expectedAnswer" en las MCQ.',
   'PREGUNTAS OPEN:',
   '- "type": "OPEN", SIN "options" ni "correctIndex". La pregunta pide una respuesta breve a desarrollar (1 a 4 oraciones).',

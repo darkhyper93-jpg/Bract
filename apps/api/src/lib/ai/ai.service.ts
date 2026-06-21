@@ -438,8 +438,9 @@ function normalizeOpenGrade(raw: string): OpenGrade {
 
 // Valida la salida cruda del quiz (la IA puede devolver basura) e impone los invariantes de negocio,
 // RAMIFICANDO por tipo de pregunta:
-// - MCQ: cada opción con texto y explicación no vacíos; nº de opciones en [MIN, MAX]; correctIndex entero
-//   dentro del rango. Descarta la pregunta entera si no cumple (nunca recorta opciones, que correría el índice).
+// - MCQ: cada opción con texto no vacío (la explicación es best-effort: si falta queda ''); nº de opciones
+//   en [MIN, MAX]; correctIndex entero dentro del rango. Descarta la pregunta entera solo si no cumple eso
+//   (nunca recorta opciones, que correría el índice).
 // - OPEN: expectedAnswer no vacío; HARD CAP a `openCap` abiertas (palanca de costo: cada abierta = 1
 //   futura llamada de corrección). Las abiertas de más se descartan (se completan con MCQ hasta `cap`).
 // Comunes: topicId ∈ temas de entrada (si no, cae al primero — siempre hay ≥1); dedup por texto; cap a `cap`.
@@ -485,12 +486,15 @@ function validateAndCapQuiz(
       let optionsOk = true;
       for (const o of q.options ?? []) {
         const text = o.text.trim();
-        const explanation = o.explanation.trim();
-        if (text.length === 0 || explanation.length === 0) {
+        // DECISIÓN: una opción MCQ solo requiere `text` no vacío. Si la IA dejó la `explanation`
+        // incompleta (frecuente en quizzes mixtos), NO descartamos la pregunta entera: conservamos
+        // la opción con explanation = '' — perder la explicación de una opción no invalida la MCQ,
+        // pero descartar la pregunta hacía desaparecer todas las MCQ y dejaba solo las abiertas.
+        if (text.length === 0) {
           optionsOk = false;
           break;
         }
-        options.push({ text, explanation });
+        options.push({ text, explanation: o.explanation.trim() });
       }
       if (!optionsOk) continue;
       if (options.length < MIN_QUIZ_OPTIONS || options.length > MAX_QUIZ_OPTIONS) continue;
