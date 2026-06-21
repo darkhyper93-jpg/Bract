@@ -132,7 +132,11 @@ export const topicsResponseSchema: Schema = {
 // schema crudo (no todos aplican a ambos tipos); el código exige lo que corresponde a cada tipo.
 const quizOptionSchema = z.object({
   text: z.string().min(1),
-  explanation: z.string().min(1),
+  // DECISIÓN: explanation es OPCIONAL (default ''). La explicación por opción es best-effort: si la IA
+  // la omite o la deja vacía, NO debe reventar el parse del quiz ENTERO (era un gate latente: con
+  // .min(1), una sola opción sin explicación tiraba todo el quiz → 503). Coherente con validateAndCapQuiz:
+  // lo obligatorio en una MCQ es `options` + `correctIndex` válido, no la explicación.
+  explanation: z.string().default(''),
 });
 
 const quizQuestionSchema = z.object({
@@ -150,7 +154,12 @@ export const quizOutputSchema = z.object({
 
 export type QuizOutput = z.infer<typeof quizOutputSchema>;
 
-export const quizResponseSchema: Schema = {
+// FIX RAÍZ del bug de quizzes MIXTOS: la generación está partida por tipo (una llamada SOLO-MCQ y otra
+// SOLO-OPEN), así que cada llamada usa un responseSchema ESPECÍFICO que pone en `required` exactamente lo
+// que ESE tipo necesita. El schema viejo (unificado) NO ponía `correctIndex` en `required` → Gemini lo
+// omitía legalmente → validateAndCapQuiz descartaba TODAS las MCQ (silencioso, 201 con 0 MCQ). Forzando
+// `correctIndex` (y `options`) en el schema MCQ, el modelo SIEMPRE lo emite y las MCQ sobreviven.
+export const quizMcqResponseSchema: Schema = {
   type: Type.OBJECT,
   properties: {
     questions: {
@@ -158,10 +167,11 @@ export const quizResponseSchema: Schema = {
       items: {
         type: Type.OBJECT,
         properties: {
-          type: { type: Type.STRING }, // 'MCQ' | 'OPEN'
+          type: { type: Type.STRING }, // 'MCQ'
           topicId: { type: Type.STRING },
           question: { type: Type.STRING },
-          // MCQ: opciones con explicación. OPEN no las usa (la IA las omite).
+          // Opciones con explicación por opción (la `explanation` se pide para calidad; el parse Zod la
+          // tolera vacía — ver quizOptionSchema). `options` + `correctIndex` SÍ son obligatorias.
           options: {
             type: Type.ARRAY,
             items: {
@@ -173,10 +183,31 @@ export const quizResponseSchema: Schema = {
               required: ['text', 'explanation'],
             },
           },
-          correctIndex: { type: Type.INTEGER }, // MCQ
-          expectedAnswer: { type: Type.STRING }, // OPEN: criterio/respuesta esperada (desde el material)
+          correctIndex: { type: Type.INTEGER },
         },
-        required: ['type', 'topicId', 'question'],
+        required: ['type', 'topicId', 'question', 'options', 'correctIndex'],
+      },
+    },
+  },
+  required: ['questions'],
+};
+
+export const quizOpenResponseSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    questions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING }, // 'OPEN'
+          topicId: { type: Type.STRING },
+          question: { type: Type.STRING },
+          // OPEN: `expectedAnswer` (criterio/respuesta esperada desde el material) es OBLIGATORIO — sin él
+          // la abierta es inservible (validateAndCapQuiz la descarta). Sin `options` ni `correctIndex`.
+          expectedAnswer: { type: Type.STRING },
+        },
+        required: ['type', 'topicId', 'question', 'expectedAnswer'],
       },
     },
   },

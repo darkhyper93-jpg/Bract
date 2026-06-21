@@ -20,8 +20,9 @@ import {
   gradeOpenResponseSchema,
   planOutputSchema,
   planResponseSchema,
+  quizMcqResponseSchema,
+  quizOpenResponseSchema,
   quizOutputSchema,
-  quizResponseSchema,
   topicsOutputSchema,
   topicsResponseSchema,
 } from './ai.schemas.js';
@@ -449,14 +450,14 @@ function validateAndCapQuiz(
     type?: string | undefined;
     topicId: string;
     question: string;
-    options?: { text: string; explanation: string }[] | undefined;
+    // explanation es opcional (quizOptionSchema usa .default('') → la IA puede omitirla; ver Zod).
+    options?: { text: string; explanation?: string | undefined }[] | undefined;
     correctIndex?: number | undefined;
     expectedAnswer?: string | undefined;
   }[],
   input: GenerateQuizInput,
   cap: number,
   openCap: number,
-  label: string, // [QUIZDEBUG] temporal: identifica la llamada (generateQuiz:mcq / :open / generateQuiz)
 ): GeneratedQuizQuestion[] {
   const validTopicIds = new Set(input.topics.map((t) => t.id));
   const fallbackTopicId = input.topics[0]?.id;
@@ -466,41 +467,20 @@ function validateAndCapQuiz(
   const out: GeneratedQuizQuestion[] = [];
   let openUsed = 0;
 
-  // [QUIZDEBUG] instrumentación temporal: motivo exacto de cada pregunta descartada (solo metadatos
-  // numéricos, SIN el texto de la pregunta ni de las opciones). Se resume al final de la función.
-  const drops: {
-    reason: string;
-    type: string;
-    correctIndex?: number | undefined;
-    optionsLength?: number | undefined;
-  }[] = [];
-
   for (const q of questions) {
     const qType = normalizeQuestionType(q.type);
     const question = q.question.trim();
-    if (question.length === 0) {
-      drops.push({ reason: 'empty_question', type: qType });
-      continue;
-    }
+    if (question.length === 0) continue;
 
     const key = normalizeQuestion(question);
-    if (key.length === 0 || seen.has(key)) {
-      drops.push({ reason: 'duplicate_or_empty_key', type: qType });
-      continue;
-    }
+    if (key.length === 0 || seen.has(key)) continue;
 
     const topicId = validTopicIds.has(q.topicId) ? q.topicId : fallbackTopicId;
 
     if (qType === QuestionType.OPEN) {
-      if (openUsed >= openCap) {
-        drops.push({ reason: 'open_cap_reached', type: qType });
-        continue; // tope duro de abiertas (costo de corrección)
-      }
+      if (openUsed >= openCap) continue; // tope duro de abiertas (costo de corrección)
       const expectedAnswer = (q.expectedAnswer ?? '').trim();
-      if (expectedAnswer.length === 0) {
-        drops.push({ reason: 'open_no_expected_answer', type: qType });
-        continue; // OPEN sin criterio de corrección → inservible
-      }
+      if (expectedAnswer.length === 0) continue; // OPEN sin criterio de corrección → inservible
       seen.add(key);
       out.push({ type: QuestionType.OPEN, topicId, question, expectedAnswer });
       openUsed++;
@@ -517,16 +497,10 @@ function validateAndCapQuiz(
           optionsOk = false;
           break;
         }
-        options.push({ text, explanation: o.explanation.trim() });
+        options.push({ text, explanation: (o.explanation ?? '').trim() });
       }
-      if (!optionsOk) {
-        drops.push({ reason: 'mcq_empty_option_text', type: qType, optionsLength: (q.options ?? []).length });
-        continue;
-      }
-      if (options.length < MIN_QUIZ_OPTIONS || options.length > MAX_QUIZ_OPTIONS) {
-        drops.push({ reason: 'mcq_options_count', type: qType, optionsLength: options.length });
-        continue;
-      }
+      if (!optionsOk) continue;
+      if (options.length < MIN_QUIZ_OPTIONS || options.length > MAX_QUIZ_OPTIONS) continue;
 
       const correctIndex = q.correctIndex;
       if (
@@ -535,12 +509,6 @@ function validateAndCapQuiz(
         correctIndex < 0 ||
         correctIndex >= options.length
       ) {
-        drops.push({
-          reason: 'mcq_correctIndex_invalid',
-          type: qType,
-          correctIndex,
-          optionsLength: options.length,
-        });
         continue;
       }
       seen.add(key);
@@ -549,25 +517,6 @@ function validateAndCapQuiz(
 
     if (out.length >= cap) break;
   }
-
-  // [QUIZDEBUG] resumen por llamada: cuántas devolvió la IA (received), cuántas sobreviven (kept) y
-  // el motivo exacto del resto (dropCounts agregados + drops con valores). SIN contenido de preguntas.
-  logger.info('[QUIZDEBUG] validateAndCapQuiz', {
-    label,
-    cap,
-    openCap,
-    received: questions.length,
-    kept: out.length,
-    keptByType: {
-      MCQ: out.filter((q) => q.type === QuestionType.MCQ).length,
-      OPEN: out.filter((q) => q.type === QuestionType.OPEN).length,
-    },
-    dropCounts: drops.reduce<Record<string, number>>((acc, d) => {
-      acc[d.reason] = (acc[d.reason] ?? 0) + 1;
-      return acc;
-    }, {}),
-    drops,
-  });
 
   return out;
 }
@@ -808,6 +757,11 @@ async function runQuizGeneration(
   openCap: number,
   label: string,
 ): Promise<GeneratedQuizQuestion[]> {
+  // Schema ESPECÍFICO por tipo de llamada: `openCap === 0` ⇒ llamada SOLO-MCQ (exige options+correctIndex);
+  // si no, SOLO-OPEN (exige expectedAnswer). Cada llamada de generateQuiz pide UN solo tipo (la mixta se
+  // parte en dos), así que openCap discrimina sin ambigüedad. Esto fuerza a Gemini a emitir los campos que
+  // antes omitía (correctIndex) y hacían desaparecer las MCQ.
+  const responseSchema = openCap === 0 ? quizMcqResponseSchema : quizOpenResponseSchema;
   const res = await withAIRetry(label, () =>
     client.models.generateContent({
       model: AI_MODELS.generation,
@@ -816,24 +770,15 @@ async function runQuizGeneration(
         systemInstruction: QUIZ_SYSTEM,
         maxOutputTokens: QUIZ_MAX_TOKENS,
         responseMimeType: 'application/json',
-        responseSchema: quizResponseSchema,
+        responseSchema,
       },
     }),
   );
   const parsed = parseStructured(res.text ?? '', quizOutputSchema);
-  // [QUIZDEBUG] cuántas preguntas devolvió la IA en ESTA llamada (tras el parse Zod), antes de validar.
-  logger.info('[QUIZDEBUG] runQuizGeneration', {
-    label,
-    cap,
-    openCap,
-    rawLen: (res.text ?? '').length,
-    parsedOk: parsed != null,
-    aiReturned: parsed?.questions.length ?? 0,
-  });
   if (!parsed) {
     throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió un quiz válido');
   }
-  return validateAndCapQuiz(parsed.questions, scopedInput, cap, openCap, label);
+  return validateAndCapQuiz(parsed.questions, scopedInput, cap, openCap);
 }
 
 /**
@@ -885,15 +830,6 @@ export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQ
         ...mcq.filter((q) => q.type === QuestionType.MCQ),
         ...open.filter((q) => q.type === QuestionType.OPEN),
       ];
-      // [QUIZDEBUG] caso MIXTO: cuántas MCQ y OPEN sobreviven de cada llamada y el total combinado.
-      logger.info('[QUIZDEBUG] generateQuiz.mixed', {
-        cap,
-        openCap,
-        mcqCap,
-        mcqKept: mcq.length,
-        openKept: open.length,
-        combined: questions.length,
-      });
     } else {
       // Single-type (solo MCQ o solo OPEN): UNA sola llamada, como antes (sin costo extra).
       questions = await runQuizGeneration(client, scopedInput, cap, openCap, 'generateQuiz');

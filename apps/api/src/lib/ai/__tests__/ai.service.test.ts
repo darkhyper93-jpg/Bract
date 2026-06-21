@@ -347,6 +347,78 @@ describe('generateQuiz', () => {
     expect(prompts.some((p) => p.includes('EXACTAMENTE 2'))).toBe(true);
   });
 
+  it('usa un responseSchema específico por tipo: la MCQ-only exige options+correctIndex; la OPEN-only exige expectedAnswer', async () => {
+    // FIX raíz del bug mixto: el responseSchema viejo NO ponía correctIndex en `required`, así que el
+    // modelo lo omitía y validateAndCapQuiz descartaba TODAS las MCQ. Ahora cada llamada usa un schema
+    // por tipo: la MCQ-only fuerza options+correctIndex; la OPEN-only fuerza expectedAnswer.
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockImplementation((req: { contents: string }) => {
+      if (req.contents.includes('EXACTAMENTE 0')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            questions: [{ type: 'MCQ', topicId: 't1', question: 'M1', options: opts(4), correctIndex: 1 }],
+          }),
+        });
+      }
+      return Promise.resolve({
+        text: JSON.stringify({
+          questions: [{ type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'crit' }],
+        }),
+      });
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    await generateQuiz({ ...quizInput, count: 5, openCount: 2 });
+
+    // DECISIÓN: assert estructural (no por referencia) sobre el `required` del item de pregunta de cada
+    // llamada → testea el CONTRATO con Gemini (qué campos exige), no un objeto importado.
+    const configFor = (needle: string) =>
+      generateContent.mock.calls.find((c) => (c[0].contents as string).includes(needle))![0].config;
+    const mcqRequired = configFor('EXACTAMENTE 0').responseSchema.properties.questions.items.required;
+    const openRequired = configFor('EXACTAMENTE 2').responseSchema.properties.questions.items.required;
+    expect(mcqRequired).toEqual(expect.arrayContaining(['options', 'correctIndex']));
+    expect(mcqRequired).not.toContain('expectedAnswer');
+    expect(openRequired).toContain('expectedAnswer');
+    expect(openRequired).not.toContain('correctIndex');
+  });
+
+  it('una opción MCQ sin "explanation" no rompe el parse: se conserva con explanation ""', async () => {
+    // Gate latente: antes quizOptionSchema exigía explanation.min(1) → si la IA omitía la explicación de
+    // UNA opción, fallaba el parse del quiz ENTERO (503). Ahora explanation es opcional (default '').
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          {
+            type: 'MCQ',
+            topicId: 't1',
+            question: 'M1',
+            options: [{ text: 'a' }, { text: 'b' }, { text: 'c' }, { text: 'd' }], // SIN explanation
+            correctIndex: 0,
+          },
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz({ ...quizInput, count: 5 }); // solo MCQ (openCount default 0)
+
+    expect(questions).toEqual([
+      {
+        type: 'MCQ',
+        topicId: 't1',
+        question: 'M1',
+        options: [
+          { text: 'a', explanation: '' },
+          { text: 'b', explanation: '' },
+          { text: 'c', explanation: '' },
+          { text: 'd', explanation: '' },
+        ],
+        correctIndex: 0,
+      },
+    ]);
+  });
+
   it('single-type (solo MCQ, openCount 0): dispara UNA sola llamada (sin costo extra)', async () => {
     vi.mocked(isAIConfigured).mockReturnValue(true);
     const generateContent = vi.fn().mockResolvedValue({
