@@ -79,9 +79,15 @@ apiClient.interceptors.response.use(
       return apiClient(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null);
-      useAuthStore.getState().logout();
-      // Sin hard-redirect: logout() actualiza el store y el router muestra /login solo.
-      // (window.location.href causaba un loop de reloads en el bootstrap sin sesión.)
+      // DECISIÓN: solo deslogueamos ante un fallo de auth REAL (refresh → 401 = sesión
+      // inválida). Un error sin response (red/timeout) o un 5xx (API de Render dormida)
+      // es transitorio: rechazamos los requests encolados y el original, pero mantenemos
+      // la sesión intacta para que el usuario pueda reintentar sin perder el login.
+      if (axios.isAxiosError(refreshError) && refreshError.response?.status === 401) {
+        useAuthStore.getState().logout();
+        // Sin hard-redirect: logout() actualiza el store y el router muestra /login solo.
+        // (window.location.href causaba un loop de reloads en el bootstrap sin sesión.)
+      }
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;
