@@ -299,29 +299,94 @@ describe('generateQuiz', () => {
     ]);
   });
 
-  it('mezcla MCQ + OPEN: valida expectedAnswer no vacío, respeta openCount (tope de abiertas) y pide la cantidad exacta', async () => {
+  it('quiz MIXTO (MCQ + OPEN): dispara DOS llamadas separadas (una por tipo) y combina MCQ primero, luego OPEN', async () => {
+    // FIX bug quiz mixto: gemini-flash-lite devolvía SOLO abiertas al pedir ambos tipos en UNA llamada.
+    // Ahora se piden por separado (count=5, openCount=2 → mcqCap=3, openCap=2). Distinguimos las dos
+    // llamadas por lo que pide el prompt: la MCQ-only pide "EXACTAMENTE 0" abiertas; la OPEN-only "EXACTAMENTE 2".
     vi.mocked(isAIConfigured).mockReturnValue(true);
-    const generateContent = vi.fn().mockResolvedValue({
-      text: JSON.stringify({
-        questions: [
-          { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'la integral es el área' }, // ok (1ª)
-          { type: 'OPEN', topicId: 't2', question: 'A2', expectedAnswer: '   ' }, // criterio vacío → drop
-          { type: 'OPEN', topicId: 't1', question: 'A3', expectedAnswer: 'criterio 3' }, // ok (2ª)
-          { type: 'OPEN', topicId: 't2', question: 'A4', expectedAnswer: 'criterio 4' }, // excede openCount=2 → drop
-          { type: 'MCQ', topicId: 't2', question: 'M1', options: opts(4), correctIndex: 1 }, // MCQ ok
-        ],
-      }),
+    const generateContent = vi.fn().mockImplementation((req: { contents: string }) => {
+      if (req.contents.includes('EXACTAMENTE 0')) {
+        // Llamada MCQ-only (cap=3, openCount=0).
+        return Promise.resolve({
+          text: JSON.stringify({
+            questions: [
+              { type: 'MCQ', topicId: 't1', question: 'M1', options: opts(4), correctIndex: 1 }, // ok
+              { type: 'MCQ', topicId: 't2', question: 'M2', options: opts(3), correctIndex: 0 }, // ok
+              { type: 'OPEN', topicId: 't1', question: 'X', expectedAnswer: 'fuga' }, // OPEN en la MCQ-only → drop (openCap=0)
+            ],
+          }),
+        });
+      }
+      // Llamada OPEN-only (cap=openCount=2).
+      return Promise.resolve({
+        text: JSON.stringify({
+          questions: [
+            { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'la integral es el área' }, // ok (1ª)
+            { type: 'OPEN', topicId: 't2', question: 'A2', expectedAnswer: '   ' }, // criterio vacío → drop
+            { type: 'OPEN', topicId: 't1', question: 'A3', expectedAnswer: 'criterio 3' }, // ok (2ª)
+          ],
+        }),
+      });
     });
     vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
 
     const questions = await generateQuiz({ ...quizInput, count: 5, openCount: 2 });
 
+    expect(generateContent).toHaveBeenCalledTimes(2); // DOS llamadas: una MCQ, una OPEN
     expect(questions).toEqual([
+      // MCQ primero (la fuga OPEN de la llamada MCQ quedó descartada por openCap=0)
+      { type: 'MCQ', topicId: 't1', question: 'M1', options: opts(4), correctIndex: 1 },
+      { type: 'MCQ', topicId: 't2', question: 'M2', options: opts(3), correctIndex: 0 },
+      // luego OPEN (A2 con criterio vacío descartada)
       { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'la integral es el área' },
       { type: 'OPEN', topicId: 't1', question: 'A3', expectedAnswer: 'criterio 3' },
-      { type: 'MCQ', topicId: 't2', question: 'M1', options: opts(4), correctIndex: 1 },
     ]);
-    // El prompt pidió EXACTAMENTE 2 abiertas.
+    // Cada llamada pidió SOLO su tipo: 0 abiertas en la MCQ-only, EXACTAMENTE 2 en la OPEN-only.
+    const prompts = generateContent.mock.calls.map((c) => c[0].contents as string);
+    expect(prompts.some((p) => p.includes('EXACTAMENTE 0'))).toBe(true);
+    expect(prompts.some((p) => p.includes('EXACTAMENTE 2'))).toBe(true);
+  });
+
+  it('single-type (solo MCQ, openCount 0): dispara UNA sola llamada (sin costo extra)', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          { type: 'MCQ', topicId: 't1', question: 'M1', options: opts(3), correctIndex: 0 },
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz({ ...quizInput, count: 5 }); // openCount default 0
+
+    expect(generateContent).toHaveBeenCalledOnce(); // UNA sola llamada (mcqCap=5, openCap=0)
+    expect(questions).toEqual([
+      { type: 'MCQ', topicId: 't1', question: 'M1', options: opts(3), correctIndex: 0 },
+    ]);
+    const prompt = generateContent.mock.calls[0]![0].contents as string;
+    expect(prompt).toContain('EXACTAMENTE 0');
+  });
+
+  it('single-type (solo OPEN, openCount = count): dispara UNA sola llamada', async () => {
+    vi.mocked(isAIConfigured).mockReturnValue(true);
+    const generateContent = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        questions: [
+          { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'criterio 1' },
+          { type: 'OPEN', topicId: 't2', question: 'A2', expectedAnswer: 'criterio 2' },
+        ],
+      }),
+    });
+    vi.mocked(getAIClient).mockReturnValue(asClient({ models: { generateContent } }));
+
+    const questions = await generateQuiz({ ...quizInput, count: 2, openCount: 2 }); // mcqCap=0 → single
+
+    expect(generateContent).toHaveBeenCalledOnce(); // UNA sola llamada (openCap=2, mcqCap=0)
+    expect(questions).toEqual([
+      { type: 'OPEN', topicId: 't1', question: 'A1', expectedAnswer: 'criterio 1' },
+      { type: 'OPEN', topicId: 't2', question: 'A2', expectedAnswer: 'criterio 2' },
+    ]);
     const prompt = generateContent.mock.calls[0]![0].contents as string;
     expect(prompt).toContain('EXACTAMENTE 2');
   });

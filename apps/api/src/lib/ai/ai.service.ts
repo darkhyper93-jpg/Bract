@@ -742,12 +742,50 @@ export async function extractTopics(input: ExtractTopicsInput): Promise<Extracte
 }
 
 /**
- * Genera un quiz para un tema o materia (Agente I) mezclando preguntas MCQ y ABIERTAS en UNA sola
- * llamada. MCQ: respuesta correcta + explicación POR OPCIÓN → corrección local, sin 2da llamada. OPEN:
- * `expectedAnswer` (criterio generado desde el material, server-only) → la corrección del texto del alumno
- * es una 2da llamada (gradeOpenAnswer) recién al responder. `openCount` (default 0) decide cuántas abiertas;
- * se topea a MAX_OPEN_QUESTIONS y a `cap` (palanca de costo). Inherente a IA: lanza `AI_UNAVAILABLE` (503)
- * sin la key. La salida se valida con Zod + invariantes que ramifican por tipo. NO escribe en DB.
+ * UNA llamada estructurada al proveedor para generar quiz + parse + validación por tipo. Reintenta lo
+ * transitorio (withAIRetry), valida la salida con Zod (lanza `AI_UNAVAILABLE` si no parsea) y aplica los
+ * invariantes de negocio. `cap`/`openCap` controlan QUÉ tipos sobreviven la validación: `openCap = 0`
+ * deja solo MCQ; `openCap = cap` deja solo OPEN. Lo usa generateQuiz para una o dos llamadas según el caso.
+ */
+async function runQuizGeneration(
+  client: ReturnType<typeof getAIClient>,
+  scopedInput: GenerateQuizInput,
+  cap: number,
+  openCap: number,
+  label: string,
+): Promise<GeneratedQuizQuestion[]> {
+  const res = await withAIRetry(label, () =>
+    client.models.generateContent({
+      model: AI_MODELS.generation,
+      contents: buildQuizUserPrompt(scopedInput, cap, openCap),
+      config: {
+        systemInstruction: QUIZ_SYSTEM,
+        maxOutputTokens: QUIZ_MAX_TOKENS,
+        responseMimeType: 'application/json',
+        responseSchema: quizResponseSchema,
+      },
+    }),
+  );
+  const parsed = parseStructured(res.text ?? '', quizOutputSchema);
+  if (!parsed) {
+    throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió un quiz válido');
+  }
+  return validateAndCapQuiz(parsed.questions, scopedInput, cap, openCap);
+}
+
+/**
+ * Genera un quiz para un tema o materia (Agente I) con preguntas MCQ y/o ABIERTAS. MCQ: respuesta correcta
+ * + explicación POR OPCIÓN → corrección local, sin 2da llamada. OPEN: `expectedAnswer` (criterio generado
+ * desde el material, server-only) → la corrección del texto del alumno es una 2da llamada (gradeOpenAnswer)
+ * recién al responder. `openCount` (default 0) decide cuántas abiertas; se topea a MAX_OPEN_QUESTIONS y a
+ * `cap` (palanca de costo). Inherente a IA: lanza `AI_UNAVAILABLE` (503) sin la key. La salida se valida con
+ * Zod + invariantes que ramifican por tipo. NO escribe en DB.
+ *
+ * FIX bug quiz mixto: gemini-flash-lite NO genera bien MCQ + OPEN en UNA sola llamada estructurada —
+ * verificado con datos reales, devolvía SOLO las abiertas. Las generaciones de UN solo tipo SÍ funcionan.
+ * Por eso, cuando se piden AMBOS tipos (openCap > 0 Y mcqCap > 0) hacemos DOS llamadas separadas en paralelo
+ * —una pidiendo SOLO MCQ y otra SOLO OPEN— y combinamos (MCQ primero, luego OPEN). Si solo se pide un tipo
+ * (openCap = 0 o mcqCap = 0), seguimos con UNA sola llamada como antes (sin costo extra).
  */
 export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQuizQuestion[]> {
   if (!isAIConfigured()) {
@@ -759,6 +797,7 @@ export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQ
   const cap = Math.min(input.count ?? DEFAULT_QUIZ_COUNT, MAX_QUIZ_COUNT);
   // openCap ≤ MAX_OPEN_QUESTIONS y ≤ cap: garantiza como mucho esa cantidad de futuras correcciones IA.
   const openCap = Math.min(Math.max(input.openCount ?? 0, 0), MAX_OPEN_QUESTIONS, cap);
+  const mcqCap = cap - openCap; // las restantes son MCQ
   // FIX prompt acotado: en materia entera capeamos los temas ENVIADOS a la IA a una muestra (≥ cap),
   // sin tocar lo que persiste el service (scope/scopeName/topicCount se derivan del set COMPLETO afuera).
   // El mismo `scopedInput` alimenta el prompt y la validación (la IA solo conoce estos topicId).
@@ -769,23 +808,24 @@ export async function generateQuiz(input: GenerateQuizInput): Promise<GeneratedQ
       : input;
   try {
     const client = getAIClient();
-    const res = await withAIRetry('generateQuiz', () =>
-      client.models.generateContent({
-        model: AI_MODELS.generation,
-        contents: buildQuizUserPrompt(scopedInput, cap, openCap),
-        config: {
-          systemInstruction: QUIZ_SYSTEM,
-          maxOutputTokens: QUIZ_MAX_TOKENS,
-          responseMimeType: 'application/json',
-          responseSchema: quizResponseSchema,
-        },
-      }),
-    );
-    const parsed = parseStructured(res.text ?? '', quizOutputSchema);
-    if (!parsed) {
-      throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió un quiz válido');
+    let questions: GeneratedQuizQuestion[];
+    if (openCap > 0 && mcqCap > 0) {
+      // Quiz MIXTO: DOS llamadas de UN solo tipo cada una (lo que el modelo SÍ maneja), en paralelo.
+      // MCQ-only: cap = mcqCap, openCap = 0 (descarta cualquier OPEN). OPEN-only: cap/openCap = openCap.
+      const [mcq, open] = await Promise.all([
+        runQuizGeneration(client, scopedInput, mcqCap, 0, 'generateQuiz:mcq'),
+        runQuizGeneration(client, scopedInput, openCap, openCap, 'generateQuiz:open'),
+      ]);
+      // Combinamos manteniendo la validación por tipo: MCQ primero, luego OPEN. El filtro por tipo es
+      // defensivo (la MCQ-only ya excluye OPEN por openCap=0; nos blinda de fugas en la OPEN-only).
+      questions = [
+        ...mcq.filter((q) => q.type === QuestionType.MCQ),
+        ...open.filter((q) => q.type === QuestionType.OPEN),
+      ];
+    } else {
+      // Single-type (solo MCQ o solo OPEN): UNA sola llamada, como antes (sin costo extra).
+      questions = await runQuizGeneration(client, scopedInput, cap, openCap, 'generateQuiz');
     }
-    const questions = validateAndCapQuiz(parsed.questions, scopedInput, cap, openCap);
     if (questions.length === 0) {
       throw new AppError('AI_UNAVAILABLE', 'La IA no devolvió preguntas válidas');
     }
