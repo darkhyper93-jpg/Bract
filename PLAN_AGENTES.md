@@ -5,21 +5,21 @@
 > dividir el trabajo en **agentes de Claude Code** independientes.
 >
 > **Regla de oro:** cada agente lee primero el "PREÁMBULO COMÚN" (secciones 1–8) y después su
-> sección de agente (sección 9). Nadie escribe código sin haber leído `README.md`, `CLAUDE.md`,
+> sección de agente (sección 9). Nadie escribe código sin haber leído `SPEC.md`, `CLAUDE.md`,
 > `error.md` y `context.md`.
 
 > **PRECEDENCIA (resolver conflictos entre docs):** para esta fase de construcción del producto,
 > el orden de autoridad es: **`context.md` (qué construir) + este `PLAN_AGENTES.md` + `error.md`
-> (estado real)** por encima de la letra del `README.md`/`CLAUDE.md`. En concreto:
+> (estado real)** por encima de la letra del `SPEC.md`/`CLAUDE.md`. En concreto:
 > 1. Las features de `context.md` (planificador, flashcards, chat) **están APROBADAS** — NO las
->    rechaces por "no están en el README §16". El flujo correcto es **spec-first**: actualizar el
->    README con su spec y luego implementar (no frenarse ni pedir aprobación para empezar).
+>    rechaces por "no están en SPEC.md §16". El flujo correcto es **spec-first**: actualizar el
+>    SPEC.md con su spec y luego implementar (no frenarse ni pedir aprobación para empezar).
 > 2. **Deploy/DB:** seguí `error.md` (entrada del 2026-06-09) y la sección 7 de este doc:
 >    `db push` manual, **Session pooler 5432**, sin migrate en el build. Ignorá cualquier nota que
 >    diga "migrate automático" o "puerto 6543".
 > 3. `napkin.md` **no es fuente de verdad** y puede no estar en el repo; sus reglas vigentes ya
 >    están acá. Si lo ves, ignorá sus notas de deploy (6543 / corepack / migrate-en-build) y su
->    regla de "rechazar features fuera del README".
+>    regla de "rechazar features fuera de SPEC.md".
 
 ---
 
@@ -49,12 +49,12 @@ examen; marcar un tema completado actualiza el contexto del chat y la frecuencia
 varias materias simultáneas.
 
 ### La tensión clave entre documentos
-- `README.md` / `CLAUDE.md` describen la **fundación SaaS** (auth, users, profile, notifications,
+- `SPEC.md` / `CLAUDE.md` describen la **fundación SaaS** (auth, users, profile, notifications,
   analytics, admin, deploy). **Eso YA está construido, deployado y funcionando.**
 - `context.md` describe el **producto real** (las 3 secciones de estudio con IA). **Nada de eso
   existe todavía.** Es lo que hay que construir.
-- Por la regla del README §0.10 y §16 ("si no está aquí, no se implementa sin actualizar el doc"),
-  el primer entregable de cada feature es **actualizar el README** con su spec (modelos, endpoints,
+- Por la regla de SPEC.md §0.10 y §16 ("si no está aquí, no se implementa sin actualizar el doc"),
+  el primer entregable de cada feature es **actualizar SPEC.md** con su spec (modelos, endpoints,
   UI) en el estilo existente, y recién después implementar.
 
 ## 2. Estado actual (NO romper)
@@ -81,13 +81,13 @@ varias materias simultáneas.
   `typecheck = prisma generate && tsc --noEmit`. No tocar sin razón.
 
 ## 3. Lectura obligatoria antes de escribir una línea (todos)
-1. `README.md` — arquitectura/convenciones de la fundación (source of truth técnico).
+1. `SPEC.md` — arquitectura/convenciones de la fundación (source of truth técnico).
 2. `CLAUDE.md` — reglas de comportamiento, capas, orden de implementación, checklist.
 3. `error.md` — log de decisiones. Respetarlas. Documentar ahí toda desviación nueva.
 4. `context.md` — visión de producto (qué construir).
 5. `napkin.md` — runbook de reglas recurrentes de alto valor.
 
-## 4. Reglas de arquitectura y calidad (todos — del README/CLAUDE/napkin)
+## 4. Reglas de arquitectura y calidad (todos — de SPEC.md/CLAUDE/napkin)
 - **Capas estrictas:** Controller (solo HTTP, extrae `req`, llama service, responde) → Service
   (lógica, recibe DTOs, **nunca** `req`) → Repository (solo Prisma). Nunca mezclar.
 - **Orden de implementación por tarea (8 pasos):** tipos en `packages/shared/src/types/` → Zod en
@@ -99,7 +99,7 @@ varias materias simultáneas.
 - **Frontend:** cada componente con `loading (skeleton)` · `empty (EmptyState)` · `error` ·
   `success`. Formularios con React Hook Form + Zod resolver. Imports cross-package vía
   `@bract/shared` (nunca rutas relativas `../../../packages/...`).
-- **UI dark-first**, tokens CSS del README §9 (sin colores hardcodeados), interacciones < 100ms,
+- **UI dark-first**, tokens CSS de SPEC.md §9 (sin colores hardcodeados), interacciones < 100ms,
   Framer Motion para transiciones, i18n (es/en) con i18next.
 - **Sin `console.log`** (Winston en backend; silencio en frontend prod). **Sin `any`** sin comentario
   `// DECISIÓN: ...` que lo justifique. **Sin N+1** (usar `select`/`include` explícito).
@@ -115,7 +115,7 @@ varias materias simultáneas.
 Trabajar con cabeza fría: ante cualquier error o duda, **analizar la causa raíz, arreglar, y
 verificar de forma aislada antes de seguir**. No adivinar; reproducir/compilar el patrón dudoso.
 - **ANTES de cada fase:** releer docs relevantes; definir modelo de datos y endpoints; identificar
-  dependencias (qué debe existir primero); **actualizar el README** con la spec de la feature;
+  dependencias (qué debe existir primero); **actualizar SPEC.md** con la spec de la feature;
   presentar el plan.
 - **DURANTE:** seguir el orden de capas; mantener `pnpm -r typecheck`, lint y build en verde;
   verificar envelope y los 4 estados; sin N+1.
@@ -126,10 +126,10 @@ verificar de forma aislada antes de seguir**. No adivinar; reproducir/compilar e
   contexto** correctamente (completar un tema afecta plan + flashcards + chat).
 
 ## 6. Gobernanza spec-first
-Las 3 features del producto NO están en el README. Antes de implementar cada una:
-1. Actualizar `README.md` con su spec (modelos, relaciones, endpoints `/api/v1/...`, UI, fase),
+Las 3 features del producto NO están en SPEC.md. Antes de implementar cada una:
+1. Actualizar `SPEC.md` con su spec (modelos, relaciones, endpoints `/api/v1/...`, UI, fase),
    siguiendo el estilo de las secciones existentes (§3 data, §5 API, §8 frontend, §15 fases).
-2. Agregar el proveedor de IA al stack del README (§1) y sus env vars (§11).
+2. Agregar el proveedor de IA al stack de SPEC.md (§1) y sus env vars (§11).
 3. Documentar toda desviación en `error.md` con el formato definido.
 
 ## 7. División de trabajo: KEYS y SERVICIOS los maneja el USUARIO (en otro chat)
@@ -152,7 +152,7 @@ schema de Prisma **no tiene `directUrl`** y el transaction pooler no soporta DDL
   con esa URL 5432: `cd apps/api && npx prisma db push`. (En Windows CMD: `set DATABASE_URL=...`
   sin comillas; en PowerShell: `$env:DATABASE_URL="..."`.)
 
-## 8. Bugs de la fundación a arreglar (polish, Fase 8 del README)
+## 8. Bugs de la fundación a arreglar (polish, Fase 8 de SPEC.md)
 - **i18n incompleto:** muchos textos hardcodeados (el dashboard entero, "Analytics" en el sidebar)
   no usan traducción → cambiar idioma no los afecta. Completar es/en con i18next.
 - **Toggle de idioma (`Header.tsx`):** muestra el idioma DESTINO, no el actual (confuso) — mostrar
@@ -190,7 +190,7 @@ en paralelo una vez listos A y B. F después de C/D/E. G en cualquier momento. H
 **Objetivo:** sentar la base de datos y los tipos sobre los que se construye todo el producto.
 **Depende de:** nada (va primero).
 **Entregables:**
-- Spec en `README.md` de las 3 features (modelos, relaciones, endpoints, UI, fases nuevas).
+- Spec en `SPEC.md` de las 3 features (modelos, relaciones, endpoints, UI, fases nuevas).
 - Modelos Prisma nuevos en `schema.prisma`, todos **por-usuario** y conectados:
   - `Subject` (materia): `userId`, `name`, `examDate?`, `color?`.
   - `Topic` (tema): `subjectId`, `name`, `status` (pending/in_progress/completed), `difficulty`
@@ -205,7 +205,7 @@ en paralelo una vez listos A y B. F después de C/D/E. G en cualquier momento. H
 - Instrucción al usuario para correr `prisma db push` (sección 7).
 **Reglas específicas:** definir relaciones con `onDelete` correctos; índices para queries por
 `userId` y por `dueDate` (SRS). Respetar `@@map` (snake_case en tablas, como el resto).
-**Criterio de hecho:** `prisma generate` + `pnpm -r typecheck` verdes; `db push` aplicado; el README
+**Criterio de hecho:** `prisma generate` + `pnpm -r typecheck` verdes; `db push` aplicado; SPEC.md
 refleja la spec; los tipos/Zod exportados desde `@bract/shared`.
 
 ## Agente B — Núcleo de IA (servicio compartido)
@@ -218,9 +218,9 @@ refleja la spec; los tipos/Zod exportados desde `@bract/shared`.
 - Un **ensamblador de contexto** que arma, a partir de los datos del usuario (materias, temas,
   progreso, próximo examen), el prompt/contexto que reciben las 3 features.
 - Manejo de errores y rate limiting de IA; degradación clara si falta `AI_API_KEY`.
-- Documentar en README §1 (stack) y §11 (env vars) el proveedor elegido y `AI_API_KEY`.
+- Documentar en SPEC.md §1 (stack) y §11 (env vars) el proveedor elegido y `AI_API_KEY`.
 **Reglas específicas:** la key SIEMPRE por env, nunca hardcodeada; el SDK del proveedor es la única
-librería nueva permitida fuera del stack del README, y debe documentarse en `error.md`.
+librería nueva permitida fuera del stack de SPEC.md, y debe documentarse en `error.md`.
 **Criterio de hecho:** funciones tipadas y testeadas con mock; typecheck verde; lista de env vars
 nuevas comunicada al usuario.
 
@@ -270,7 +270,7 @@ real. Revisar que no haya duplicación de fuente de verdad (materias/temas/progr
 recargar manualmente; verificado end-to-end.
 
 ## Agente G — Polish, i18n y Bugs de la Fundación
-**Objetivo:** dejar la fundación pulida (Fase 8 README). Independiente de A–F.
+**Objetivo:** dejar la fundación pulida (Fase 8 de SPEC.md). Independiente de A–F.
 **Depende de:** nada (paralelizable).
 **Entregables:** arreglar los 4 bugs de la sección 8 (i18n hardcodeado + toggle de idioma + fecha/
 nombre del perfil + lista de notificaciones); completar traducciones es/en de toda la UI nueva y
@@ -283,7 +283,7 @@ notificaciones listan lo que el contador indica; typecheck/lint verdes.
 **Depende de:** F (y G si ya está).
 **Entregables:** recorrido end-to-end de las 3 secciones conectadas; checklist del CLAUDE.md;
 `pnpm -r typecheck` + lint + build verdes; verificación de los 3 jobs de CI; verificación del deploy
-en Render (API + web); smoke test de los flujos clave; actualización final de `error.md` y README.
+en Render (API + web); smoke test de los flujos clave; actualización final de `error.md` y SPEC.md.
 **Criterio de hecho:** todo verde en CI, deploy live, las 3 secciones funcionan conectadas en
 producción, sin estados rotos.
 
@@ -310,8 +310,8 @@ Todos los docs están en el repo, así que no hace falta pegarlos: alcanza con a
 ```
 Sos el **Agente <X> — <nombre>** del proyecto Bract.
 1. Leé COMPLETO `PLAN_AGENTES.md` (preámbulo secciones 1–8 + tu sección en 9 + apéndices) y los
-   docs que referencia: README.md, CLAUDE.md, error.md, context.md, napkin.md.
-2. Respetá spec-first: actualizá el README con la spec de tu feature ANTES de implementar.
+   docs que referencia: SPEC.md, CLAUDE.md, error.md, context.md, napkin.md.
+2. Respetá spec-first: actualizá SPEC.md con la spec de tu feature ANTES de implementar.
 3. NO escribas código hasta devolverme: (a) resumen del estado actual relevante a tu agente,
    (b) la spec/plan detallado de tu fase, (c) las env vars nuevas que vas a necesitar.
    Espero mi OK explícito antes de implementar.

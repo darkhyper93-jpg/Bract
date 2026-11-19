@@ -4,7 +4,7 @@ import { RemediationIntensity } from '../types/progress.types';
 // Progreso & Personalización (Agente I-2). Schemas compartidos API↔web (fuente única de validación).
 // El progreso es solo-lectura (sin schema de escritura). El único input externo es PUT /preferences.
 
-// Defaults de la fórmula de debilidad (README §3.6). El web los usa para mostrar el estado por defecto.
+// Defaults de la fórmula de debilidad (SPEC.md §3.6). El web los usa para mostrar el estado por defecto.
 export const DEFAULT_WEIGHT_QUIZ = 0.6;
 export const DEFAULT_WEIGHT_SRS = 0.4;
 export const DEFAULT_REMEDIATION_INTENSITY = RemediationIntensity.LOW;

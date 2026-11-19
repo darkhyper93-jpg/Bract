@@ -4,7 +4,7 @@ import { authenticate } from '../../middleware/auth.middleware.js';
 
 const router: Router = Router();
 
-// All profile routes require authentication — README §5.5
+// All profile routes require authentication — SPEC.md §5.5
 router.use(authenticate);
 
 /**

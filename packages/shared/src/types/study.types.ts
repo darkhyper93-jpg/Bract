@@ -1,4 +1,4 @@
-// Producto — Estudio con IA · Disponibilidad y Plan (cronograma) — README §3.3
+// Producto — Estudio con IA · Disponibilidad y Plan (cronograma) — SPEC.md §3.3
 // Unidad de tiempo: minutos (la UI muestra horas; la conversión es de presentación) — §3.4.
 
 import { Topic } from './subject.types';

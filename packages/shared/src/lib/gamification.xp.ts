@@ -1,4 +1,4 @@
-// Gamificación (Agente J) — README §3.7. Lógica PURA compartida API↔web (sin deps de runtime): la curva
+// Gamificación (Agente J) — SPEC.md §3.7. Lógica PURA compartida API↔web (sin deps de runtime): la curva
 // de nivel y las constantes de XP/mecánicas. Front y back derivan el MISMO nivel desde `totalXp` → sin
 // drift (el `level` NO se persiste). Tunear el juego = cambiar estas constantes en un solo lugar.
 //

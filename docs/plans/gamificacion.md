@@ -60,7 +60,7 @@ Lecturas que la Home ya consume y se reusan tal cual (cero endpoints nuevos para
 Convenciones del repo: `cuid()`, `userId` denormalizado, `@@map` snake_case, índices por usuario,
 enums espejados a `@bract/shared` con `z.nativeEnum`. **El `level` NO es columna**: es función pura
 de `totalXp` (`levelForXp`, patrón `srs.ts`/`progress.formula.ts`) → sin drift. Nueva sección
-README **§3.7**.
+SPEC.md **§3.7**.
 
 ```prisma
 // ===== GAMIFICACIÓN (Agente J) =====
@@ -191,7 +191,7 @@ debilidad ⇒ no hay jefe** (la Home muestra un EmptyState "seguí estudiando pa
 
 **Identidad:** dark-first de Bract (`§9.2`) + energía de juego al estilo codex.io. Se agrega un set
 chico de **tokens de acento de juego** como CSS vars (no hardcodear): `--xp-gold`, `--streak-flame`,
-`--boss-crimson`, `--level-glow` (variantes que respetan contraste 4.5:1). Documentados en README §9.2.
+`--boss-crimson`, `--level-glow` (variantes que respetan contraste 4.5:1). Documentados en SPEC.md §9.2.
 **Iconos = SVG** (flama/escudo/espada/nivel), nunca emojis (regla skill `no-emoji-icons`).
 
 **Componentes (`features/gamification/components/`, consumidos por la Home):**
@@ -220,7 +220,7 @@ luego se quiere precisión sin refetch, los hooks pueden devolver un delta en `m
 
 ---
 
-## 5. Endpoints (README §5.5, todas `[self]`)
+## 5. Endpoints (SPEC.md §5.5, todas `[self]`)
 
 ```
 GAMIFICACIÓN (Agente J)
@@ -235,7 +235,7 @@ acciones reales (hooks F4), nunca por un POST directo del cliente (anti-trampa: 
 
 ## 6. Plan por fases (supervisado: parar en bordes, NO mergear, diff por fase)
 
-- **F0 — Spec-first (README):** §3.7 (3 modelos + 3 enums + back-relations + reglas), §5.5
+- **F0 — Spec-first (SPEC.md):** §3.7 (3 modelos + 3 enums + back-relations + reglas), §5.5
   (`GET /gamification/summary`), §8.11 (Home gamificada: rediseño de la §8.10 sobre eventos existentes),
   §9.2 (tokens de acento de juego), **Fase 19**. Marcar J en `IDEAS_POST_MVP.md`. Sin código de app.
 - **F1 — `@bract/shared`:** `types/gamification.types.ts` + `schemas/gamification.schema.ts`
@@ -301,7 +301,7 @@ metas/horarios, sección `/arena`, ledger/historial de XP, delta de gamificació
 ## Estado de ejecución (checkpoint para retomar)
 
 - [x] Plan aprobado y commiteado en `docs/plans/gamificacion.md` (branch `agente-j-gamificacion`).
-- [ ] F0 — Spec-first (README + IDEAS)
+- [ ] F0 — Spec-first (SPEC.md + IDEAS)
 - [ ] F1 — `@bract/shared` contract + XP lib
 - [ ] F2 — Prisma + `db push` ← **BORDE DE REVISIÓN (esperar al usuario)**
 - [ ] F3 — Backend motor + lectura

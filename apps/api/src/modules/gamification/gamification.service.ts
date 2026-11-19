@@ -21,7 +21,7 @@ import { buildQuestTemplates, utcDateOnly } from './gamification.rules.js';
 // Gamificación (Agente J) — lógica de negocio. Recibe DTOs (nunca req), mapea Prisma→shared (Date→ISO,
 // enum casteado), deriva el nivel con la fórmula compartida (levelForXp) y genera LAZY las misiones/jefe
 // del día (idempotente). SOLO LECTURA acá; las mutaciones por efecto van en gamification.effects (F4).
-// NO toca HTTP. README §3.7.
+// NO toca HTTP. SPEC.md §3.7.
 // ============================================================================
 
 // ---- Mappers Prisma → contrato @bract/shared ------------------------------

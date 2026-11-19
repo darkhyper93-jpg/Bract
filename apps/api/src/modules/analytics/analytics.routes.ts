@@ -5,7 +5,7 @@ import { Role } from '@bract/shared';
 
 const router: Router = Router();
 
-// Todos los endpoints de analytics requieren ADMIN o SUPER_ADMIN — README §5.5
+// Todos los endpoints de analytics requieren ADMIN o SUPER_ADMIN — SPEC.md §5.5
 router.use(authenticate);
 router.use(authorize(Role.ADMIN, Role.SUPER_ADMIN));
 

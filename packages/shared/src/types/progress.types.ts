@@ -1,4 +1,4 @@
-// Producto — Progreso, puntos débiles y personalización (Agente I-2) — README §3.6.
+// Producto — Progreso, puntos débiles y personalización (Agente I-2) — SPEC.md §3.6.
 // El progreso/debilidad es DERIVADO (on-the-fly): estos tipos describen la salida del motor,
 // no entidades persistidas. El único modelo persistido nuevo es UserStudyPreferences.
 

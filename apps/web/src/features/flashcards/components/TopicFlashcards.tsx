@@ -104,7 +104,7 @@ export function TopicFlashcards() {
     [subjectTopics],
   );
   const topicName = (id: string) => subjectTopics.find((tp) => tp.id === id)?.name ?? id;
-  // Materia elegida sin temas → no hay tema que elegir ni generar (contrato uniforme, README §5.6).
+  // Materia elegida sin temas → no hay tema que elegir ni generar (contrato uniforme, SPEC.md §5.6).
   const subjectHasNoTopics = subjectId !== '' && topicOptions.length === 0;
   const generating = generate.isPending || generateMulti.isPending;
 

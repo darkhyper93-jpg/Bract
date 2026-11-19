@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Wrapper genérico (cross-feature: chat ahora, quiz a futuro) de la Web Speech API de DICTADO.
-// Ver README §8.9 y los tipos ambient en src/types/speech.d.ts.
+// Ver SPEC.md §8.9 y los tipos ambient en src/types/speech.d.ts.
 
 export type SpeechRecognitionStatus = 'idle' | 'listening' | 'error';
 // `not-allowed` = permiso de micrófono denegado (accionable, distinto de "no soportado").

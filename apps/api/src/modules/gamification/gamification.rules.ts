@@ -12,7 +12,7 @@ import {
 // Gamificación (Agente J) — LÓGICA PURA (sin DB/HTTP/reloj propio: el caller pasa `now`). Patrón srs.ts /
 // progress.formula.ts → la mecánica del juego es trivialmente testeable. La curva de nivel y las constantes
 // de XP viven en @bract/shared (lib/gamification.xp); acá va la lógica de racha/escudos, tope diario,
-// avance de misión, daño al jefe y la composición del set de misiones del día. README §3.7.
+// avance de misión, daño al jefe y la composición del set de misiones del día. SPEC.md §3.7.
 // ============================================================================
 
 // ---- Fechas: el "día" es UTC (rota a las 00:00 UTC). Limitación conocida v1 (ver §3.7). ----

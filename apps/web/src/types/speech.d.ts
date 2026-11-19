@@ -2,7 +2,7 @@
 // (gap histórico de la lib estándar), así que declaramos acá la superficie MÍNIMA de la Web
 // Speech API que consume `useSpeechRecognition`. Sin esto habría que usar `any`, prohibido por
 // CLAUDE.md. Solo el DICTADO necesita esto: la LECTURA (`speechSynthesis` + `SpeechSynthesisUtterance`)
-// sí está tipada en lib.dom, así que no se declara acá. Ver README §8.9.
+// sí está tipada en lib.dom, así que no se declara acá. Ver SPEC.md §8.9.
 
 interface SpeechRecognitionAlternative {
   readonly transcript: string;

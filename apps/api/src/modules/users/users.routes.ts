@@ -59,7 +59,7 @@ const router: Router = Router();
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-// README §5.5: GET /api/v1/users — ADMIN+
+// SPEC.md §5.5: GET /api/v1/users — ADMIN+
 router.get('/', authenticate, authorize(Role.ADMIN, Role.SUPER_ADMIN), usersController.listUsers);
 
 /**
@@ -131,10 +131,10 @@ router.get('/', authenticate, authorize(Role.ADMIN, Role.SUPER_ADMIN), usersCont
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-// README §5.5: GET /api/v1/users/:id — ADMIN | self
+// SPEC.md §5.5: GET /api/v1/users/:id — ADMIN | self
 router.get('/:id', authenticate, authorizeSelfOrAdmin, usersController.getUserById);
 
-// README §5.5: PATCH /api/v1/users/:id — self only (service enforces actorId === targetId)
+// SPEC.md §5.5: PATCH /api/v1/users/:id — self only (service enforces actorId === targetId)
 router.patch('/:id', authenticate, usersController.updateUser);
 
 /**
@@ -166,7 +166,7 @@ router.patch('/:id', authenticate, usersController.updateUser);
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-// README §5.5: PATCH /api/v1/users/:id/role — SUPER_ADMIN only
+// SPEC.md §5.5: PATCH /api/v1/users/:id/role — SUPER_ADMIN only
 router.patch('/:id/role', authenticate, authorize(Role.SUPER_ADMIN), usersController.changeUserRole);
 
 /**
@@ -198,10 +198,10 @@ router.patch('/:id/role', authenticate, authorize(Role.SUPER_ADMIN), usersContro
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-// README §5.5: PATCH /api/v1/users/:id/status — ADMIN+
+// SPEC.md §5.5: PATCH /api/v1/users/:id/status — ADMIN+
 router.patch('/:id/status', authenticate, authorize(Role.ADMIN, Role.SUPER_ADMIN), usersController.changeUserStatus);
 
-// README §5.5: DELETE /api/v1/users/:id — ADMIN+ (soft delete)
+// SPEC.md §5.5: DELETE /api/v1/users/:id — ADMIN+ (soft delete)
 router.delete('/:id', authenticate, authorize(Role.ADMIN, Role.SUPER_ADMIN), usersController.deleteUser);
 
 export { router as usersRouter };

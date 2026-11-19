@@ -1,4 +1,4 @@
-// Producto — Estudio con IA · Chat de estudio (tutor con contexto del estudiante) — README §3.3.
+// Producto — Estudio con IA · Chat de estudio (tutor con contexto del estudiante) — SPEC.md §3.3.
 
 export enum ChatRole {
   USER = 'USER',

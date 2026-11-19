@@ -243,7 +243,7 @@ export const authService = {
   },
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
-    // Always return success — never reveal whether email exists (README §10.3)
+    // Always return success — never reveal whether email exists (SPEC.md §10.3)
     const user = await authRepository.findByEmail(dto.email);
     if (!user || user.status !== 'ACTIVE') return;
 

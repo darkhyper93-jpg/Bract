@@ -1,7 +1,7 @@
 # 🚩 IDEAS POST-MVP — Recordar DESPUÉS del Agente H
 
 > **NO implementar hasta cerrar el MVP (E ✅ → F → G → H).** Son features nuevas, no polish.
-> Spec-first: agregar al README antes de codear. Reusan lib/ai (B), modelos (A) y SRS (D).
+> Spec-first: agregar a SPEC.md antes de codear. Reusan lib/ai (B), modelos (A) y SRS (D).
 
 ## Agente I — "Modo Práctica / Evaluación" (5 ideas en UNA feature coherente)
 
@@ -37,7 +37,7 @@ estudiante**, integradas al track de progreso adaptativo (se conecta con planner
 metas + horarios (reusa la disponibilidad y el planner) y al progreso real (reusa SRS + evaluación
 del Agente I). Post-MVP, feature/agente nuevo, spec-first. Revisar codex.io en detalle al diseñar.
 
-**Estado:** EN CURSO — spec-first aprobada (ver README §3.7 · §5.5 · §8.11 · §9.2 · Fase 19 y
+**Estado:** EN CURSO — spec-first aprobada (ver SPEC.md §3.7 · §5.5 · §8.11 · §9.2 · Fase 19 y
 `docs/plans/gamificacion.md`). **v1 ACOTADO:** XP + niveles + misiones diarias + racha PERDONADORA +
 jefe del día (= tema más flojo de I-2) + **home gamificada** (rediseño de §8.10, no sección nueva),
 100% determinista (sin IA). XP atado a aprender (completar quiz, repasar flashcards vencidas, cumplir
@@ -105,7 +105,7 @@ degradar elegante (si el navegador no soporta, se oculta el botón, el chat sigu
 NO usar Whisper/Gemini-audio/ElevenLabs por ahora (cuestan plata o cómputo).
 
 **Alcance sugerido:** mayormente frontend. Empezar por el dictado en el chat (resuelve el dolor directo),
-después la lectura de respuestas. Spec-first al README. Estados claros: idle · escuchando · transcribiendo ·
+después la lectura de respuestas. Spec-first a SPEC.md. Estados claros: idle · escuchando · transcribiendo ·
 error/no-soportado.
 
 **Estado:** PENDIENTE — alta utilidad, bajo costo. Buen candidato para después de I/I-2.
@@ -121,7 +121,7 @@ El usuario quiere que la web se vea **premium**, no solo que funcione. El "G Pol
 - **Referencia de diseño: codex.io** (la que más le gustó al usuario) — capturar ese feel.
 
 **Notas:** transversal, frontend. Mejor hacerlo cuando estén todas las features para no repintar dos
-veces. Reusa los tokens CSS ya definidos en el README; no hardcodear colores fuera de tokens.
+veces. Reusa los tokens CSS ya definidos en SPEC.md; no hardcodear colores fuera de tokens.
 
 **Estado:** PENDIENTE — idealmente el último gran pase, una vez completas las features.
 

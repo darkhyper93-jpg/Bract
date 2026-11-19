@@ -7,13 +7,13 @@
 - Each item includes date + "Do instead".
 
 ## Execution & Validation (Highest Priority)
-1. **[2026-06-05] Read README.md before any task**
-   Do instead: always read README.md first — it is the single source of truth for architecture, models, endpoints, and phases.
+1. **[2026-06-05] Read SPEC.md before any task**
+   Do instead: always read SPEC.md first — it is the single source of truth for architecture, models, endpoints, and phases.
 
 2. **[2026-06-05] Check active development phase before implementing**
-   Do instead: confirm which README phase is active; refuse to implement phase N+1 if phase N is incomplete.
+   Do instead: confirm which SPEC.md phase is active; refuse to implement phase N+1 if phase N is incomplete.
 
-3. **[2026-06-05] Feature not in README → ask before implementing**
+3. **[2026-06-05] Feature not in SPEC.md → ask before implementing**
    Do instead: respond with the standard template from CLAUDE.md asking to define data/endpoints/phase before touching code.
 
 ## Shell & Git Reliability
@@ -65,7 +65,7 @@
    Do instead: implement loading (skeleton) + empty (EmptyState) + error + success before marking component done.
 
 2. **[2026-06-05] No hardcoded colors**
-   Do instead: use only CSS tokens defined in the README design system section.
+   Do instead: use only CSS tokens defined in the SPEC.md design system section.
 
 3. **[2026-06-10] i18next plurals need `_one`/`_other` suffixed keys (not a bare base key)**
    Do instead: define `key_one` + `key_other` and call `t('key', { count })`. A bare `key` + `key_other` fails for count===1 (looks for `key_one`).

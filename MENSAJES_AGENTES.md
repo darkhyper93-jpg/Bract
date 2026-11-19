@@ -1,7 +1,7 @@
 # Bract — Mensajes de arranque por agente
 
 > Mensajes listos para pegar en cada agente de Claude Code. Cada uno asume que el repo ya tiene
-> `PLAN_AGENTES.md`, `README.md`, `CLAUDE.md`, `error.md` y `context.md` commiteados.
+> `PLAN_AGENTES.md`, `SPEC.md`, `CLAUDE.md`, `error.md` y `context.md` commiteados.
 >
 > **Orden obligatorio:** A → B → (C / D / E) → F → H. **G** corre en paralelo por su cuenta.
 > C/D/E solo en paralelo si cada uno va en su propia rama o git worktree (tocan archivos
@@ -30,7 +30,7 @@
 Sos el Agente A — Spec & Modelo de Datos Compartido del proyecto Bract.
 
 Leé COMPLETO PLAN_AGENTES.md (preámbulo 1–8 + tu sección "Agente A" en 9 + apéndices) y los docs
-que referencia: README.md, CLAUDE.md, error.md, context.md. Atendé la nota de PRECEDENCIA del
+que referencia: SPEC.md, CLAUDE.md, error.md, context.md. Atendé la nota de PRECEDENCIA del
 inicio del plan: las features de context.md están APROBADAS; el flujo es spec-first.
 
 Sos la base de todo el producto: nadie puede avanzar hasta que termines.
@@ -44,7 +44,7 @@ NO escribas código todavía. Devolveme primero:
 (d) plan de fase.
 Espero mi OK explícito antes de implementar.
 
-Al terminar: actualizá el README con la spec, dejá pnpm -r typecheck en verde, y dame las
+Al terminar: actualizá SPEC.md con la spec, dejá pnpm -r typecheck en verde, y dame las
 instrucciones exactas de `prisma db push` (Session pooler 5432) para que yo las corra. Documentá
 decisiones en error.md.
 ```
@@ -59,7 +59,7 @@ Sos el Agente B — Núcleo de IA del proyecto Bract.
 NO empieces hasta que el Agente A esté mergeado (el modelo de datos compartido debe existir).
 
 Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente B" + Apéndice C "Contratos de IA") y
-README.md, CLAUDE.md, error.md, context.md. Respetá la nota de PRECEDENCIA.
+SPEC.md, CLAUDE.md, error.md, context.md. Respetá la nota de PRECEDENCIA.
 
 Tu objetivo: una capa de IA reutilizable (ai.service) con el proveedor detrás de una env var
 (definí el nombre, ej. AI_API_KEY), un ensamblador de contexto del estudiante, y funciones tipadas
@@ -72,7 +72,7 @@ NO escribas código todavía. Devolveme primero:
 (c) plan de fase.
 Espero mi OK.
 
-Al terminar: documentá el proveedor en README §1 y §11, y la decisión de la librería nueva en
+Al terminar: documentá el proveedor en SPEC.md §1 y §11, y la decisión de la librería nueva en
 error.md. typecheck/lint en verde. Pasame la lista de env vars para que yo las cargue.
 ```
 
@@ -86,7 +86,7 @@ Sos el Agente C — Planificador del proyecto Bract.
 NO empieces hasta que A y B estén mergeados. Trabajá en tu propia rama/worktree si C/D/E corren
 en paralelo (tocás schema/sidebar/router/i18n compartidos).
 
-Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente C") y README.md, CLAUDE.md, error.md,
+Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente C") y SPEC.md, CLAUDE.md, error.md,
 context.md. Respetá la PRECEDENCIA y el orden de 8 capas.
 
 Objetivo: CRUD de materias/temas/disponibilidad + generación y recálculo del cronograma (urgencia
@@ -110,7 +110,7 @@ Sos el Agente D — Flashcards + SRS del proyecto Bract.
 
 NO empieces hasta que A y B estén mergeados. Rama/worktree propio si va en paralelo con C/E.
 
-Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente D" + Apéndice B "SRS") y README.md,
+Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente D" + Apéndice B "SRS") y SPEC.md,
 CLAUDE.md, error.md, context.md. Respetá la PRECEDENCIA y el orden de 8 capas.
 
 Objetivo: generación de flashcards con IA por tema (usa Agente B) + CRUD manual + motor de repaso
@@ -135,7 +135,7 @@ Sos el Agente E — Chat de Estudio del proyecto Bract.
 NO empieces hasta que A y B estén mergeados. Rama/worktree propio si va en paralelo con C/D.
 
 Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente E" + Apéndice C "Contratos de IA") y
-README.md, CLAUDE.md, error.md, context.md. Respetá la PRECEDENCIA y el orden de 8 capas.
+SPEC.md, CLAUDE.md, error.md, context.md. Respetá la PRECEDENCIA y el orden de 8 capas.
 
 Objetivo: tutor IA con contexto del estudiante (materias, temas pendientes/completados, próximo
 examen) + persistencia de sesiones/mensajes. Backend: ChatSession/ChatMessage, endpoint de mensaje
@@ -158,7 +158,7 @@ Sos el Agente F — Integración y Contexto Compartido del proyecto Bract.
 
 NO empieces hasta que C, D y E estén mergeados.
 
-Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente F") y README.md, CLAUDE.md, error.md,
+Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente F") y SPEC.md, CLAUDE.md, error.md,
 context.md. Respetá la PRECEDENCIA.
 
 Objetivo (el diferencial del producto): garantizar que las 3 secciones compartan datos y contexto
@@ -184,7 +184,7 @@ Sos el Agente G — Polish, i18n y Bugs de la Fundación del proyecto Bract.
 Sos independiente de A–F: trabajá en tu propia rama y mergeá ordenado. Coordiná con F/H para no
 pisar i18n de las features nuevas.
 
-Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente G" + sección 8 "Bugs") y README.md,
+Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente G" + sección 8 "Bugs") y SPEC.md,
 CLAUDE.md, error.md, context.md. Respetá la PRECEDENCIA.
 
 Objetivo: arreglar los 4 bugs de la sección 8 — (1) i18n: textos hardcodeados (dashboard, "Analytics"
@@ -210,7 +210,7 @@ Sos el Agente H — QA End-to-End y Deploy del proyecto Bract.
 
 NO empieces hasta que F esté mergeado (idealmente también G).
 
-Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente H") y README.md, CLAUDE.md, error.md,
+Leé COMPLETO PLAN_AGENTES.md (preámbulo + tu sección "Agente H") y SPEC.md, CLAUDE.md, error.md,
 context.md. Respetá la PRECEDENCIA (deploy: db push manual, Session pooler 5432, sin migrate en build).
 
 Objetivo: validar el sistema completo y conectado, y verificar el deploy. Recorré las 3 secciones
@@ -220,7 +220,7 @@ y el deploy en Render (API + web). Smoke test de los flujos clave en producción
 
 Devolveme: (a) reporte de QA con lo que pasa y lo que falla, (b) lista de fixes necesarios (si los
 hay) o confirmación de "todo verde y conectado en producción", (c) actualización final de error.md y
-README. Si falta cargar env vars/keys o correr db push, indicámelo claramente (eso lo hago yo).
+SPEC.md. Si falta cargar env vars/keys o correr db push, indicámelo claramente (eso lo hago yo).
 
 Criterio de hecho: CI verde, deploy live, 3 secciones funcionando conectadas en prod, sin estados rotos.
 ```

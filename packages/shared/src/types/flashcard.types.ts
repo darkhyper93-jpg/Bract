@@ -1,4 +1,4 @@
-// Producto — Estudio con IA · Flashcards + SRS (SM-2 simplificado) — README §3.3 / Apéndice B.
+// Producto — Estudio con IA · Flashcards + SRS (SM-2 simplificado) — SPEC.md §3.3 / Apéndice B.
 
 export enum FlashcardSource {
   AI = 'AI',

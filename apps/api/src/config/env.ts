@@ -6,7 +6,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   APP_URL: z.string().url().default('http://localhost:4000'),
 
-  // DECISIÓN: FRONTEND_URL no está en README §11 pero es necesario para CORS whitelist (README §10.3)
+  // DECISIÓN: FRONTEND_URL no está en SPEC.md §11 pero es necesario para CORS whitelist (SPEC.md §10.3)
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
 
   // Supabase

@@ -1,6 +1,6 @@
 # render.yaml
 # Documentación: https://render.com/docs/render-yaml
-# DECISIÓN: Render en lugar de K8s+Docker del README §12 — ver error.md
+# DECISIÓN: Render en lugar de K8s+Docker de SPEC.md §12 — ver error.md
 
 services:
   # ============================================================

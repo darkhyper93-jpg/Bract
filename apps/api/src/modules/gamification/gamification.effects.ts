@@ -18,7 +18,7 @@ import {
 // quiz, repasar carta vencida, completar item del plan/tema): otorgan XP (capeado), avanzan misiones, dañan
 // al jefe y actualizan la racha. El cliente NUNCA llama esto directo (anti-trampa). Premia APRENDER, no
 // actividad vacía. Cada efecto es BEST-EFFORT: los services delegan vía `safeGamify` → un fallo acá NUNCA
-// rompe la acción del usuario (quiz/flashcards/planner se comportan idéntico a hoy). README §3.7.
+// rompe la acción del usuario (quiz/flashcards/planner se comportan idéntico a hoy). SPEC.md §3.7.
 // ============================================================================
 
 // Envoltorio best-effort: corre el efecto y traga cualquier error (lo loguea). Los services lo usan para
