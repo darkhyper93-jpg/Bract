@@ -25,7 +25,7 @@ Monorepo con pnpm y TypeScript en todo el sistema:
 - **`apps/api`:** Node 20 con Express, Prisma sobre Supabase Postgres, autenticación con JWT RS256, Upstash Redis para límites de uso, caché y lista de sesiones revocadas, y Winston para registros.
 - **`packages/shared`:** tipos y esquemas Zod compartidos entre la web y la API.
 
-La IA se usa a través de un único servicio con modelos distintos según la tarea. Si falta la clave, la aplicación arranca igual: el planificador usa un cálculo propio y lo que depende de la IA responde «no disponible».
+La IA de la aplicación es Google Gemini, en su plan gratuito, a través de un único servicio con modelos distintos según la tarea. El código se desarrolla con Claude Code, siguiendo `SPEC.md` y `CLAUDE.md`. Si falta la clave, la aplicación arranca igual: el planificador usa un cálculo propio y lo que depende de la IA responde «no disponible».
 
 ## Ponerlo en marcha
 

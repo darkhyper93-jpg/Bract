@@ -59,7 +59,7 @@ Estas reglas se aplican a CADA línea de código, CADA componente, CADA decisió
 | OpenTelemetry | latest | Trazabilidad y observabilidad |
 | bcrypt | latest | Hash de contraseñas |
 | jsonwebtoken | latest | Firma y verificación de JWT |
-| @anthropic-ai/sdk | latest | Núcleo de IA (Agente B): Claude para planner/flashcards/chat. Proveedor detrás de `AI_API_KEY` (§11). Única librería fuera del stack original — ver `error.md`. |
+| @google/genai | 2 | Núcleo de IA (Agente B): Google Gemini (free tier) para planner/flashcards/chat/quiz/importación. Proveedor detrás de `AI_API_KEY` (§11). Única librería fuera del stack original. Reemplazó a `@anthropic-ai/sdk` el 2026-06-12 por costo — ver `error.md`. Claude se usa solo para desarrollar el código (Claude Code), no dentro de la app. |
 
 ### 1.3 Data Layer
 
@@ -1844,13 +1844,13 @@ CLOUDFLARE_R2_PUBLIC_URL=https://files.bract.app
 RESEND_API_KEY=re_...
 EMAIL_FROM=noreply@bract.app
 
-# Núcleo de IA (Agente B) — proveedor: Anthropic Claude
+# Núcleo de IA (Agente B) — proveedor: Google Gemini (free tier, sin tarjeta). Antes Anthropic Claude — ver error.md (2026-06-12).
 # AI_API_KEY es OPCIONAL: si falta, la app bootea igual y degrada (plan → baseline
 # determinista; flashcards/chat → error AI_UNAVAILABLE 503). Nunca rompe el build/boot.
-AI_API_KEY=sk-ant-...
-# Modelos escalonados por tarea (NO Opus para todo). Defaults si se omiten:
-AI_MODEL_GENERATION=claude-haiku-4-5   # plan + flashcards (generación, barato)
-AI_MODEL_CHAT=claude-sonnet-4-6        # chat (medio; claude-opus-4-8 para calidad máxima)
+AI_API_KEY=...                         # key de Google AI Studio (Gemini)
+# Modelos escalonados por tarea (no el más caro para todo). Defaults si se omiten:
+AI_MODEL_GENERATION=gemini-2.5-flash-lite   # plan + flashcards (generación, el más barato)
+AI_MODEL_CHAT=gemini-2.5-flash              # chat (más capaz; free tier)
 
 # Logging
 LOG_LEVEL=debug
