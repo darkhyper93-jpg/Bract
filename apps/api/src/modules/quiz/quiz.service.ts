@@ -36,7 +36,7 @@ import { gamificationEffects, safeGamify } from '../gamification/gamification.ef
 const TOPIC_NOT_FOUND = 'Tema no encontrado';
 const SUBJECT_NOT_FOUND = 'Materia no encontrada';
 const ATTEMPT_NOT_FOUND = 'Intento no encontrado';
-// Mensaje canónico compartido (contrato uniforme — README §5.6).
+// Mensaje canónico compartido (contrato uniforme — SPEC.md §5.6).
 const SUBJECT_NO_TOPICS = GENERATION_ERRORS.SUBJECT_NO_TOPICS;
 const QUESTION_NOT_FOUND = 'Pregunta inexistente';
 const QUESTION_ALREADY_ANSWERED = 'La pregunta ya fue respondida';

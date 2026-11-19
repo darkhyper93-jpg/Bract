@@ -15,7 +15,7 @@ export default defineConfig({
   build: {
     // Target moderno — descarta polyfills innecesarios
     target: 'es2020',
-    // Avisar si un chunk supera 400KB (README §13: initial bundle < 150KB gzipped)
+    // Avisar si un chunk supera 400KB (SPEC.md §13: initial bundle < 150KB gzipped)
     chunkSizeWarningLimit: 400,
     rollupOptions: {
       output: {

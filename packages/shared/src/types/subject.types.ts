@@ -1,4 +1,4 @@
-// Producto — Estudio con IA · Materias y Temas (contexto compartido) — README §3.3
+// Producto — Estudio con IA · Materias y Temas (contexto compartido) — SPEC.md §3.3
 // Fuente de verdad única: materias → temas → progreso (§3.4).
 
 export enum TopicStatus {

@@ -195,7 +195,7 @@ const DIFFICULTY_RANK: Record<TopicDifficulty, number> = {
   [TopicDifficulty.HARD]: 2,
 };
 
-// I-2 (capa 2) — DOS términos SEPARADOS y ADITIVOS en el orden del baseline (README §3.6): DEBILIDAD (objetiva,
+// I-2 (capa 2) — DOS términos SEPARADOS y ADITIVOS en el orden del baseline (SPEC.md §3.6): DEBILIDAD (objetiva,
 // modulada por α) y PRIORIDAD (preferencia, nudge FIJO independiente de α). Ninguno multiplica al otro; topeados.
 const NUDGE_MAX_DAYS = 7; // adelanto máx. por DEBILIDAD para temas CON examen (se modula por α)
 const NUDGE_DIFFICULTY_WEIGHT = 1.5; // cuánto mueve la DEBILIDAD dentro del grupo SIN examen (se modula por α)

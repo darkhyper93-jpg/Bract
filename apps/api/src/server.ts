@@ -31,7 +31,7 @@ import { docsRouter } from './routes/docs.routes.js';
 
 export const app: Express = express();
 
-// Middleware order — README §(agent spec): requestId → cors → helmet → json → cookies → logger → rate limit → routes → error
+// Middleware order — SPEC.md §(agent spec): requestId → cors → helmet → json → cookies → logger → rate limit → routes → error
 app.use(requestIdMiddleware);
 app.use(corsMiddleware);
 app.use(helmet());

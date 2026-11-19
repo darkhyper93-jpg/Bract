@@ -2,7 +2,7 @@ import { ConfidenceLevel, RemediationIntensity } from '@bract/shared';
 import type { CalibrationBucket, CalibrationSummary, UserStudyPreferences } from '@bract/shared';
 import { DEFAULT_REMEDIATION_INTENSITY, DEFAULT_WEIGHT_QUIZ, DEFAULT_WEIGHT_SRS } from '@bract/shared';
 
-// Fórmula de debilidad por tema (README §3.6). PURA: sin Prisma ni HTTP → testeable en aislamiento y
+// Fórmula de debilidad por tema (SPEC.md §3.6). PURA: sin Prisma ni HTTP → testeable en aislamiento y
 // reusable por planner (capa 2) y chat (capa 3). El service la alimenta con señales agregadas + prefs.
 // weakness es 100% OBJETIVO: SOLO quiz + SRS. La PRIORIDAD (prioritySubjectIds) NO vive acá — es un término
 // aparte del planner (ai.service.buildBaselinePlan). El dashboard muestra siempre el weakness real.

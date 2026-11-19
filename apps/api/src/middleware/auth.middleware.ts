@@ -59,7 +59,7 @@ export function authorize(...roles: Role[]) {
   };
 }
 
-// DECISIÓN: middleware separado en lugar de authorize() inline — permite reutilización limpia en rutas — ver README §5.5
+// DECISIÓN: middleware separado en lugar de authorize() inline — permite reutilización limpia en rutas — ver SPEC.md §5.5
 export function authorizeSelfOrAdmin(req: Request, _res: Response, next: NextFunction): void {
   if (!req.user) {
     next(new AppError('UNAUTHORIZED', 'Not authenticated'));

@@ -57,7 +57,7 @@ export function QuizSetup({ onGenerated }: QuizSetupProps) {
   const hasSubjects = subjects.length > 0;
   const selectedSubject = subjects.find((s) => s.id === subjectId);
   const topics = selectedSubject?.topics ?? [];
-  // Materia elegida sin temas → no hay nada que generar (mismo contrato que el backend, README §5.6).
+  // Materia elegida sin temas → no hay nada que generar (mismo contrato que el backend, SPEC.md §5.6).
   const subjectHasNoTopics = selectedSubject !== undefined && topics.length === 0;
 
   // Al cargar las materias, seleccionar la primera por defecto.

@@ -212,7 +212,7 @@ export function buildGradeOpenUserPrompt(args: BuildGradeOpenArgs): string {
 // Cuerpo del system prompt del chat, localizado por idioma. FIX: las reglas de formato/estilo y la
 // sección de honestidad deben respetarse TAMBIÉN en inglés (antes estaban solo en español → el modelo
 // las ignoraba al responder en inglés y metía ** y ### ). Una sola fuente keyed por idioma; el ensamblado
-// (cuerpo + contexto) es único y vive en buildChatSystemPrompt. Ver README §8.x.
+// (cuerpo + contexto) es único y vive en buildChatSystemPrompt. Ver SPEC.md §8.x.
 const CHAT_SYSTEM_BODY: Record<ChatLanguage, string[]> = {
   es: [
     'Sos el tutor personal del estudiante en Bract.',

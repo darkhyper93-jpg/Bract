@@ -3,7 +3,7 @@ import { logger } from '../../lib/logger.js';
 import { analyticsRepository } from './analytics.repository.js';
 import type { AnalyticsOverview, UserGrowthPoint, ActivityPoint } from '@bract/shared';
 
-const CACHE_TTL = 300; // 5 minutos — README §13
+const CACHE_TTL = 300; // 5 minutos — SPEC.md §13
 
 const CACHE_KEYS = {
   overview: 'analytics:overview',

@@ -1,4 +1,4 @@
-// Producto — Evaluación / Quiz (Agente I) — IDEAS_POST_MVP §"Agente I", README §3.5.
+// Producto — Evaluación / Quiz (Agente I) — IDEAS_POST_MVP §"Agente I", SPEC.md §3.5.
 // Quiz de opción múltiple por tema o materia con CORRECCIÓN POR PREGUNTA EN EL SERVIDOR y anti-trampa:
 // generar crea el intento IN_PROGRESS y persiste correctIndex + explicaciones AUTORITATIVOS en el server;
 // al cliente solo viajan preguntas PÚBLICAS (sin la respuesta ni la explicación). Responder de a una
@@ -7,7 +7,7 @@
 
 // Espejan los enums de Prisma. Zod los consume con z.nativeEnum → una sola lista de valores.
 // El cliente NO manda scope: envía { subjectId, topicIds[] } y el server lo DERIVA (1=TOPIC,
-// todos los temas de la materia=SUBJECT, subconjunto=MULTI_TOPIC). Ver README §3.5.
+// todos los temas de la materia=SUBJECT, subconjunto=MULTI_TOPIC). Ver SPEC.md §3.5.
 export enum QuizScope {
   TOPIC = 'TOPIC',
   SUBJECT = 'SUBJECT',

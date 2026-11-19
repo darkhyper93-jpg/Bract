@@ -15,7 +15,7 @@ const PREFERRED_VOICE = /google|natural|neural/i;
 // Orden: 1) voz del idioma con nombre premium (Google/Natural/Neural); 2) voz DEFAULT del idioma
 // (la default del idioma suele ser la mejor — antes la evitábamos y sonaba robótica); 3) primera voz
 // del idioma. Si no hay ninguna del idioma → undefined (dejamos que el navegador use su voz default).
-// Ver README §8.9.
+// Ver SPEC.md §8.9.
 function pickVoice(voices: SpeechSynthesisVoice[], lang: string): SpeechSynthesisVoice | undefined {
   const base = (lang.split('-')[0] ?? lang).toLowerCase();
   const matches = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
@@ -102,7 +102,7 @@ export function useSpeechSynthesis({ lang }: UseSpeechSynthesisOptions): UseSpee
 
   // KEEPALIVE (Chrome/Edge): speechSynthesis corta las lecturas largas (~15s) si no se la "patea"
   // periódicamente. Guardamos el id del interval en un ref para limpiarlo SIEMPRE (onend/onerror/
-  // cancel/pause/unmount) y no dejar intervalos colgados. Ver README §8.9.
+  // cancel/pause/unmount) y no dejar intervalos colgados. Ver SPEC.md §8.9.
   const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const clearKeepAlive = useCallback(() => {
     if (keepAliveRef.current !== null) {

@@ -3,7 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config/env.js';
 
 // DECISIÓN: usamos @aws-sdk/client-s3 en lugar de aws4fetch porque el SDK provee
-// getSignedUrl() compatible con el flujo de upload del README §6.1
+// getSignedUrl() compatible con el flujo de upload de SPEC.md §6.1
 export const r2 = new S3Client({
   region: 'auto',
   endpoint: `https://${env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,

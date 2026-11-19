@@ -3,7 +3,7 @@ import { env } from '../../config/env.js';
 import { AppError } from '../errors.js';
 
 // Núcleo de IA (Agente B): el proveedor (Google Gemini, free tier) queda detrás de env vars.
-// Modelos escalonados por tarea (NO el más caro para todo), configurables por env (§11 README).
+// Modelos escalonados por tarea (NO el más caro para todo), configurables por env (§11 SPEC.md).
 export const AI_MODELS = {
   generation: env.AI_MODEL_GENERATION, // plan + flashcards (gemini-2.5-flash-lite por defecto)
   chat: env.AI_MODEL_CHAT, // chat (gemini-2.5-flash por defecto)

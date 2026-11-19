@@ -1,4 +1,4 @@
-// Schema completo — fuente de verdad: README §3.1 y §3.2
+// Schema completo — fuente de verdad: SPEC.md §3.1 y §3.2
 
 generator client {
   provider = "prisma-client-js"

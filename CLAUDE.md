@@ -1,6 +1,6 @@
 # BRACT — CLAUDE.md
 # Instrucciones de comportamiento para Claude Code
-# Fuente de verdad del sistema: README.md (léelo primero, siempre)
+# Fuente de verdad del sistema: SPEC.md (léelo primero, siempre)
 
 ---
 
@@ -8,18 +8,18 @@
 
 Eres el agente de desarrollo de **Bract**, un SaaS premium full-stack.
 
-**Antes de cualquier tarea:** lee `README.md` completo. Contiene la arquitectura,
+**Antes de cualquier tarea:** lee `SPEC.md` completo. Contiene la arquitectura,
 los modelos, los endpoints, las fases de desarrollo y las reglas de diseño.
-Este archivo solo define cómo debes comportarte — el *qué* está en el README.
+Este archivo solo define cómo debes comportarte — el *qué* está en SPEC.md.
 
 ---
 
 ## REGLAS ANTES DE ESCRIBIR CÓDIGO
 
-1. Verificar en qué **fase del README** está activo el desarrollo
-2. Confirmar que lo pedido está **especificado en el README** — si no, preguntar antes de implementar
+1. Verificar en qué **fase de SPEC.md** está activo el desarrollo
+2. Confirmar que lo pedido está **especificado en SPEC.md** — si no, preguntar antes de implementar
 3. Identificar dependencias: qué debe existir primero para que esto funcione
-4. Verificar la ruta exacta donde va cada archivo según la estructura del README
+4. Verificar la ruta exacta donde va cada archivo según la estructura de SPEC.md
 
 ---
 
@@ -67,17 +67,17 @@ Este archivo solo define cómo debes comportarte — el *qué* está en el READM
 - ❌ Queries Prisma en services
 - ❌ Pasar `req` como argumento a un service
 - ❌ Importar entre apps con paths relativos (`../../../packages/...`) — usar `@bract/shared`
-- ❌ Colores hardcodeados fuera de los tokens CSS definidos en el README
+- ❌ Colores hardcodeados fuera de los tokens CSS definidos en SPEC.md
 - ❌ Componente sin skeleton de carga
 - ❌ Lista vacía sin `EmptyState`
 - ❌ `console.log` en ningún archivo
-- ❌ Implementar features no definidas en el README sin aprobación
+- ❌ Implementar features no definidas en SPEC.md sin aprobación
 - ❌ Saltarse fases (no implementar fase 3 si la 2 no está completa)
-- ❌ Librerías fuera del stack del README sin consultar
+- ❌ Librerías fuera del stack de SPEC.md sin consultar
 
 ---
 
-## CUANDO LO PEDIDO NO ESTÁ EN EL README
+## CUANDO LO PEDIDO NO ESTÁ EN SPEC.md
 
 Responde exactamente así:
 
@@ -87,7 +87,7 @@ Para implementarla necesito definir:
 1. ¿Qué datos/modelos necesita?
 2. ¿Qué endpoints requiere?
 3. ¿En qué fase de desarrollo entra?
-¿Actualizamos el README primero?"
+¿Actualizamos SPEC.md primero?"
 ```
 
 ---
@@ -97,10 +97,10 @@ Para implementarla necesito definir:
 Documéntala con un comentario inline en el código:
 
 ```typescript
-// DECISIÓN: usamos cuid() en lugar de uuid() para IDs más cortos en URLs — ver README §3.1
+// DECISIÓN: usamos cuid() en lugar de uuid() para IDs más cortos en URLs — ver SPEC.md §3.1
 ```
 
-Y si implica una desviación de arquitectura, agrégala a `error.md` con el formato definido en el README §14.3.
+Y si implica una desviación de arquitectura, agrégala a `error.md` con el formato definido en SPEC.md §14.3.
 
 ---
 
@@ -112,7 +112,7 @@ Y si implica una desviación de arquitectura, agrégala a `error.md` con el form
 □ Repository: queries sin N+1, solo Prisma, sin lógica de negocio
 □ Service: lógica completa, recibe DTOs (no req), lanza AppError correctamente
 □ Controller: envelope de respuesta correcto en todos los casos
-□ Rutas protegidas con middleware authenticate + authorize según README §5.5
+□ Rutas protegidas con middleware authenticate + authorize según SPEC.md §5.5
 □ Frontend — api/: función tipada que consume el endpoint
 □ Frontend — hooks/: React Query hook con queryKey correcto y staleTime
 □ Frontend — components/: loading + empty + error + success implementados

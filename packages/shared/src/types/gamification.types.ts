@@ -1,4 +1,4 @@
-// Gamificación (Agente J) — README §3.7 / §8.11. Capa de LECTURA: el cliente solo consume
+// Gamificación (Agente J) — SPEC.md §3.7 / §8.11. Capa de LECTURA: el cliente solo consume
 // GET /gamification/summary; el XP/quests/jefe/racha se mutan server-side POR EFECTO de acciones reales
 // (anti-trampa — el cliente no puede "darse" XP). Los mappers Prisma→shared (Date→ISO, enum casteado) y la
 // derivación del nivel (levelForXp) viven en el service. La curva/constantes están en lib/gamification.xp.

@@ -6,7 +6,7 @@ import { RATE_LIMIT } from '../../config/constants.js';
 
 const router: Router = Router();
 
-// Per-route rate limiters — README §5.4
+// Per-route rate limiters — SPEC.md §5.4
 const loginLimiter = createRateLimiter(RATE_LIMIT.AUTH_LOGIN.max, RATE_LIMIT.AUTH_LOGIN.windowMs);
 const registerLimiter = createRateLimiter(RATE_LIMIT.AUTH_REGISTER.max, RATE_LIMIT.AUTH_REGISTER.windowMs);
 const forgotPasswordLimiter = createRateLimiter(RATE_LIMIT.AUTH_FORGOT_PASSWORD.max, RATE_LIMIT.AUTH_FORGOT_PASSWORD.windowMs);

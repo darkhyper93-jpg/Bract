@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TopicStatus, TopicDifficulty } from '../types/subject.types';
 
-// Paleta cerrada de colores de materia (README §3.3: "validado por Zod contra paleta permitida").
+// Paleta cerrada de colores de materia (SPEC.md §3.3: "validado por Zod contra paleta permitida").
 // DECISIÓN: 8 hex curados que armonizan con los tokens del design system (§9.2, dark-first):
 // brand indigo + estados (info/success/warning/error) + 3 acentos complementarios. Exportada
 // para que el frontend reuse exactamente la misma paleta (swatches del selector de color).

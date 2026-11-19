@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript estricto, Zod, Prisma 5.22 (Postgres), Express (capas controller/service/repository), Vitest (backend), React 18 + React Query + Tailwind tokens + recharts + i18next (web).
 
-**Spec de referencia:** `README.md` §3.6 (modelos, fórmula, blend, degradación) · §5.5 (rutas) · Fase 15.
+**Spec de referencia:** `SPEC.md` §3.6 (modelos, fórmula, blend, degradación) · §5.5 (rutas) · Fase 15.
 
 ---
 
@@ -54,7 +54,7 @@
 - [ ] **Step 1: Crear el archivo de tipos**
 
 ```typescript
-// Producto — Progreso, puntos débiles y personalización (Agente I-2) — README §3.6.
+// Producto — Progreso, puntos débiles y personalización (Agente I-2) — SPEC.md §3.6.
 // El progreso/debilidad es DERIVADO (on-the-fly): estos tipos describen la salida del motor,
 // no entidades persistidas. El único modelo persistido nuevo es UserStudyPreferences.
 
@@ -144,7 +144,7 @@ import { RemediationIntensity } from '../types/progress.types';
 // Progreso & Personalización (Agente I-2). Schemas compartidos API↔web (fuente única de validación).
 // El progreso es solo-lectura (sin schema de escritura). El único input externo es PUT /preferences.
 
-// Defaults de la fórmula de debilidad (README §3.6). El web los usa para mostrar el estado por defecto.
+// Defaults de la fórmula de debilidad (SPEC.md §3.6). El web los usa para mostrar el estado por defecto.
 export const DEFAULT_WEIGHT_QUIZ = 0.6;
 export const DEFAULT_WEIGHT_SRS = 0.4;
 export const DEFAULT_REMEDIATION_INTENSITY = RemediationIntensity.LOW;
@@ -334,7 +334,7 @@ import { RemediationIntensity } from '@bract/shared';
 import type { UserStudyPreferences } from '@bract/shared';
 import { DEFAULT_REMEDIATION_INTENSITY, DEFAULT_WEIGHT_QUIZ, DEFAULT_WEIGHT_SRS } from '@bract/shared';
 
-// Fórmula de debilidad por tema (README §3.6). PURA: sin Prisma ni HTTP → testeable en aislamiento y
+// Fórmula de debilidad por tema (SPEC.md §3.6). PURA: sin Prisma ni HTTP → testeable en aislamiento y
 // reusable por planner (capa 2) y chat (capa 3). El service la alimenta con señales agregadas + prefs.
 // weakness es 100% OBJETIVO: SOLO quiz + SRS. La PRIORIDAD (prioritySubjectIds) NO vive acá — es un término
 // aparte del planner (ai.service.buildBaselinePlan). El dashboard muestra siempre el weakness real.
@@ -1811,7 +1811,7 @@ export interface GeneratePlanInput {
 (b) agregar las constantes del nudge junto a `DIFFICULTY_RANK`:
 
 ```typescript
-// I-2 (capa 2) — DOS términos SEPARADOS y ADITIVOS en el orden del baseline (README §3.6): DEBILIDAD (objetiva,
+// I-2 (capa 2) — DOS términos SEPARADOS y ADITIVOS en el orden del baseline (SPEC.md §3.6): DEBILIDAD (objetiva,
 // modulada por α) y PRIORIDAD (preferencia, nudge FIJO independiente de α). Ninguno multiplica al otro; topeados.
 const NUDGE_MAX_DAYS = 7; // adelanto máx. por DEBILIDAD para temas CON examen (se modula por α)
 const NUDGE_DIFFICULTY_WEIGHT = 1.5; // cuánto mueve la DEBILIDAD dentro del grupo SIN examen (se modula por α)
@@ -1862,7 +1862,7 @@ pasa a:
   });
 ```
 
-> Invariante (README §3.6): con `alpha=0` o `weakness` ausente en todos, `effectiveDays = examDays` y `score = difficultyRank` → orden **idéntico a hoy**. Los temas sin examen (+∞) siempre van después de los que tienen examen.
+> Invariante (SPEC.md §3.6): con `alpha=0` o `weakness` ausente en todos, `effectiveDays = examDays` y `score = difficultyRank` → orden **idéntico a hoy**. Los temas sin examen (+∞) siempre van después de los que tienen examen.
 
 - [ ] **Step 2: Enriquecer buildPlanInput en planner.service.ts (try/catch → degrada)**
 
